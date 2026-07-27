@@ -1,0 +1,11 @@
+@PerfLintHub_HostAddress = http://localhost:8080
+
+GET {{PerfLintHub_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{PerfLintHub_HostAddress}}/todos/1
+Accept: application/json
+
+###

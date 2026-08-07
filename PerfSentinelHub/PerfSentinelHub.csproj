@@ -8,7 +8,7 @@
         <PublishAot>true</PublishAot>
         <Copyright>Copyright (C) 2026 Robin Trassard</Copyright>
         <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
-        <RepositoryUrl>https://github.com/robintra/PerfLintHub</RepositoryUrl>
+        <RepositoryUrl>https://github.com/robintra/PerfSentinelHub</RepositoryUrl>
     </PropertyGroup>
 
     <ItemGroup>

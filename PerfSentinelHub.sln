@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfLintHub", "PerfLintHub\PerfLintHub.csproj", "{28F0E4CC-EF5E-4D6F-BE82-6081FBD8F32A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfSentinelHub", "PerfSentinelHub\PerfSentinelHub.csproj", "{28F0E4CC-EF5E-4D6F-BE82-6081FBD8F32A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

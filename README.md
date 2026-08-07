@@ -1,4 +1,4 @@
-# PerfLintHub
+# PerfSentinelHub
 
 Long-term memory for [perf-sentinel](https://github.com/robintra/perf-sentinel) findings, and
 the single endpoint IDE plugins talk to.
@@ -15,7 +15,7 @@ with no daemon at all.
 .NET 10 SDK. The project publishes as native AOT, so there is no runtime to deploy.
 
 ```bash
-dotnet run --project PerfLintHub
+dotnet run --project PerfSentinelHub
 ```
 
 ## Design notes

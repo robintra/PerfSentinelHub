@@ -1,0 +1,11 @@
+@PerfSentinelHub_HostAddress = http://localhost:8080
+
+GET {{PerfSentinelHub_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{PerfSentinelHub_HostAddress}}/todos/1
+Accept: application/json
+
+###

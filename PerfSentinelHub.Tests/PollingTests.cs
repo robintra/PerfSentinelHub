@@ -58,10 +58,11 @@ public sealed class PollingTests : IDisposable
         Assert.Equal(1, result.ImportedCount);
         Assert.Equal(0, result.RejectedCount);
         Assert.Equal("0.11.2", result.ProducerVersion);
+        Assert.False(result.IsPossiblyTruncated);
         Assert.Equal(
             [
                 ("/api/status", "Bearer test-secret"),
-                ("/api/findings?limit=10000&include_acked=true", "Bearer test-secret")
+                ("/api/findings?limit=1000&include_acked=true", "Bearer test-secret")
             ],
             requests);
         Assert.Single(await database.QueryFindingsAsync(
@@ -79,6 +80,45 @@ public sealed class PollingTests : IDisposable
         Assert.Equal("0.11.2", reader.GetString(0));
         Assert.True(reader.IsDBNull(1));
         Assert.True(reader.IsDBNull(2));
+    }
+
+    [Fact]
+    public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var fixture = System.Text.Json.JsonDocument.Parse(await File.ReadAllBytesAsync(
+            FixturePath,
+            cancellationToken));
+        var finding = fixture.RootElement[0].GetRawText();
+        var payload = System.Text.Encoding.UTF8.GetBytes(
+            $"[{string.Join(',', Enumerable.Repeat(finding, 1000))}]");
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            if (context.Request.Path == "/api/status")
+                await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
+            else
+                await context.Response.Body.WriteAsync(payload, cancellationToken);
+        }, cancellationToken);
+        var options = new HubOptions { DatabasePath = _databasePath };
+        var database = new HubDatabase(Options.Create(options), TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        var logger = new ListLogger<SourcePoller>();
+        var poller = new SourcePoller(
+            new DaemonClient(new HttpClient(), Options.Create(options)),
+            database,
+            TimeProvider.System,
+            logger);
+
+        var result = await poller.PollAsync(new SourceOptions
+        {
+            Id = "capped",
+            Name = "Capped",
+            Environment = "test",
+            BaseUrl = daemon.BaseUrl
+        }, cancellationToken);
+
+        Assert.True(result.IsPossiblyTruncated);
+        Assert.Contains(logger.Messages, message => message.Contains("possibly truncated", StringComparison.Ordinal));
     }
 
     [Theory]

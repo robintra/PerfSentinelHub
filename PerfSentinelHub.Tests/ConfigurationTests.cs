@@ -29,6 +29,7 @@ public sealed class ConfigurationTests
 
     [Theory]
     [InlineData("", "http://daemon:4318")]
+    [InlineData("bad/source", "http://daemon:4318")]
     [InlineData("prod", "file:///tmp/findings")]
     [InlineData("prod", "http://user:password@daemon:4318")]
     public void Invalid_source_is_rejected(string id, string url)
@@ -74,6 +75,19 @@ public sealed class ConfigurationTests
         var options = ValidOptions() with
         {
             Sources = [ValidSource() with { AuthHeaderName = name, AuthHeaderValue = value }]
+        };
+
+        Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("0123456789abcdef0123456789abcdef\t")]
+    public void Invalid_import_key_is_rejected(string value)
+    {
+        var options = ValidOptions() with
+        {
+            Sources = [ValidSource() with { ImportApiKey = value }]
         };
 
         Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);

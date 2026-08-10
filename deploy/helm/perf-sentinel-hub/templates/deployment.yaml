@@ -47,6 +47,13 @@ spec:
                   name: {{ $source.authSecretName }}
                   key: {{ $source.authSecretKey }}
             {{- end }}
+            {{- if $source.importSecretName }}
+            - name: Hub__Sources__{{ $index }}__ImportApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $source.importSecretName }}
+                  key: {{ $source.importSecretKey }}
+            {{- end }}
             {{- end }}
           volumeMounts:
             - { name: data, mountPath: /data }

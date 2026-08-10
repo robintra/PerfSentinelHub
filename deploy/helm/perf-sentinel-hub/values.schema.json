@@ -34,16 +34,20 @@
         "dependentRequired": {
           "authHeaderName": ["authSecretName", "authSecretKey"],
           "authSecretName": ["authHeaderName", "authSecretKey"],
-          "authSecretKey": ["authHeaderName", "authSecretName"]
+          "authSecretKey": ["authHeaderName", "authSecretName"],
+          "importSecretName": ["importSecretKey"],
+          "importSecretKey": ["importSecretName"]
         },
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
           "name": { "type": "string", "minLength": 1 },
           "environment": { "type": "string", "minLength": 1 },
           "baseUrl": { "type": "string", "pattern": "^https?://" },
           "authHeaderName": { "type": "string", "minLength": 1 },
           "authSecretName": { "type": "string", "minLength": 1 },
-          "authSecretKey": { "type": "string", "minLength": 1 }
+          "authSecretKey": { "type": "string", "minLength": 1 },
+          "importSecretName": { "type": "string", "minLength": 1 },
+          "importSecretKey": { "type": "string", "minLength": 1 }
         }
       }
     },

@@ -8,6 +8,7 @@ namespace PerfSentinelHub.Collection;
 public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> options)
 {
     private const int MaxBodyBytes = 16 * 1024 * 1024;
+    internal const int FindingsLimit = 1000;
     private readonly TimeSpan _timeout = options.Value.HttpTimeout;
 
     public async Task<string> FetchStatusAsync(
@@ -35,7 +36,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     public Task<byte[]> FetchFindingsAsync(
         SourceOptions source,
         CancellationToken cancellationToken) =>
-        SendAsync(source, "api/findings?limit=10000&include_acked=true", cancellationToken);
+        SendAsync(source, $"api/findings?limit={FindingsLimit}&include_acked=true", cancellationToken);
 
     private async Task<byte[]> SendAsync(
         SourceOptions source,

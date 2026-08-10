@@ -4,7 +4,11 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Collection;
 
-public sealed record PollResult(int ImportedCount, int RejectedCount, string ProducerVersion);
+public sealed record PollResult(
+    int ImportedCount,
+    int RejectedCount,
+    string ProducerVersion,
+    bool IsPossiblyTruncated);
 
 public sealed class SourcePollException(string errorCode, Exception innerException)
     : Exception($"Source poll failed: {errorCode}", innerException)
@@ -41,7 +45,12 @@ public sealed class SourcePoller(
                     source.Id,
                     batch.RejectedCount,
                     batch.RejectedCount + batch.Findings.Count);
-            return new PollResult(batch.Findings.Count, batch.RejectedCount, version);
+            var isPossiblyTruncated = batch.Findings.Count + batch.RejectedCount == DaemonClient.FindingsLimit;
+            if (isPossiblyTruncated)
+                logger.LogWarning(
+                    "Source {SourceId} poll returned the daemon cap and is possibly truncated; Hub push export is required for complete high-volume coverage.",
+                    source.Id);
+            return new PollResult(batch.Findings.Count, batch.RejectedCount, version, isPossiblyTruncated);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

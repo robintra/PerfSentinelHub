@@ -6,6 +6,10 @@ namespace PerfSentinelHub.Collection;
 
 public sealed record ParsedBatch(IReadOnlyList<ParsedFinding> Findings, int RejectedCount);
 
+public sealed record ParsedImport(string ProducerVersion, ParsedBatch Batch);
+
+public sealed class ImportBatchTooLargeException : Exception;
+
 public sealed record ParsedFinding(
     string Signature,
     string EnvelopeJson,
@@ -34,21 +38,58 @@ public static class FindingParser
 
         using (document)
         {
-            if (document.RootElement.ValueKind != JsonValueKind.Array)
-                throw new InvalidDataException("The findings response must be a JSON array.");
-
-            var findings = new List<ParsedFinding>();
-            var rejected = 0;
-            foreach (var envelope in document.RootElement.EnumerateArray())
-            {
-                if (TryParse(envelope, out var finding))
-                    findings.Add(finding);
-                else
-                    rejected++;
-            }
-
-            return new ParsedBatch(findings, rejected);
+            return ParseArray(document.RootElement);
         }
+    }
+
+    public static ParsedImport ParseImport(ReadOnlyMemory<byte> payload)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(payload);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The import body is not valid JSON.", exception);
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !TryString(root, "producer_version", out var producerVersion) ||
+                producerVersion.Length > 64 ||
+                !root.TryGetProperty("findings", out var findings) ||
+                findings.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("The import body is invalid.");
+
+            var count = findings.GetArrayLength();
+            if (count > 100)
+                throw new ImportBatchTooLargeException();
+            if (count == 0)
+                throw new InvalidDataException("The import batch is empty.");
+
+            return new ParsedImport(producerVersion, ParseArray(findings));
+        }
+    }
+
+    private static ParsedBatch ParseArray(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("The findings response must be a JSON array.");
+
+        var findings = new List<ParsedFinding>();
+        var rejected = 0;
+        foreach (var envelope in root.EnumerateArray())
+        {
+            if (TryParse(envelope, out var finding))
+                findings.Add(finding);
+            else
+                rejected++;
+        }
+
+        return new ParsedBatch(findings, rejected);
     }
 
     private static bool TryParse(JsonElement envelope, out ParsedFinding finding)

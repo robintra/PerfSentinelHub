@@ -2,8 +2,8 @@
 
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
 [perf-sentinel 0.11.2](https://github.com/robintra/perf-sentinel/releases/tag/v0.11.2) daemons.
-It is a poll-only NativeAOT service backed by SQLite: daemons remain the producers, while the Hub
-preserves their read-compatible finding envelopes for 180 days by default.
+It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
+recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 
 ## Run locally in five minutes
 
@@ -15,6 +15,7 @@ Hub__Sources__0__Id=local \
 Hub__Sources__0__Name='Local daemon' \
 Hub__Sources__0__Environment=development \
 Hub__Sources__0__BaseUrl=http://localhost:4318 \
+Hub__Sources__0__ImportApiKey=0123456789abcdef0123456789abcdef \
 ASPNETCORE_URLS=http://localhost:5080 \
 dotnet run --project PerfSentinelHub
 
@@ -39,9 +40,10 @@ helm upgrade --install perf-sentinel-hub deploy/helm/perf-sentinel-hub \
   --set persistence.size=5Gi
 ```
 
-For an authenticated daemon, put the value in a Kubernetes Secret, then set
+For an authenticated daemon poll, put the value in a Kubernetes Secret, then set
 `sources[].authHeaderName`, `sources[].authSecretName`, and `sources[].authSecretKey`. Never put
-the credential itself in Helm values.
+the credential itself in Helm values. For daemon push, set `sources[].importSecretName` and
+`sources[].importSecretKey`; the referenced value must contain at least 32 characters.
 
 ## Configuration
 
@@ -63,6 +65,17 @@ and `sources`.
 | `Sources[].Environment` | none | Non-empty |
 | `Sources[].BaseUrl` | none | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
 | `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
+| `Sources[].ImportApiKey` | none | Optional push credential; at least 32 characters, supplied through a Secret |
+
+## Import API
+
+`POST /api/import/findings?source_id=<id>` accepts the daemon's JSON envelope
+`{"producer_version":"…","findings":[…]}` with `X-API-Key`. A request contains 1–100 findings
+and at most 2 MiB. The response is sent only after the idempotent signature upsert commits.
+
+The Hub admits one import at a time, matching SQLite's single-writer model. Concurrent imports get
+`503 Retry-After: 1`; daemon exporters retain and retry their coalesced batches. This bounds request
+memory and garbage-collector pressure independently of the number of daemons.
 
 ## Read API
 
@@ -79,10 +92,14 @@ ignore unknown fields, as they do with the daemon API. `/health/live` checks the
 
 ## Freshness and recovery
 
-Each source is polled independently. A successful poll updates observations but does not delete a
+Push is primary. Each source is also polled independently. A successful poll updates observations but does not delete a
 finding merely because a later daemon response omits it: the daemon ring buffer may have evicted
 it, so missing does **not** mean resolved. Retention removes findings whose last observation is
 older than the configured period.
+
+The perf-sentinel 0.11.x daemon caps `/api/findings` at 1,000 rows. The Hub uses that exact cap and
+warns whenever it is reached because the safety-net snapshot may be incomplete; high-volume
+coverage therefore requires the bounded push exporter.
 
 Failures keep previously stored findings readable. The affected source is marked unreachable and
 retried with bounded exponential backoff; a later success clears that state. Poll bodies are
@@ -91,7 +108,7 @@ source ID and a stable error code.
 
 ## Deliberate exclusions
 
-This release has no ingress, user authentication, push or CI import, worker execution, trace
+This release has no ingress, user authentication, CI/SARIF import, worker execution, trace
 backend, dashboard, acknowledgment writer, or remote backup. Network exposure and authentication
 belong in the next independent design; acknowledgments remain in the repository consumed by
 perf-sentinel.

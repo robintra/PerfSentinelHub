@@ -12,6 +12,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     private readonly string _databasePath = options.Value.DatabasePath;
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _ready;
 
     public bool IsReady => Volatile.Read(ref _ready) == 1;
@@ -89,6 +90,42 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         long observedAtMs,
         CancellationToken cancellationToken)
     {
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await UpsertBatchCoreAsync(source, batch, observedAtMs, cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    public async Task<bool> TryUpsertBatchAsync(
+        SourceSnapshot source,
+        ParsedBatch batch,
+        long observedAtMs,
+        CancellationToken cancellationToken)
+    {
+        if (!await _writeGate.WaitAsync(0, cancellationToken))
+            return false;
+        try
+        {
+            await UpsertBatchCoreAsync(source, batch, observedAtMs, cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    private async Task UpsertBatchCoreAsync(
+        SourceSnapshot source,
+        ParsedBatch batch,
+        long observedAtMs,
+        CancellationToken cancellationToken)
+    {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(deferred: false);
 
@@ -128,16 +165,24 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         long attemptedAtMs,
         CancellationToken cancellationToken)
     {
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
             INSERT INTO source_state(source_id, last_attempt_ms)
             VALUES ($source_id, $attempted_at)
             ON CONFLICT(source_id) DO UPDATE SET last_attempt_ms = excluded.last_attempt_ms;
             """;
-        command.Parameters.AddWithValue("$source_id", sourceId);
-        command.Parameters.AddWithValue("$attempted_at", attemptedAtMs);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+            command.Parameters.AddWithValue("$source_id", sourceId);
+            command.Parameters.AddWithValue("$attempted_at", attemptedAtMs);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     public async Task MarkSourceFailureAsync(
@@ -146,9 +191,12 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         string errorCode,
         CancellationToken cancellationToken)
     {
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
             INSERT INTO source_state(
               source_id, last_attempt_ms, unreachable_since_ms, last_error_code)
             VALUES ($source_id, $failed_at, $failed_at, $error_code)
@@ -157,29 +205,42 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               unreachable_since_ms = COALESCE(source_state.unreachable_since_ms, excluded.unreachable_since_ms),
               last_error_code = excluded.last_error_code;
             """;
-        command.Parameters.AddWithValue("$source_id", sourceId);
-        command.Parameters.AddWithValue("$failed_at", failedAtMs);
-        command.Parameters.AddWithValue("$error_code", errorCode);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+            command.Parameters.AddWithValue("$source_id", sourceId);
+            command.Parameters.AddWithValue("$failed_at", failedAtMs);
+            command.Parameters.AddWithValue("$error_code", errorCode);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     public async Task PurgeAsync(long cutoffMs, CancellationToken cancellationToken)
     {
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        // findings.last_seen_ms is the MAX across sources, so stale per-source observations and
-        // retired sources outlive the window unless they are purged on their own timestamps.
-        command.CommandText = """
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var transaction = connection.BeginTransaction(deferred: false);
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            // findings.last_seen_ms is the MAX across sources, so stale per-source observations and
+            // retired sources outlive the window unless they are purged on their own timestamps.
+            command.CommandText = """
             DELETE FROM finding_sources WHERE last_seen_ms < $cutoff;
             DELETE FROM findings WHERE last_seen_ms < $cutoff;
             DELETE FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff;
             DELETE FROM source_state WHERE last_attempt_ms < $cutoff;
             """;
-        command.Parameters.AddWithValue("$cutoff", cutoffMs);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            command.Parameters.AddWithValue("$cutoff", cutoffMs);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     public Task<IReadOnlyList<StoredFinding>> QueryFindingsAsync(
@@ -400,5 +461,9 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public void Dispose() => _initializeGate.Dispose();
+    public void Dispose()
+    {
+        _initializeGate.Dispose();
+        _writeGate.Dispose();
+    }
 }

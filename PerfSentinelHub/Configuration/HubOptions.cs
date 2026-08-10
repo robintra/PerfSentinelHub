@@ -24,6 +24,7 @@ public sealed record SourceOptions
     public Uri? BaseUrl { get; set; }
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
+    public string? ImportApiKey { get; set; }
 }
 
 public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
@@ -52,8 +53,11 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in options.Sources)
         {
-            if (string.IsNullOrWhiteSpace(source.Id) || !ids.Add(source.Id))
-                errors.Add("Source IDs must be non-empty and unique.");
+            if (string.IsNullOrWhiteSpace(source.Id) ||
+                source.Id.Length > 64 ||
+                source.Id.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '.' and not '_' and not '-') ||
+                !ids.Add(source.Id))
+                errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
             if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
                 errors.Add($"Source '{source.Id}' requires a name and environment.");
             if (source.BaseUrl is not { IsAbsoluteUri: true } baseUrl ||
@@ -66,6 +70,10 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
                     "without credentials, query, or fragment.");
 
             ValidateAuthHeader(source, errors);
+            if (source.ImportApiKey is { } importApiKey &&
+                (importApiKey.Length < 32 || string.IsNullOrWhiteSpace(importApiKey) ||
+                 importApiKey.Any(char.IsControl)))
+                errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
         }
 
         return errors.Count == 0

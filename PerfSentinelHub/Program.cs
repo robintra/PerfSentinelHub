@@ -18,6 +18,7 @@ builder.Services.AddOptions<HubOptions>()
     .ValidateOnStart();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
+builder.Services.AddSingleton<ImportGate>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AutomaticDecompression = DecompressionMethods.All,

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: perf-sentinel-hub
-description: Durable poll-only storage for perf-sentinel findings
+description: Durable push and recovery-poll storage for perf-sentinel findings
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

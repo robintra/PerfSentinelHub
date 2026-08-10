@@ -122,6 +122,46 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task MarkSourceAttemptAsync(
+        string sourceId,
+        long attemptedAtMs,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO source_state(source_id, last_attempt_ms)
+            VALUES ($source_id, $attempted_at)
+            ON CONFLICT(source_id) DO UPDATE SET last_attempt_ms = excluded.last_attempt_ms;
+            """;
+        command.Parameters.AddWithValue("$source_id", sourceId);
+        command.Parameters.AddWithValue("$attempted_at", attemptedAtMs);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task MarkSourceFailureAsync(
+        string sourceId,
+        long failedAtMs,
+        string errorCode,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO source_state(
+              source_id, last_attempt_ms, unreachable_since_ms, last_error_code)
+            VALUES ($source_id, $failed_at, $failed_at, $error_code)
+            ON CONFLICT(source_id) DO UPDATE SET
+              last_attempt_ms = excluded.last_attempt_ms,
+              unreachable_since_ms = COALESCE(source_state.unreachable_since_ms, excluded.unreachable_since_ms),
+              last_error_code = excluded.last_error_code;
+            """;
+        command.Parameters.AddWithValue("$source_id", sourceId);
+        command.Parameters.AddWithValue("$failed_at", failedAtMs);
+        command.Parameters.AddWithValue("$error_code", errorCode);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public Task<IReadOnlyList<StoredFinding>> QueryFindingsAsync(
         FindingQuery query,
         CancellationToken cancellationToken) =>

@@ -1,8 +1,10 @@
+using System.Net;
 using PerfSentinelHub.Api;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
+using PerfSentinelHub.Collection;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -15,6 +17,13 @@ builder.Services.AddOptions<HubOptions>()
     .ValidateOnStart();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
+builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AutomaticDecompression = DecompressionMethods.All,
+    AllowAutoRedirect = false,
+    UseCookies = false
+});
+builder.Services.AddTransient<SourcePoller>();
 
 var app = builder.Build();
 

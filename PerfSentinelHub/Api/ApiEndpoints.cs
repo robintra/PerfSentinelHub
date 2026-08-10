@@ -225,9 +225,13 @@ public static class ApiEndpoints
     }
 }
 
+// Bounds how many import bodies may be buffered at once (MaxImports * 2 MiB). It is not a write
+// lock -- HubDatabase serializes writes -- so one slow uploader must not stall the whole fleet.
 public sealed class ImportGate : IDisposable
 {
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    public const int MaxImports = 4;
+
+    private readonly SemaphoreSlim _gate = new(MaxImports, MaxImports);
 
     public bool TryEnter() => _gate.Wait(0);
 

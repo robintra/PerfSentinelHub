@@ -12,6 +12,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     private readonly string _databasePath = options.Value.DatabasePath;
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
+    private const int PurgeChunkSize = 5_000;
+    private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _ready;
 
@@ -93,7 +95,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            await UpsertBatchCoreAsync(source, batch, observedAtMs, cancellationToken);
+            await UpsertBatchCoreAsync(source, batch, observedAtMs, fromPoll: true, cancellationToken);
         }
         finally
         {
@@ -107,11 +109,12 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         long observedAtMs,
         CancellationToken cancellationToken)
     {
-        if (!await _writeGate.WaitAsync(0, cancellationToken))
+        // Wait out a short write rather than rejecting the push: only genuine contention 503s.
+        if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
             return false;
         try
         {
-            await UpsertBatchCoreAsync(source, batch, observedAtMs, cancellationToken);
+            await UpsertBatchCoreAsync(source, batch, observedAtMs, fromPoll: false, cancellationToken);
             return true;
         }
         finally
@@ -124,6 +127,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         SourceSnapshot source,
         ParsedBatch batch,
         long observedAtMs,
+        bool fromPoll,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -139,21 +143,24 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await using (var state = connection.CreateCommand())
         {
             state.Transaction = transaction;
+            // source_state tracks the poll path only: a daemon push must not clear an
+            // unreachable marker, or a permanently broken poll reads as healthy forever.
             state.CommandText = """
                 INSERT INTO source_state(
                   source_id, last_attempt_ms, last_success_ms, unreachable_since_ms,
                   producer_version, last_error_code)
                 VALUES ($source_id, $observed_at, $observed_at, NULL, $producer_version, NULL)
                 ON CONFLICT(source_id) DO UPDATE SET
-                  last_attempt_ms = excluded.last_attempt_ms,
-                  last_success_ms = excluded.last_success_ms,
-                  unreachable_since_ms = NULL,
+                  last_attempt_ms = IIF($from_poll, excluded.last_attempt_ms, source_state.last_attempt_ms),
+                  last_success_ms = IIF($from_poll, excluded.last_success_ms, source_state.last_success_ms),
+                  unreachable_since_ms = IIF($from_poll, NULL, source_state.unreachable_since_ms),
                   producer_version = excluded.producer_version,
-                  last_error_code = NULL;
+                  last_error_code = IIF($from_poll, NULL, source_state.last_error_code);
                 """;
             state.Parameters.AddWithValue("$source_id", source.SourceId);
             state.Parameters.AddWithValue("$observed_at", observedAtMs);
             state.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
+            state.Parameters.AddWithValue("$from_poll", fromPoll ? 1 : 0);
             await state.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -218,6 +225,15 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
 
     public async Task PurgeAsync(long cutoffMs, CancellationToken cancellationToken)
     {
+        // Chunked: holding the write gate for one whole multi-GB delete would 503 every daemon
+        // import for the duration of the purge.
+        while (await PurgeChunkAsync(cutoffMs, cancellationToken) > 0)
+        {
+        }
+    }
+
+    private async Task<int> PurgeChunkAsync(long cutoffMs, CancellationToken cancellationToken)
+    {
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
@@ -228,14 +244,20 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             // findings.last_seen_ms is the MAX across sources, so stale per-source observations and
             // retired sources outlive the window unless they are purged on their own timestamps.
             command.CommandText = """
-            DELETE FROM finding_sources WHERE last_seen_ms < $cutoff;
-            DELETE FROM findings WHERE last_seen_ms < $cutoff;
-            DELETE FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff;
-            DELETE FROM source_state WHERE last_attempt_ms < $cutoff;
+            DELETE FROM finding_sources WHERE rowid IN (
+              SELECT rowid FROM finding_sources WHERE last_seen_ms < $cutoff LIMIT $chunk);
+            DELETE FROM findings WHERE rowid IN (
+              SELECT rowid FROM findings WHERE last_seen_ms < $cutoff LIMIT $chunk);
+            DELETE FROM endpoint_heartbeats WHERE rowid IN (
+              SELECT rowid FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff LIMIT $chunk);
+            DELETE FROM source_state WHERE rowid IN (
+              SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
             """;
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            command.Parameters.AddWithValue("$chunk", PurgeChunkSize);
+            var deleted = await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            return deleted;
         }
         finally
         {

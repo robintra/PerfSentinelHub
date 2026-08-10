@@ -15,7 +15,7 @@ Hub__Sources__0__Id=local \
 Hub__Sources__0__Name='Local daemon' \
 Hub__Sources__0__Environment=development \
 Hub__Sources__0__BaseUrl=http://localhost:4318 \
-Hub__Sources__0__ImportApiKey=0123456789abcdef0123456789abcdef \
+Hub__Sources__0__ImportApiKey="$(openssl rand -hex 16)" \
 ASPNETCORE_URLS=http://localhost:5080 \
 dotnet run --project PerfSentinelHub
 
@@ -73,9 +73,15 @@ and `sources`.
 `{"producer_version":"…","findings":[…]}` with `X-API-Key`. A request contains 1–100 findings
 and at most 2 MiB. The response is sent only after the idempotent signature upsert commits.
 
-The Hub admits one import at a time, matching SQLite's single-writer model. Concurrent imports get
-`503 Retry-After: 1`; daemon exporters retain and retry their coalesced batches. This bounds request
-memory and garbage-collector pressure independently of the number of daemons.
+The Hub admits four imports at a time, which bounds request memory independently of the number of
+daemons; writes themselves are serialized against the poll and retention paths. An import that
+cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon exporters
+retain and retry their coalesced batches. Retention purges in bounded chunks so a long purge does
+not reject imports for its whole duration.
+
+A push updates findings and per-source observations only. It never clears the poll path's
+`unreachable_since_ms`, so a source the Hub cannot reach still reports `unreachable_since` even
+while its daemon pushes successfully.
 
 ## Read API
 

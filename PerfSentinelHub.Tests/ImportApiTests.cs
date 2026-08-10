@@ -69,18 +69,20 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
     }
 
     [Fact]
-    public void Import_gate_allows_only_one_in_flight_writer()
+    public void Import_gate_bounds_the_number_of_buffered_bodies()
     {
         var gate = factory.Services.GetRequiredService<ImportGate>();
 
-        Assert.True(gate.TryEnter());
+        var entered = Enumerable.Range(0, ImportGate.MaxImports).Count(_ => gate.TryEnter());
         try
         {
+            Assert.Equal(ImportGate.MaxImports, entered);
             Assert.False(gate.TryEnter());
         }
         finally
         {
-            gate.Exit();
+            for (var slot = 0; slot < entered; slot++)
+                gate.Exit();
         }
     }
 
@@ -88,7 +90,7 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
     public async Task Busy_import_is_retryable_without_entering_storage()
     {
         var gate = factory.Services.GetRequiredService<ImportGate>();
-        Assert.True(gate.TryEnter());
+        var entered = Enumerable.Range(0, ImportGate.MaxImports).Count(_ => gate.TryEnter());
         try
         {
             using var request = await RequestAsync(ApiKey, 1);
@@ -100,8 +102,32 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
         }
         finally
         {
-            gate.Exit();
+            for (var slot = 0; slot < entered; slot++)
+                gate.Exit();
         }
+    }
+
+    [Fact]
+    public async Task Import_does_not_clear_the_poll_unreachable_state()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.MarkSourceFailureAsync("test", 500, "network_error", cancellationToken);
+
+        using var request = await RequestAsync(ApiKey, 1);
+        using var response = await _client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT unreachable_since_ms, last_error_code, producer_version
+            FROM source_state WHERE source_id = 'test';
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        Assert.True(await reader.ReadAsync(cancellationToken));
+        Assert.False(reader.IsDBNull(0));
+        Assert.Equal("network_error", reader.GetString(1));
+        Assert.Equal("0.11.2", reader.GetString(2));
     }
 
     private static async Task<HttpRequestMessage> RequestAsync(

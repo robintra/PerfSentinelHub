@@ -82,7 +82,7 @@ public sealed class ConfigurationTests
 
     [Theory]
     [InlineData("short")]
-    [InlineData("0123456789abcdef0123456789abcdef\t")]
+    [InlineData("0123456789abcdef\t0123456789abcdef")]
     public void Invalid_import_key_is_rejected(string value)
     {
         var options = ValidOptions() with
@@ -91,6 +91,16 @@ public sealed class ConfigurationTests
         };
 
         Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
+    public void Import_key_is_trimmed_like_the_daemon_trims_its_key_file()
+    {
+        var source = ValidSource() with { ImportApiKey = "0123456789abcdef0123456789abcdef\n" };
+        var options = ValidOptions() with { Sources = [source] };
+
+        Assert.Equal("0123456789abcdef0123456789abcdef", source.ImportApiKey);
+        Assert.True(new HubOptionsValidator().Validate(null, options).Succeeded);
     }
 
     [Fact]

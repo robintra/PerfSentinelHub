@@ -24,7 +24,15 @@ public sealed record SourceOptions
     public Uri? BaseUrl { get; set; }
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
-    public string? ImportApiKey { get; set; }
+    // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a
+    // trailing newline must hash to the same bytes on both halves of the contract.
+    public string? ImportApiKey
+    {
+        get => _importApiKey;
+        set => _importApiKey = value?.Trim();
+    }
+
+    private string? _importApiKey;
 }
 
 public sealed class HubOptionsValidator : IValidateOptions<HubOptions>

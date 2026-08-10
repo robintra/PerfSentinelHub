@@ -1,37 +1,113 @@
 # PerfSentinelHub
 
-Long-term memory for [perf-sentinel](https://github.com/robintra/perf-sentinel) findings, and
-the single endpoint IDE plugins talk to.
+PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
+[perf-sentinel 0.11.2](https://github.com/robintra/perf-sentinel/releases/tag/v0.11.2) daemons.
+It is a poll-only NativeAOT service backed by SQLite: daemons remain the producers, while the Hub
+preserves their read-compatible finding envelopes for 180 days by default.
 
-Daemons retain findings in a bounded ring buffer and CI runners disappear with the job. The hub
-persists what they produce, keyed by finding signature, and serves the daemon's own read contract
-back, so a plugin cannot tell whether it is talking to one daemon, several behind a hub, or a hub
-with no daemon at all.
+## Run locally in five minutes
 
-**Status: scaffold.** Nothing below is implemented yet.
-
-## Requirements
-
-.NET 10 SDK. The project publishes as native AOT, so there is no runtime to deploy.
+Requirements: .NET SDK 10.0.302 and a reachable perf-sentinel daemon.
 
 ```bash
+Hub__DatabasePath=/tmp/perf-sentinel-hub.db \
+Hub__Sources__0__Id=local \
+Hub__Sources__0__Name='Local daemon' \
+Hub__Sources__0__Environment=development \
+Hub__Sources__0__BaseUrl=http://localhost:4318 \
+ASPNETCORE_URLS=http://localhost:5080 \
 dotnet run --project PerfSentinelHub
+
+curl http://localhost:5080/health/ready
+curl http://localhost:5080/api/findings
 ```
 
-## Design notes
+The first poll starts immediately. The SQLite file survives restarts at the configured path.
 
-- Findings are stored as opaque documents. Only the queried fields are indexed.
-- ADO.NET on `Microsoft.Data.Sqlite`, not EF Core, because native AOT forbids runtime reflection.
-- Minimal APIs with a source-generated `JsonSerializerContext`, for the same reason.
-- The hub is read-only for humans: acknowledgments live in the repository's
-  `.perf-sentinel-acknowledgments.toml`, never here.
+## Install with Helm
+
+The chart always deploys one replica and a persistent volume. Supply at least one source:
+
+```bash
+helm upgrade --install perf-sentinel-hub deploy/helm/perf-sentinel-hub \
+  --set image.repository=ghcr.io/robintra/perf-sentinel-hub \
+  --set image.tag=0.1.0 \
+  --set 'sources[0].id=production' \
+  --set 'sources[0].name=Production' \
+  --set 'sources[0].environment=production' \
+  --set 'sources[0].baseUrl=http://perf-sentinel.observability:4318' \
+  --set persistence.size=5Gi
+```
+
+For an authenticated daemon, put the value in a Kubernetes Secret, then set
+`sources[].authHeaderName`, `sources[].authSecretName`, and `sources[].authSecretKey`. Never put
+the credential itself in Helm values.
+
+## Configuration
+
+Environment variables use the .NET `Hub__...` form; Helm exposes the same settings under `hub`
+and `sources`.
+
+| Setting | Default | Validation |
+| --- | --- | --- |
+| `Hub:DatabasePath` | `/data/hub.db` | Absolute path |
+| `Hub:PollInterval` | `01:00:00` | Positive duration |
+| `Hub:HttpTimeout` | `00:00:10` | Positive duration |
+| `Hub:MaxConcurrentPolls` | `4` | 1–32 |
+| `Hub:Retention` | `180.00:00:00` (180 days) | Positive duration |
+| `Hub:DefaultReadLimit` | `1000` | 1–`MaxReadLimit` |
+| `Hub:MaxReadLimit` | `10000` | 1–10000 |
+| `Hub:Sources` | none | At least one source |
+| `Sources[].Id` | none | Non-empty and unique |
+| `Sources[].Name` | none | Non-empty |
+| `Sources[].Environment` | none | Non-empty |
+| `Sources[].BaseUrl` | none | Absolute HTTP(S) URL without credentials |
+| `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
+
+## Read API
+
+- `GET /api/status` reports the Hub service and version.
+- `GET /api/findings` accepts `service`, `finding_type`, `severity`, `limit`, and the
+  daemon-compatible `include_acked` query parameter.
+- `GET /api/findings/{traceId}` returns findings for a sample trace.
+
+Responses preserve each daemon finding as an opaque, additive JSON document and add durable
+`first_seen`, `last_seen`, `max_confidence`, and source freshness metadata. IDE clients should
+ignore unknown fields, as they do with the daemon API. `/health/live` checks the process;
+`/health/ready` becomes successful after SQLite initialization.
+
+## Freshness and recovery
+
+Each source is polled independently. A successful poll updates observations but does not delete a
+finding merely because a later daemon response omits it: the daemon ring buffer may have evicted
+it, so missing does **not** mean resolved. Retention removes findings whose last observation is
+older than the configured period.
+
+Failures keep previously stored findings readable. The affected source is marked unreachable and
+retried with bounded exponential backoff; a later success clears that state. Poll bodies are
+limited to 16 MiB, requests have a timeout, imports are transactional, and logs identify only the
+source ID and a stable error code.
+
+## Deliberate exclusions
+
+This release has no ingress, user authentication, push or CI import, worker execution, trace
+backend, dashboard, acknowledgment writer, or remote backup. Network exposure and authentication
+belong in the next independent design; acknowledgments remain in the repository consumed by
+perf-sentinel.
+
+## Development
+
+```bash
+make verify
+```
+
+The gate uses locked packages, tests, a linux NativeAOT publish, Docker/Trivy, and Helm linting.
+The toolchain is pinned to .NET SDK 10.0.302, ASP.NET/SQLite 10.0.10, Helm 4.2.3, and SHA-pinned
+GitHub Actions. Runtime containers are non-root, read-only, and based on a digest-pinned chiseled
+image.
 
 ## License
 
-[GNU Affero General Public License v3.0](LICENSE).
-
-Sending findings to the hub, or reading them from it, places no license obligation on your own
-code: applications and IDE plugins reach it over HTTP, which is arm's-length communication rather
-than linking. The AGPL covers this hub's own source. Section 13 applies if you modify it and offer
-the modified version to others over a network. Running the unmodified source or image does not
-trigger it. This is a practical summary, not legal advice.
+[GNU Affero General Public License v3.0](LICENSE). Applications and IDE plugins communicate with
+the Hub over HTTP rather than linking it. If you modify the Hub and offer that modified version
+over a network, AGPL section 13 applies. This is a practical summary, not legal advice.

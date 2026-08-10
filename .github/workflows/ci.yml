@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 10.0.302
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        with:
+          version: v4.2.3
+      - name: Restore
+        run: dotnet restore PerfSentinelHub.sln --locked-mode
+      - name: Test
+        run: dotnet test PerfSentinelHub.sln -c Release --no-restore
+      - name: Publish NativeAOT
+        run: dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true --no-restore
+      - name: Audit packages
+        run: |
+          dotnet package list --project PerfSentinelHub.sln --vulnerable --include-transitive --format json --no-restore > /tmp/vulnerabilities.json
+          python3 -c 'import json,sys; d=json.load(open("/tmp/vulnerabilities.json")); v=[x for p in d.get("projects",[]) for f in p.get("frameworks",[]) for k in ("topLevelPackages","transitivePackages") for x in f.get(k,[]) if x.get("vulnerabilities")]; sys.exit(bool(v))'
+      - name: Build image
+        run: docker build --platform linux/amd64 -t perf-sentinel-hub:ci .
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: perf-sentinel-hub:ci
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+      - name: Validate Helm chart
+        run: |
+          helm lint deploy/helm/perf-sentinel-hub --set 'sources[0].id=ci' --set 'sources[0].name=ci' --set 'sources[0].environment=ci' --set 'sources[0].baseUrl=http://perf-sentinel:4318'
+          helm template ci deploy/helm/perf-sentinel-hub --set 'sources[0].id=ci' --set 'sources[0].name=ci' --set 'sources[0].environment=ci' --set 'sources[0].baseUrl=http://perf-sentinel:4318' >/dev/null

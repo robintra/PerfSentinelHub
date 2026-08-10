@@ -3,6 +3,7 @@
     <PropertyGroup>
         <InvariantGlobalization>false</InvariantGlobalization>
         <PublishAot>true</PublishAot>
+        <RuntimeIdentifiers>osx-arm64;linux-arm64;linux-x64</RuntimeIdentifiers>
         <Copyright>Copyright (C) 2026 Robin Trassard</Copyright>
         <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
         <RepositoryUrl>https://github.com/robintra/PerfSentinelHub</RepositoryUrl>

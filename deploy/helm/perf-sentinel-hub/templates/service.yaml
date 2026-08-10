@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "perf-sentinel-hub.name" . }}
+spec:
+  selector:
+    {{- include "perf-sentinel-hub.labels" . | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: http

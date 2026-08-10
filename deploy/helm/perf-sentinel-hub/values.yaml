@@ -1,0 +1,20 @@
+replicaCount: 1
+image:
+  repository: perf-sentinel-hub
+  tag: local
+  pullPolicy: IfNotPresent
+hub:
+  pollInterval: "01:00:00"
+  httpTimeout: "00:00:10"
+  maxConcurrentPolls: 4
+  retention: "180.00:00:00"
+  defaultReadLimit: 1000
+  maxReadLimit: 10000
+sources: []
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: ""
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { cpu: 500m, memory: 256Mi }

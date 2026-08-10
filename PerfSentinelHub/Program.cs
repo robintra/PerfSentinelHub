@@ -1,11 +1,11 @@
 using System.Net;
-using PerfSentinelHub.Api;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using PerfSentinelHub.Configuration;
-using PerfSentinelHub.Storage;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
+using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Maintenance;
+using PerfSentinelHub.Storage;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 

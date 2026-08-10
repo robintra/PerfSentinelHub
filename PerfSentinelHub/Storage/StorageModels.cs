@@ -18,7 +18,8 @@ public sealed record StoredFinding(
     long FirstSeenMs,
     long LastSeenMs,
     string MaxConfidence,
-    int MaxConfidenceRank);
+    int MaxConfidenceRank,
+    IReadOnlyList<FindingSourceObservation> Sources);
 
 public sealed record FindingSourceObservation(
     string Signature,
@@ -27,7 +28,8 @@ public sealed record FindingSourceObservation(
     string Environment,
     string ProducerVersion,
     long FirstSeenMs,
-    long LastSeenMs);
+    long LastSeenMs,
+    long? UnreachableSinceMs);
 
 public sealed record SourceState(
     string SourceId,

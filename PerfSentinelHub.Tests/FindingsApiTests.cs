@@ -1,0 +1,118 @@
+using System.Net;
+using System.Text.Json;
+using PerfSentinelHub.Collection;
+using PerfSentinelHub.Storage;
+
+namespace PerfSentinelHub.Tests;
+
+public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
+{
+    private readonly HubApplicationFactory _factory;
+    private readonly HttpClient _client;
+
+    public FindingsApiTests(HubApplicationFactory factory)
+    {
+        _factory = factory;
+        _client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task Findings_filters_and_preserves_opaque_fields_with_additive_metadata()
+    {
+        await SeedAsync();
+        using var response = await _client.GetAsync(
+            "/api/findings?service=rider-smoke&finding_type=blocking_wait&severity=critical&limit=1",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        var envelope = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Equal("blocking_wait", envelope.GetProperty("finding").GetProperty("type").GetString());
+        Assert.True(envelope.GetProperty("future_contract_field").GetProperty("preserve").GetBoolean());
+        Assert.True(envelope.TryGetProperty("first_seen", out _));
+        Assert.Equal(2, envelope.GetProperty("sources").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("/api/findings?limit=0")]
+    [InlineData("/api/findings?limit=10001")]
+    [InlineData("/api/findings?service=a&service=b")]
+    [InlineData("/api/findings?service=%FF")]
+    public async Task Invalid_query_is_rejected(string path)
+    {
+        using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task No_matching_findings_returns_an_empty_array()
+    {
+        await SeedAsync();
+        using var response = await _client.GetAsync(
+            "/api/findings?service=missing",
+            TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        Assert.Equal(JsonValueKind.Array, document.RootElement.ValueKind);
+        Assert.Empty(document.RootElement.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Trace_lookup_returns_only_the_matching_envelope()
+    {
+        await SeedAsync();
+        using var response = await _client.GetAsync(
+            "/api/findings/rider-trace-file-line",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        var envelope = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Equal(
+            "rider-trace-file-line",
+            envelope.GetProperty("finding").GetProperty("trace_id").GetString());
+    }
+
+    private async Task SeedAsync()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var payload = await File.ReadAllBytesAsync(FixturePath, cancellationToken);
+        var batch = FindingParser.Parse(payload);
+        await _factory.Database.UpsertBatchAsync(
+            new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
+            batch,
+            1000,
+            cancellationToken);
+        await _factory.Database.UpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
+            batch,
+            2000,
+            cancellationToken);
+
+        var original = batch.Findings[0];
+        var other = original with
+        {
+            Signature = "slow_sql:other:query",
+            Service = "other",
+            FindingType = "slow_sql",
+            TraceId = "other-trace",
+            EnvelopeJson = original.EnvelopeJson
+                .Replace("blocking_wait:rider-smoke:checkout:slow-path", "slow_sql:other:query", StringComparison.Ordinal)
+                .Replace("rider-trace-file-line", "other-trace", StringComparison.Ordinal)
+                .Replace("\"type\": \"blocking_wait\"", "\"type\": \"slow_sql\"", StringComparison.Ordinal)
+                .Replace("\"service\": \"rider-smoke\"", "\"service\": \"other\"", StringComparison.Ordinal)
+        };
+        await _factory.Database.UpsertBatchAsync(
+            new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
+            new ParsedBatch([other], 0),
+            3000,
+            cancellationToken);
+    }
+
+    private static string FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "Fixtures",
+        "daemon-findings-0.11.2.json");
+}

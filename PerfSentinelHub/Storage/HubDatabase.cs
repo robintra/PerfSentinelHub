@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using System.Text;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 
@@ -8,6 +10,7 @@ namespace PerfSentinelHub.Storage;
 public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider) : IDisposable
 {
     private readonly string _databasePath = options.Value.DatabasePath;
+    private readonly int _maxReadLimit = options.Value.MaxReadLimit;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private int _ready;
 
@@ -117,6 +120,110 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         }
 
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<StoredFinding>> QueryFindingsAsync(
+        FindingQuery query,
+        CancellationToken cancellationToken) =>
+        QueryAsync(query, null, cancellationToken);
+
+    public Task<IReadOnlyList<StoredFinding>> FindByTraceAsync(
+        string traceId,
+        CancellationToken cancellationToken) =>
+        QueryAsync(new FindingQuery(null, null, null, _maxReadLimit), traceId, cancellationToken);
+
+    private async Task<IReadOnlyList<StoredFinding>> QueryAsync(
+        FindingQuery query,
+        string? traceId,
+        CancellationToken cancellationToken)
+    {
+        var where = new StringBuilder("WHERE 1 = 1");
+        var parameters = new List<(string Name, object Value)>();
+        AddFilter(where, parameters, "service", "$service", query.Service);
+        AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
+        AddFilter(where, parameters, "severity", "$severity", query.Severity);
+        AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $$"""
+            WITH selected AS (
+              SELECT * FROM findings
+              {{where}}
+              ORDER BY last_seen_ms DESC, signature ASC
+              LIMIT $limit
+            )
+            SELECT
+              f.signature, f.finding_json, f.service, f.finding_type, f.severity,
+              f.endpoint, f.template_hash, f.sample_trace_id, f.first_seen_ms,
+              f.last_seen_ms, f.max_confidence, f.max_confidence_rank,
+              fs.source_id, fs.source_name, fs.environment, fs.producer_version,
+              fs.first_seen_ms, fs.last_seen_ms, ss.unreachable_since_ms
+            FROM selected AS f
+            LEFT JOIN finding_sources AS fs ON fs.signature = f.signature
+            LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
+            ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
+            """;
+        foreach (var (name, value) in parameters)
+            command.Parameters.AddWithValue(name, value);
+        command.Parameters.AddWithValue("$limit", query.Limit);
+
+        var rows = new List<StoredFinding>();
+        var bySignature = new Dictionary<string, StoredFinding>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var signature = reader.GetString(0);
+            if (!bySignature.TryGetValue(signature, out var finding))
+            {
+                var sources = new List<FindingSourceObservation>();
+                finding = new StoredFinding(
+                    signature,
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.GetString(5),
+                    reader.GetString(6),
+                    reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.GetInt64(8),
+                    reader.GetInt64(9),
+                    reader.GetString(10),
+                    reader.GetInt32(11),
+                    sources);
+                bySignature.Add(signature, finding);
+                rows.Add(finding);
+            }
+
+            if (!reader.IsDBNull(12))
+            {
+                ((List<FindingSourceObservation>)finding.Sources).Add(new FindingSourceObservation(
+                    signature,
+                    reader.GetString(12),
+                    reader.GetString(13),
+                    reader.GetString(14),
+                    reader.GetString(15),
+                    reader.GetInt64(16),
+                    reader.GetInt64(17),
+                    reader.IsDBNull(18) ? null : reader.GetInt64(18)));
+            }
+        }
+
+        return rows;
+    }
+
+    private static void AddFilter(
+        StringBuilder where,
+        List<(string Name, object Value)> parameters,
+        string column,
+        string parameter,
+        string? value)
+    {
+        if (value is null)
+            return;
+
+        where.Append(" AND ").Append(column).Append(" = ").Append(parameter);
+        parameters.Add((parameter, value));
     }
 
     private static async Task UpsertFindingAsync(

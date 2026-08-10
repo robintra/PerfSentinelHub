@@ -1,5 +1,7 @@
 namespace PerfSentinelHub.Api;
 
+using PerfSentinelHub.Storage;
+
 public static class ApiEndpoints
 {
     public static void MapHubApi(this WebApplication app)
@@ -8,6 +10,7 @@ public static class ApiEndpoints
 
         app.MapGet("/api/status", () => new StatusResponse("perf-sentinel-hub", version));
         app.MapGet("/health/live", () => TypedResults.Ok());
-        app.MapGet("/health/ready", () => TypedResults.Ok());
+        app.MapGet("/health/ready", (HubDatabase database) =>
+            database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
     }
 }

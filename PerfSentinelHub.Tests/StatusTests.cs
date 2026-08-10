@@ -1,20 +1,24 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Tests;
 
-public sealed class StatusTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class StatusTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private readonly HttpClient _client;
+    private readonly string _databasePath;
 
-    public StatusTests(WebApplicationFactory<Program> factory) =>
+    public StatusTests(WebApplicationFactory<Program> factory)
+    {
+        _databasePath = Path.Combine(Path.GetTempPath(), $"hub-{Guid.NewGuid():N}.db");
         _client = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
             services.PostConfigure<HubOptions>(options =>
             {
-                options.DatabasePath = Path.Combine(Path.GetTempPath(), $"hub-{Guid.NewGuid():N}.db");
+                options.DatabasePath = _databasePath;
                 options.Sources = [new SourceOptions
                 {
                     Id = "test",
@@ -24,6 +28,7 @@ public sealed class StatusTests : IClassFixture<WebApplicationFactory<Program>>
                 }];
             })))
             .CreateClient();
+    }
 
     [Fact]
     public async Task Status_is_stable_and_health_endpoints_are_distinct()
@@ -40,5 +45,14 @@ public sealed class StatusTests : IClassFixture<WebApplicationFactory<Program>>
 
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/health/live", cancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/health/ready", cancellationToken)).StatusCode);
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+        File.Delete($"{_databasePath}-shm");
+        File.Delete($"{_databasePath}-wal");
     }
 }

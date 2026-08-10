@@ -2,6 +2,7 @@ using PerfSentinelHub.Api;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Storage;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -12,8 +13,13 @@ builder.Services.TryAddEnumerable(
 builder.Services.AddOptions<HubOptions>()
     .BindConfiguration(HubOptions.SectionName)
     .ValidateOnStart();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<HubDatabase>();
 
 var app = builder.Build();
+
+await app.Services.GetRequiredService<HubDatabase>()
+    .InitializeAsync(app.Lifetime.ApplicationStopping);
 
 app.MapHubApi();
 

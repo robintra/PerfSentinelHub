@@ -4,7 +4,10 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Hosting;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Collection;
+using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests;
@@ -23,6 +26,13 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
+            var workers = services.Where(descriptor =>
+                descriptor.ServiceType == typeof(IHostedService) &&
+                descriptor.ImplementationType is { } type &&
+                (type == typeof(PollWorker) || type == typeof(RetentionWorker))).ToArray();
+            foreach (var worker in workers)
+                services.Remove(worker);
+
             services.PostConfigure<HubOptions>(options =>
             {
                 options.DatabasePath = _databasePath;

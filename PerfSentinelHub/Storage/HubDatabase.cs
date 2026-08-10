@@ -162,6 +162,21 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task PurgeAsync(long cutoffMs, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM findings WHERE last_seen_ms < $cutoff;
+            DELETE FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff;
+            """;
+        command.Parameters.AddWithValue("$cutoff", cutoffMs);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public Task<IReadOnlyList<StoredFinding>> QueryFindingsAsync(
         FindingQuery query,
         CancellationToken cancellationToken) =>

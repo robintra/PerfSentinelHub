@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 using PerfSentinelHub.Collection;
+using PerfSentinelHub.Maintenance;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -24,6 +25,8 @@ builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandle
     UseCookies = false
 });
 builder.Services.AddTransient<SourcePoller>();
+builder.Services.AddHostedService<PollWorker>();
+builder.Services.AddHostedService<RetentionWorker>();
 
 var app = builder.Build();
 

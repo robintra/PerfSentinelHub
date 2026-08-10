@@ -1,8 +1,5 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.302-noble@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.302-noble-aot@sha256:dbf0906fc695ba77ea281f62e9f139f34827d520f0a0900fd939c6297515d43f AS build
 ARG TARGETARCH
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends clang zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
 RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) exit 1 ;; esac \

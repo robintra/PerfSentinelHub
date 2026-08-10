@@ -102,9 +102,10 @@ make verify
 ```
 
 The gate uses locked packages, tests, a linux NativeAOT publish, Docker/Trivy, and Helm linting.
-The toolchain is pinned to .NET SDK 10.0.302, ASP.NET/SQLite 10.0.10, Helm 4.2.3, and SHA-pinned
-GitHub Actions. Runtime containers are non-root, read-only, and based on a digest-pinned chiseled
-image.
+The toolchain is pinned to .NET SDK 10.0.302, ASP.NET/SQLite 10.0.10,
+SQLitePCLRaw 3.0.5, Helm 4.2.3, and SHA-pinned GitHub Actions: checkout 7.0.1,
+setup-dotnet 6.0.0, setup-helm 5.0.1, and Trivy Action 0.36.0. Runtime containers are non-root,
+read-only, and based on digest-pinned official NativeAOT/chiseled images.
 
 ## License
 

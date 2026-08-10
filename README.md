@@ -61,14 +61,15 @@ and `sources`.
 | `Sources[].Id` | none | Non-empty and unique |
 | `Sources[].Name` | none | Non-empty |
 | `Sources[].Environment` | none | Non-empty |
-| `Sources[].BaseUrl` | none | Absolute HTTP(S) URL without credentials |
+| `Sources[].BaseUrl` | none | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
 | `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
 
 ## Read API
 
 - `GET /api/status` reports the Hub service and version.
 - `GET /api/findings` accepts `service`, `finding_type`, `severity`, `limit`, and the
-  daemon-compatible `include_acked` query parameter.
+  daemon-compatible `include_acked` query parameter. `include_acked` defaults to `true`;
+  `include_acked=false` hides envelopes carrying a non-null `acknowledged_by`.
 - `GET /api/findings/{traceId}` returns findings for a sample trace.
 
 Responses preserve each daemon finding as an opaque, additive JSON document and add durable

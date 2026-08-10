@@ -31,7 +31,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using (var pragmas = connection.CreateCommand())
             {
-                pragmas.CommandText = "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;";
+                pragmas.CommandText = "PRAGMA journal_mode=WAL;";
                 await pragmas.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -71,13 +71,14 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         {
             DataSource = _databasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared,
             Pooling = true
         }.ToString());
 
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;";
+        // journal_mode is persisted in the file header; the others are per-connection settings.
+        command.CommandText =
+            "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;";
         await command.ExecuteNonQueryAsync(cancellationToken);
         return connection;
     }
@@ -168,9 +169,13 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await using var transaction = connection.BeginTransaction(deferred: false);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
+        // findings.last_seen_ms is the MAX across sources, so stale per-source observations and
+        // retired sources outlive the window unless they are purged on their own timestamps.
         command.CommandText = """
+            DELETE FROM finding_sources WHERE last_seen_ms < $cutoff;
             DELETE FROM findings WHERE last_seen_ms < $cutoff;
             DELETE FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff;
+            DELETE FROM source_state WHERE last_attempt_ms < $cutoff;
             """;
         command.Parameters.AddWithValue("$cutoff", cutoffMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -198,6 +203,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
+        if (!query.IncludeAcked)
+            where.Append(" AND json_extract(finding_json, '$.acknowledged_by') IS NULL");
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -300,13 +307,22 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               $template_hash, $sample_trace_id, $observed_at, $observed_at,
               $confidence, $confidence_rank)
             ON CONFLICT(signature) DO UPDATE SET
-              finding_json = excluded.finding_json,
-              service = excluded.service,
-              finding_type = excluded.finding_type,
-              severity = excluded.severity,
-              endpoint = excluded.endpoint,
-              template_hash = excluded.template_hash,
-              sample_trace_id = excluded.sample_trace_id,
+              -- Only a newer observation may replace the envelope and its indexed columns:
+              -- a slower source polled earlier must not overwrite a fresher severity or trace.
+              finding_json = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.finding_json, findings.finding_json),
+              service = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.service, findings.service),
+              finding_type = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.finding_type, findings.finding_type),
+              severity = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.severity, findings.severity),
+              endpoint = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.endpoint, findings.endpoint),
+              template_hash = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.template_hash, findings.template_hash),
+              sample_trace_id = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
+                excluded.sample_trace_id, findings.sample_trace_id),
               first_seen_ms = MIN(findings.first_seen_ms, excluded.first_seen_ms),
               last_seen_ms = MAX(findings.last_seen_ms, excluded.last_seen_ms),
               max_confidence = CASE

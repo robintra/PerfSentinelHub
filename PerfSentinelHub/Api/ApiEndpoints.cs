@@ -68,15 +68,17 @@ public static class ApiEndpoints
              limit is < 1 || limit > options.MaxReadLimit))
             return false;
 
-        if (request.Query.TryGetValue("include_acked", out var includeAcked) &&
-            !bool.TryParse(includeAcked[0], out _))
+        var includeAcked = true;
+        if (request.Query.TryGetValue("include_acked", out var rawIncludeAcked) &&
+            !bool.TryParse(rawIncludeAcked[0], out includeAcked))
             return false;
 
         query = new FindingQuery(
             ReadOptional(request, "service"),
             ReadOptional(request, "finding_type"),
             ReadOptional(request, "severity"),
-            limit);
+            limit,
+            includeAcked);
         return true;
     }
 

@@ -15,6 +15,10 @@ spec:
       {{- include "perf-sentinel-hub.labels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        # The config is mounted with subPath, which Kubernetes never refreshes in place:
+        # this checksum rolls the pod whenever the ConfigMap content changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "perf-sentinel-hub.labels" . | nindent 8 }}
     spec:

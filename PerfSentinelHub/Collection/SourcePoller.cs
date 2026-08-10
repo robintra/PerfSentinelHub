@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -34,6 +35,12 @@ public sealed class SourcePoller(
                 batch,
                 observedAtMs,
                 cancellationToken);
+            if (batch.RejectedCount > 0)
+                logger.LogWarning(
+                    "Source {SourceId} rejected {RejectedCount} of {ReceivedCount} findings.",
+                    source.Id,
+                    batch.RejectedCount,
+                    batch.RejectedCount + batch.Findings.Count);
             return new PollResult(batch.Findings.Count, batch.RejectedCount, version);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -55,6 +62,7 @@ public sealed class SourcePoller(
         ResponseTooLargeException => "response_too_large",
         InvalidStatusException => "invalid_status",
         InvalidDataException => "invalid_findings",
+        SqliteException => "storage_error",
         HttpRequestException { StatusCode: not null } => "http_error",
         HttpRequestException => "network_error",
         _ => "network_error"

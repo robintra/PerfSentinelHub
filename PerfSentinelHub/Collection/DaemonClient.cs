@@ -14,11 +14,12 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         SourceOptions source,
         CancellationToken cancellationToken)
     {
-        var body = await SendAsync(source, "/api/status", cancellationToken);
+        var body = await SendAsync(source, "api/status", cancellationToken);
         try
         {
             using var document = JsonDocument.Parse(body);
-            if (document.RootElement.TryGetProperty("version", out var version) &&
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("version", out var version) &&
                 version.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(version.GetString()))
                 return version.GetString()!;
@@ -34,7 +35,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     public Task<byte[]> FetchFindingsAsync(
         SourceOptions source,
         CancellationToken cancellationToken) =>
-        SendAsync(source, "/api/findings?limit=10000&include_acked=true", cancellationToken);
+        SendAsync(source, "api/findings?limit=10000&include_acked=true", cancellationToken);
 
     private async Task<byte[]> SendAsync(
         SourceOptions source,
@@ -43,7 +44,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(source.BaseUrl, path));
+        using var request = new HttpRequestMessage(HttpMethod.Get, RequestUri(source, path));
         if (source.AuthHeaderName is not null)
             request.Headers.TryAddWithoutValidation(source.AuthHeaderName, source.AuthHeaderValue);
 
@@ -75,6 +76,16 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         {
             throw new DaemonTimeoutException(exception);
         }
+    }
+
+    // The path stays relative and the base keeps its trailing slash: a rooted path would discard
+    // any path prefix configured on Sources[].BaseUrl (a daemon behind a path-based ingress).
+    private static Uri RequestUri(SourceOptions source, string path)
+    {
+        var baseUrl = source.BaseUrl!;
+        return new Uri(
+            baseUrl.AbsoluteUri.EndsWith('/') ? baseUrl : new Uri($"{baseUrl.AbsoluteUri}/"),
+            path);
     }
 }
 

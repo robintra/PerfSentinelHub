@@ -42,6 +42,13 @@ public static class FindingEnvelopeWriter
             }
             writer.WriteEndArray();
             writer.WriteEndObject();
+
+            // Flush as we go: a full 10 000-envelope page would otherwise sit in memory at once.
+            if (writer.BytesPending >= 64 * 1024)
+            {
+                writer.Flush();
+                await response.BodyWriter.FlushAsync(cancellationToken);
+            }
         }
 
         writer.WriteEndArray();

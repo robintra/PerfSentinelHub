@@ -1,7 +1,11 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests;
@@ -20,7 +24,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Assert.Equal(TimeSpan.FromMilliseconds(expectedMs), Backoff.Delay(failures, sample));
 
     [Fact]
-    public async Task Purge_uses_last_seen_for_findings_and_heartbeats()
+    public async Task Purge_uses_last_seen_for_findings_sources_heartbeats_and_state()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = new HubDatabase(
@@ -38,6 +42,12 @@ public sealed class WorkerAndRetentionTests : IDisposable
                 INSERT INTO endpoint_heartbeats VALUES
                   ('a','svc','/old',500),
                   ('a','svc','/recent',1500);
+                INSERT INTO finding_sources VALUES
+                  ('seen-again','stale','Stale','staging','0.11.2',100,500),
+                  ('seen-again','fresh','Fresh','production','0.11.2',100,1500);
+                INSERT INTO source_state(source_id, last_attempt_ms) VALUES
+                  ('retired',500),
+                  ('active',1500);
                 """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -47,6 +57,81 @@ public sealed class WorkerAndRetentionTests : IDisposable
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal(2L, await CountAsync(reopened, "findings", cancellationToken));
         Assert.Equal(1L, await CountAsync(reopened, "endpoint_heartbeats", cancellationToken));
+        Assert.Equal(1L, await CountAsync(reopened, "finding_sources", cancellationToken));
+        Assert.Equal(1L, await CountAsync(reopened, "source_state", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Poll_worker_keeps_running_when_a_storage_write_fails()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = Options.Create(new HubOptions
+        {
+            DatabasePath = UnwritablePath,
+            Sources = [new SourceOptions
+            {
+                Id = "unreachable",
+                Name = "Unreachable",
+                Environment = "test",
+                BaseUrl = new Uri("http://127.0.0.1:1")
+            }]
+        });
+        var clock = new FakeTimeProvider();
+        var logger = new ListLogger<PollWorker>();
+        var poller = new SourcePoller(
+            new DaemonClient(new HttpClient(), options),
+            new HubDatabase(options, clock),
+            clock,
+            NullLogger<SourcePoller>.Instance);
+        using var worker = new PollWorker(poller, options, clock, logger);
+
+        await worker.StartAsync(cancellationToken);
+        await WaitForAsync(() => logger.Messages.Count > 0);
+
+        Assert.Contains(logger.Messages, message => message.Contains("unreachable", StringComparison.Ordinal));
+        Assert.False(worker.ExecuteTask!.IsCompleted);
+        await StopQuietlyAsync(worker, cancellationToken);
+    }
+
+    [Fact]
+    public async Task Retention_worker_keeps_running_when_a_purge_fails()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = Options.Create(new HubOptions { DatabasePath = UnwritablePath });
+        var clock = new FakeTimeProvider();
+        var logger = new ListLogger<RetentionWorker>();
+        using var worker = new RetentionWorker(new HubDatabase(options, clock), options, clock, logger);
+
+        await worker.StartAsync(cancellationToken);
+        await WaitForAsync(() => logger.Messages.Count > 0);
+
+        Assert.False(worker.ExecuteTask!.IsCompleted);
+        await StopQuietlyAsync(worker, cancellationToken);
+    }
+
+    private static string UnwritablePath => Path.Combine(
+        Path.GetTempPath(),
+        $"perf-sentinel-hub-missing-{Guid.NewGuid():N}",
+        "hub.db");
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var attempt = 0; attempt < 500 && !condition(); attempt++)
+            await Task.Delay(10);
+    }
+
+    private static async Task StopQuietlyAsync(
+        BackgroundService worker,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await worker.StopAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // The stop token cancels the worker loop; that is the expected shutdown path.
+        }
     }
 
     private static async Task<long> CountAsync(

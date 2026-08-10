@@ -21,7 +21,7 @@ public sealed record SourceOptions
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string Environment { get; set; } = "";
-    public Uri BaseUrl { get; set; } = new("http://invalid.local");
+    public Uri? BaseUrl { get; set; }
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
 }
@@ -56,10 +56,14 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
                 errors.Add("Source IDs must be non-empty and unique.");
             if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
                 errors.Add($"Source '{source.Id}' requires a name and environment.");
-            if (!source.BaseUrl.IsAbsoluteUri ||
-                (source.BaseUrl.Scheme != Uri.UriSchemeHttp && source.BaseUrl.Scheme != Uri.UriSchemeHttps) ||
-                !string.IsNullOrEmpty(source.BaseUrl.UserInfo))
-                errors.Add($"Source '{source.Id}' requires an absolute HTTP(S) URL without credentials.");
+            if (source.BaseUrl is not { IsAbsoluteUri: true } baseUrl ||
+                (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps) ||
+                !string.IsNullOrEmpty(baseUrl.UserInfo) ||
+                !string.IsNullOrEmpty(baseUrl.Query) ||
+                !string.IsNullOrEmpty(baseUrl.Fragment))
+                errors.Add(
+                    $"Source '{source.Id}' requires an absolute HTTP(S) URL " +
+                    "without credentials, query, or fragment.");
 
             ValidateAuthHeader(source, errors);
         }

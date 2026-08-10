@@ -7,14 +7,28 @@ namespace PerfSentinelHub.Maintenance;
 public sealed class RetentionWorker(
     HubDatabase database,
     IOptions<HubOptions> options,
-    TimeProvider timeProvider) : BackgroundService
+    TimeProvider timeProvider,
+    ILogger<RetentionWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             var cutoff = (timeProvider.GetUtcNow() - options.Value.Retention).ToUnixTimeMilliseconds();
-            await database.PurgeAsync(cutoff, stoppingToken);
+            try
+            {
+                await database.PurgeAsync(cutoff, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                // A failed purge must skip one pass, not stop the host and lose the read endpoint.
+                logger.LogError(exception, "Retention purge failed; retrying at the next pass.");
+            }
+
             await Task.Delay(TimeSpan.FromDays(1), timeProvider, stoppingToken);
         }
     }

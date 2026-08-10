@@ -47,6 +47,8 @@ public sealed class ConfigurationTests
         HubOptions[] invalid =
         [
             ValidOptions() with { Sources = [] },
+            ValidOptions() with { Sources = [ValidSource() with { BaseUrl = null }] },
+            ValidOptions() with { Sources = [ValidSource() with { BaseUrl = new Uri("https://daemon.example?a=b") }] },
             ValidOptions() with { Sources = [ValidSource(), ValidSource()] },
             ValidOptions() with { DatabasePath = "relative.db" },
             ValidOptions() with { PollInterval = TimeSpan.Zero },

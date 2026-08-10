@@ -58,6 +58,38 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     [Fact]
+    public async Task Upsert_keeps_the_newest_observation_when_an_older_one_commits_late()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var older = batch.Findings[0] with { Severity = "warning", TraceId = "stale-trace" };
+
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
+            batch,
+            2000,
+            cancellationToken);
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
+            new ParsedBatch([older], 0),
+            1000,
+            cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            "critical",
+            await TextScalarAsync(connection, "SELECT severity FROM findings;", cancellationToken));
+        Assert.Equal(
+            "rider-trace-file-line",
+            await TextScalarAsync(connection, "SELECT sample_trace_id FROM findings;", cancellationToken));
+        Assert.Equal(
+            2000L,
+            await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
+    }
+
+    [Fact]
     public async Task Parser_rejects_only_the_invalid_array_element()
     {
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(

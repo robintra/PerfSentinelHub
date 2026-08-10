@@ -6,4 +6,5 @@ public sealed record FindingQuery(
     string? Service,
     string? FindingType,
     string? Severity,
-    int Limit);
+    int Limit,
+    bool IncludeAcked = true);

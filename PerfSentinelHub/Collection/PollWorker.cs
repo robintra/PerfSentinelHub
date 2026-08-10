@@ -6,7 +6,8 @@ namespace PerfSentinelHub.Collection;
 public sealed class PollWorker(
     SourcePoller poller,
     IOptions<HubOptions> options,
-    TimeProvider timeProvider) : BackgroundService
+    TimeProvider timeProvider,
+    ILogger<PollWorker> logger) : BackgroundService
 {
     private readonly HubOptions _options = options.Value;
 
@@ -40,8 +41,16 @@ public sealed class PollWorker(
                 failures = 0;
                 delay = _options.PollInterval;
             }
-            catch (SourcePollException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                return;
+            }
+            catch (Exception exception)
+            {
+                // A poll must never take the host down: SourcePoller writes to storage outside its
+                // own guarded region, so anything can surface here, not only SourcePollException.
+                if (exception is not SourcePollException)
+                    logger.LogError(exception, "Source {SourceId} poll failed unexpectedly.", source.Id);
                 failures++;
                 delay = Backoff.Delay(failures, Random.Shared.NextDouble());
             }

@@ -59,6 +59,32 @@ public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
     }
 
     [Fact]
+    public async Task Acknowledged_findings_are_excluded_when_include_acked_is_false()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var acked = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:acked:checkout",
+            Service = "acked",
+            TraceId = null,
+            EnvelopeJson = batch.Findings[0].EnvelopeJson.Replace(
+                "\"acknowledged_by\": null",
+                "\"acknowledged_by\": \"robin\"",
+                StringComparison.Ordinal)
+        };
+        await _factory.Database.UpsertBatchAsync(
+            new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
+            new ParsedBatch([acked], 0),
+            4000,
+            cancellationToken);
+
+        Assert.Equal(1, await CountAsync("/api/findings?service=acked"));
+        Assert.Equal(1, await CountAsync("/api/findings?service=acked&include_acked=true"));
+        Assert.Equal(0, await CountAsync("/api/findings?service=acked&include_acked=false"));
+    }
+
+    [Fact]
     public async Task Trace_lookup_returns_only_the_matching_envelope()
     {
         await SeedAsync();
@@ -73,6 +99,15 @@ public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
         Assert.Equal(
             "rider-trace-file-line",
             envelope.GetProperty("finding").GetProperty("trace_id").GetString());
+    }
+
+    private async Task<int> CountAsync(string path)
+    {
+        using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        return document.RootElement.GetArrayLength();
     }
 
     private async Task SeedAsync()

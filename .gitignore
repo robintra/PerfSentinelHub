@@ -5,6 +5,8 @@ riderModule.iml
 /_ReSharper.Caches/
 .idea/
 .DS_Store
+.dotnet/
+TestResults/
 
 # SQLite du hub (§7) : jamais dans le dépôt
 *.db

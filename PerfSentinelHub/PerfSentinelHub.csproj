@@ -1,10 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <InvariantGlobalization>true</InvariantGlobalization>
+        <InvariantGlobalization>false</InvariantGlobalization>
         <PublishAot>true</PublishAot>
         <Copyright>Copyright (C) 2026 Robin Trassard</Copyright>
         <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
@@ -12,8 +9,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
-      <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+      <PackageReference Include="Microsoft.Data.Sqlite" />
+      <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     </ItemGroup>
 
 </Project>

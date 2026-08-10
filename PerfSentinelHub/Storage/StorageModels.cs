@@ -1,5 +1,11 @@
 namespace PerfSentinelHub.Storage;
 
+public sealed record SourceSnapshot(
+    string SourceId,
+    string SourceName,
+    string Environment,
+    string ProducerVersion);
+
 public sealed record StoredFinding(
     string Signature,
     string EnvelopeJson,

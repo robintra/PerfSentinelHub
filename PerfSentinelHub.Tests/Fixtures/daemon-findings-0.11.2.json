@@ -1,0 +1,35 @@
+[
+  {
+    "finding": {
+      "type": "blocking_wait",
+      "severity": "critical",
+      "trace_id": "rider-trace-file-line",
+      "service": "rider-smoke",
+      "grouping": [],
+      "source_endpoint": "POST /checkout",
+      "pattern": {
+        "template": "Thread.Sleep(25)",
+        "occurrences": 8,
+        "window_ms": 1000,
+        "distinct_params": 1
+      },
+      "suggestion": "Remove the blocking wait from the request path",
+      "first_timestamp": "2026-08-08T10:00:00Z",
+      "last_timestamp": "2026-08-08T10:00:05Z",
+      "confidence": "daemon_production",
+      "code_location": {
+        "function": "SlowPath",
+        "filepath": "Program.cs",
+        "lineno": 18,
+        "namespace": "PerfSentinel.RiderSmoke.Program"
+      },
+      "instrumentation_scopes": ["OpenTelemetry.Instrumentation.AspNetCore"],
+      "signature": "blocking_wait:rider-smoke:checkout:slow-path"
+    },
+    "stored_at_ms": 1786183205000,
+    "first_seen_ms": 1786183200000,
+    "seen_count": 8,
+    "acknowledged_by": null,
+    "future_contract_field": { "preserve": true }
+  }
+]

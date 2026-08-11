@@ -165,6 +165,66 @@
       "reason": "Latest stable .NET setup action, pinned to its release commit."
     },
     {
+      "name": "step-security/harden-runner",
+      "kind": "github-action",
+      "version": "2.20.1",
+      "digest_or_sha": "b09bb98e06d4d774595224525879c09bc6e98c40",
+      "released_at": "2026-08-05T05:52:30Z",
+      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.20.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Harden-Runner release outside the 72-hour stabilization window."
+    },
+    {
+      "name": "actions/github-script",
+      "kind": "github-action",
+      "version": "9.0.0",
+      "digest_or_sha": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
+      "released_at": "2026-04-09T22:57:15Z",
+      "source": "https://github.com/actions/github-script/releases/tag/v9.0.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable official GitHub API scripting action."
+    },
+    {
+      "name": "actions/upload-artifact",
+      "kind": "github-action",
+      "version": "7.0.1",
+      "digest_or_sha": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+      "released_at": "2026-04-10T17:31:14Z",
+      "source": "https://github.com/actions/upload-artifact/releases/tag/v7.0.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable official artifact upload action."
+    },
+    {
+      "name": "actions/download-artifact",
+      "kind": "github-action",
+      "version": "8.0.1",
+      "digest_or_sha": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+      "released_at": "2026-03-11T15:44:25Z",
+      "source": "https://github.com/actions/download-artifact/releases/tag/v8.0.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable official artifact download action."
+    },
+    {
+      "name": "actions/dependency-review-action",
+      "kind": "github-action",
+      "version": "5.0.0",
+      "digest_or_sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+      "released_at": "2026-05-08T20:23:50Z",
+      "source": "https://github.com/actions/dependency-review-action/releases/tag/v5.0.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable official dependency review action."
+    },
+    {
+      "name": "actions/create-github-app-token",
+      "kind": "github-action",
+      "version": "3.2.0",
+      "digest_or_sha": "bcd2ba49218906704ab6c1aa796996da409d3eb1",
+      "released_at": "2026-05-12T23:31:37Z",
+      "source": "https://github.com/actions/create-github-app-token/releases/tag/v3.2.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable official action for a short-lived, checks-only GitHub App installation token."
+    },
+    {
       "name": "azure/setup-helm",
       "kind": "github-action",
       "version": "5.0.1",

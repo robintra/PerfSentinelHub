@@ -40,7 +40,12 @@ SONAR_PROPERTIES = {
     "sonar.sourceEncoding": "UTF-8",
 }
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}
-REQUIRED_SECRETS = {"QODANA_TOKEN", "SONAR_TOKEN"}
+REQUIRED_SECRETS = {
+    "CI_GATE_APP_ID",
+    "CI_GATE_APP_PRIVATE_KEY",
+    "QODANA_TOKEN",
+    "SONAR_TOKEN",
+}
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 WORKFLOW_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)\}\}")
 CANONICAL_SECRET_REFERENCE = re.compile(r"\s*secrets\.([A-Z][A-Z0-9_]*)\s*")

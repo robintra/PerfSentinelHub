@@ -1,35 +1,392 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Open fork pull request number
+        required: true
+        type: string
+      head_sha:
+        description: Exact inspected fork head SHA
+        required: true
+        type: string
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  verify:
+  validate-dispatch:
+    name: Validate reviewed fork request
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      head_repository: ${{ steps.verify.outputs.head_repository }}
+      head_sha: ${{ steps.verify.outputs.head_sha }}
     steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: verify
+        env:
+          REQUESTED_PR: ${{ inputs.pr_number }}
+          REQUESTED_SHA: ${{ inputs.head_sha }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const requestedPr = process.env.REQUESTED_PR;
+            const requestedSha = process.env.REQUESTED_SHA;
+            if (!/^[0-9]+$/.test(requestedPr) || Number(requestedPr) < 1) {
+              throw new Error('pr_number must be a positive integer');
+            }
+            if (!/^[0-9a-f]{40}$/.test(requestedSha)) {
+              throw new Error('head_sha must be a lowercase full commit SHA');
+            }
+            const response = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number(requestedPr)
+            });
+            const pull = response.data;
+            if (!pull.head.repo || !/^[0-9a-f]{40}$/.test(pull.head.sha)) {
+              throw new Error('pull request head metadata is unavailable');
+            }
+            if (pull.head.repo.full_name === context.repo.owner + '/' + context.repo.repo) {
+              throw new Error('workflow_dispatch review is reserved for fork pull requests');
+            }
+            core.setOutput('head_repository', pull.head.repo.full_name);
+            core.setOutput('head_sha', pull.head.sha);
+            if (pull.state !== 'open') {
+              throw new Error('pull request is not open');
+            }
+            if (pull.head.sha !== requestedSha) {
+              throw new Error('requested SHA is not the current pull request head');
+            }
+
+  changes:
+    name: Detect code changes
+    needs: validate-dispatch
+    if: ${{ always() && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      decision: ${{ steps.classify.outputs.decision }}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: classify
+        env:
+          DISPATCH_PR: ${{ inputs.pr_number }}
+          DISPATCH_SHA: ${{ needs.validate-dispatch.outputs.head_sha }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const dispatched = context.eventName === 'workflow_dispatch';
+            let pullNumber = context.payload.pull_request?.number;
+            let expectedSha = context.payload.pull_request?.head.sha;
+            if (dispatched) {
+              pullNumber = Number(process.env.DISPATCH_PR);
+              expectedSha = process.env.DISPATCH_SHA;
+            }
+            const response = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber
+            });
+            const pull = response.data;
+            if (pull.state !== 'open' || pull.head.sha !== expectedSha) {
+              throw new Error('pull request state changed before classification');
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              per_page: 100
+            });
+            const confirmedResponse = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber
+            });
+            const confirmed = confirmedResponse.data;
+            if (confirmed.state !== 'open' || confirmed.head.sha !== expectedSha) {
+              throw new Error('pull request state changed during classification');
+            }
+            if (files.length === 0 || files.length !== pull.changed_files || files.length !== confirmed.changed_files) {
+              throw new Error('changed file list is empty, truncated, or inconsistent');
+            }
+            const rootDocs = new Set([
+              'CHANGELOG.md',
+              'CODE_OF_CONDUCT.md',
+              'CONTRIBUTING.md',
+              'LICENSE',
+              'README.md',
+              'SECURITY.md'
+            ]);
+            const safeCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-';
+            const allowedDoc = filename => rootDocs.has(filename) || (
+              filename.startsWith('docs/') &&
+              filename.endsWith('.md') &&
+              !filename.includes('..') &&
+              !filename.includes('//') &&
+              [...filename].every(character => safeCharacters.includes(character))
+            );
+            const docsOnly = files.every(file =>
+              typeof file.filename === 'string' &&
+              allowedDoc(file.filename) &&
+              (file.previous_filename === undefined || allowedDoc(file.previous_filename))
+            );
+            core.setOutput('decision', docsOnly ? 'docs' : 'code');
+
+  markdown:
+    name: Markdown validation
+    needs: validate-dispatch
+    if: ${{ always() && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate Markdown encoding and whitespace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          errors = []
+          for path in sorted(Path('.').rglob('*.md')):
+              if '.git' in path.parts:
+                  continue
+              data = path.read_bytes()
+              try:
+                  text = data.decode('utf-8')
+              except UnicodeDecodeError:
+                  errors.append(f'{path}: invalid UTF-8')
+                  continue
+              if bytes([13]) in data:
+                  errors.append(f'{path}: CR line ending')
+              if not data.endswith(bytes([10])):
+                  errors.append(f'{path}: missing final newline')
+              for number, line in enumerate(text.splitlines(), start=1):
+                  if line.rstrip(' ') != line or chr(9) in line:
+                      errors.append(f'{path}:{number}: trailing whitespace or tab')
+          print(*errors, sep=chr(10), file=sys.stderr)
+          raise SystemExit(bool(errors))
+          PY
+
+  quality-tests-coverage:
+    name: Locked quality, tests, and coverage
+    needs: [validate-dispatch, changes]
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.302
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-        with:
-          version: v4.2.3
-      - name: Restore
-        run: dotnet restore PerfSentinelHub.sln --locked-mode
-      - name: Test
-        run: dotnet test PerfSentinelHub.sln -c Release --no-restore
-      - name: Publish NativeAOT
-        run: dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true --no-restore
-      - name: Audit packages
+          cache: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/packages.lock.json
+      - name: Restore locked dependencies and tools
         run: |
-          dotnet package list --project PerfSentinelHub.sln --vulnerable --include-transitive --format json --no-restore > /tmp/vulnerabilities.json
-          python3 -c 'import json,sys; d=json.load(open("/tmp/vulnerabilities.json")); v=[x for p in d.get("projects",[]) for f in p.get("frameworks",[]) for k in ("topLevelPackages","transitivePackages") for x in f.get(k,[]) if x.get("vulnerabilities")]; sys.exit(bool(v))'
-      - name: Build image
+          dotnet restore PerfSentinelHub.sln --locked-mode
+          dotnet tool restore
+      - name: Verify formatting and repository scripts
+        run: |
+          dotnet format PerfSentinelHub.sln --verify-no-changes --no-restore
+          python3 -m unittest discover -s scripts/tests
+      - name: Build with warnings as errors
+        run: dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
+      - name: Run health, import, polling, overload, backpressure, response-streaming, SQLite retention, and bounded-storage suites with coverage
+        run: |
+          rm -rf artifacts/coverage
+          mkdir -p artifacts/coverage
+          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --filter "FullyQualifiedName~ConfigurationTests|FullyQualifiedName~FindingIngestionTests|FullyQualifiedName~FindingsApiTests|FullyQualifiedName~ImportApiTests|FullyQualifiedName~PollingTests|FullyQualifiedName~StatusTests|FullyQualifiedName~StorageTests|FullyQualifiedName~WorkerAndRetentionTests" --collect:"XPlat Code Coverage" --logger:"trx;LogFileName=tests.trx" --results-directory artifacts/coverage
+          set -- artifacts/coverage/*/coverage.cobertura.xml
+          test "$#" -eq 1
+          test -f "$1"
+          mv "$1" artifacts/coverage/coverage.cobertura.xml
+          python3 scripts/check-coverage.py --current-report artifacts/coverage/coverage.cobertura.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        with:
+          name: coverage-${{ github.event.pull_request.head.sha }}
+          path: artifacts/coverage
+          if-no-files-found: error
+          retention-days: 1
+
+  qodana:
+    name: Trusted Qodana
+    needs: [validate-dispatch, changes]
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Run blocking Qodana 2026.1 analysis
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+        run: make qodana
+
+  sonar:
+    name: Trusted SonarCloud
+    needs: [validate-dispatch, changes, quality-tests-coverage]
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' && needs.quality-tests-coverage.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.302
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/packages.lock.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage-${{ github.event.pull_request.head.sha }}
+          path: artifacts/coverage
+      - name: Prepare locked Sonar inputs
+        run: |
+          dotnet tool restore
+          dotnet restore PerfSentinelHub.sln --locked-mode
+          rm -rf artifacts/sonar
+          mkdir -p artifacts/sonar
+          dotnet tool run reportgenerator -- -reports:artifacts/coverage/coverage.cobertura.xml -targetdir:artifacts/sonar -reporttypes:SonarQube
+          python3 scripts/check-analysis-config.py --require-analysis-inputs
+      - name: Run blocking SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool run dotnet-sonarscanner begin /k:robintra_PerfSentinelHub /o:robintra /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx
+          dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
+          dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+  native-aot:
+    name: NativeAOT smoke
+    needs: [validate-dispatch, changes]
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.302
+          cache: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/packages.lock.json
+      - name: Publish and smoke-test NativeAOT
+        env:
+          Hub__DatabasePath: ${{ runner.temp }}/native-smoke.db
+          Hub__Sources__0__BaseUrl: http://127.0.0.1:1
+          Hub__Sources__0__Environment: ci
+          Hub__Sources__0__Id: smoke
+          Hub__Sources__0__Name: Smoke
+        run: |
+          make publish TARGETARCH=x64
+          PerfSentinelHub/bin/Release/net10.0/linux-x64/publish/PerfSentinelHub --urls http://127.0.0.1:5081 > "$RUNNER_TEMP/native-smoke.log" 2>&1 &
+          native_pid=$!
+          trap 'kill "$native_pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import time
+          import urllib.request
+
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:5081/health/ready', timeout=1) as response:
+                      if response.status == 200:
+                          raise SystemExit(0)
+              except OSError:
+                  time.sleep(0.5)
+          raise SystemExit('NativeAOT health check timed out')
+          PY
+
+  oci:
+    name: OCI build and scan
+    needs: [validate-dispatch, changes]
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build OCI image
         run: docker build --platform linux/amd64 -t perf-sentinel-hub:ci .
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -38,7 +395,236 @@ jobs:
           exit-code: 1
           ignore-unfixed: true
           severity: HIGH,CRITICAL
-      - name: Validate Helm chart
+
+  helm:
+    name: Helm validation
+    needs: [validate-dispatch, changes]
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+      - name: Lint and render Helm chart
         run: |
-          helm lint deploy/helm/perf-sentinel-hub --set 'sources[0].id=ci' --set 'sources[0].name=ci' --set 'sources[0].environment=ci' --set 'sources[0].baseUrl=http://perf-sentinel:4318'
-          helm template ci deploy/helm/perf-sentinel-hub --set 'sources[0].id=ci' --set 'sources[0].name=ci' --set 'sources[0].environment=ci' --set 'sources[0].baseUrl=http://perf-sentinel:4318' >/dev/null
+          make helm-lint
+          make helm-template
+
+  dependency-review:
+    name: Dependency review
+    needs: [validate-dispatch, changes]
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: never
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          repository: ${{ needs.validate-dispatch.outputs.head_repository }}
+          ref: ${{ needs.validate-dispatch.outputs.head_sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          dotnet-version: 10.0.302
+      - name: Audit dispatched dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: make audit
+
+  secret-scan:
+    name: Secret scan
+    needs: validate-dispatch
+    if: ${{ always() && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Run locked Gitleaks and TruffleHog
+        env:
+          INTERNAL_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          trusted_root="$GITHUB_WORKSPACE/trusted"
+          if [ "$INTERNAL_PR" = "true" ]; then trusted_root="$GITHUB_WORKSPACE/candidate"; fi
+          mkdir -p "$RUNNER_TEMP/locked-tools/tools"
+          cd "$RUNNER_TEMP/locked-tools"
+          /bin/dash "$trusted_root/scripts/download-secret-scanners.sh"
+          tar -xzf tools/gitleaks.tar.gz -C tools gitleaks
+          tar -xzf tools/trufflehog.tar.gz -C tools trufflehog
+          tools/gitleaks dir --no-banner --redact "$GITHUB_WORKSPACE/candidate"
+          tools/trufflehog filesystem --no-update --fail "$GITHUB_WORKSPACE/candidate"
+
+  action-pins:
+    name: Action pin validation
+    needs: validate-dispatch
+    if: ${{ always() && (github.event_name == 'pull_request' || needs.validate-dispatch.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate workflow and locked supply chain
+        env:
+          INTERNAL_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          trusted_root="$GITHUB_WORKSPACE/trusted"
+          if [ "$INTERNAL_PR" = "true" ]; then trusted_root="$GITHUB_WORKSPACE/candidate"; fi
+          mkdir -p "$RUNNER_TEMP/locked-tools/tools"
+          cd "$RUNNER_TEMP/locked-tools"
+          /bin/dash "$trusted_root/scripts/download-workflow-tools.sh"
+          tar -xzf tools/actionlint.tar.gz -C tools actionlint
+          tar -xzf tools/zizmor.tar.gz -C tools zizmor
+          tools/actionlint -color "$GITHUB_WORKSPACE/candidate/.github/workflows/ci.yml"
+          tools/zizmor "$GITHUB_WORKSPACE/candidate/.github/workflows/ci.yml"
+          cd "$GITHUB_WORKSPACE/candidate"
+          python3 "$trusted_root/scripts/check-supply-chain.py"
+
+  aggregate:
+    name: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'CI / Internal validation (non-required)' || 'CI / Fork validation (non-required)' }}
+    needs: [validate-dispatch, changes, markdown, quality-tests-coverage, qodana, sonar, native-aot, oci, helm, dependency-review, secret-scan, action-pins]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Evaluate aggregate result
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          DECISION: ${{ needs.changes.outputs.decision }}
+          GATE_MODE: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'internal' || 'fork' }}
+        run: python3 scripts/check-ci-results.py --needs-json "$NEEDS_JSON" --decision "$DECISION" --mode "$GATE_MODE"
+
+  publish-gate:
+    name: Publish trusted gate
+    needs: [validate-dispatch, changes, markdown, quality-tests-coverage, qodana, sonar, native-aot, oci, helm, dependency-review, secret-scan, action-pins]
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Evaluate trusted result
+        id: gate
+        continue-on-error: true
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          DECISION: ${{ needs.changes.outputs.decision }}
+          GATE_MODE: ${{ github.event_name == 'workflow_dispatch' && 'dispatch' || 'internal' }}
+        run: python3 scripts/check-ci-results.py --needs-json "$NEEDS_JSON" --decision "$DECISION" --mode "$GATE_MODE"
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        if: ${{ always() && (github.event_name == 'pull_request' || needs.validate-dispatch.outputs.head_sha != '') }}
+        with:
+          app-id: ${{ secrets.CI_GATE_APP_ID }}
+          private-key: ${{ secrets.CI_GATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: ${{ always() && steps.app-token.outcome == 'success' }}
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.outputs.head_sha || github.event.pull_request.head.sha }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const sha = process.env.HEAD_SHA;
+            if (!/^[0-9a-f]{40}$/.test(sha)) {
+              throw new Error('No verified pull request head SHA is available for a check run');
+            }
+            const passed = process.env.GATE_OUTCOME === 'success';
+            const conclusion = passed ? 'success' : 'failure';
+            const title = passed ? 'Reviewed fork validation passed' : 'Reviewed fork validation failed';
+            const summary = passed ? 'All required checks passed for the exact inspected fork SHA.' : 'Validation failed, was cancelled, was incomplete, or no exact docs-only decision was available.';
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'CI / Gate',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: conclusion,
+              details_url: context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId,
+              output: {
+                title: title,
+                summary: summary
+              }
+            });
+      - name: Fail the publisher when the gate is not successful
+        if: ${{ always() && (steps.gate.outcome != 'success' || steps.app-token.outcome != 'success') }}
+        run: exit 1

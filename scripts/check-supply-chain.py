@@ -77,33 +77,23 @@ def active_shell_content(line: str) -> str:
     return re.split(r"\s+#", stripped, maxsplit=1)[0]
 
 
-def emits_checksum_unambiguously(command: str, binding: re.Pattern[str]) -> bool:
-    return bool(binding.search(command)) and not re.search(r";|&&|\|\||[()<>`]|\$\(", command)
-
-
 def is_checksum_bound(lines: list[str], start: int, checksum: str, output: str) -> bool:
-    binding = re.compile(rf"{re.escape(checksum)}\s+\*?{re.escape(output)}(?:[\s'\"]|$)")
-    check_command = re.compile(r"(?P<prefix>^|[|;]\s*)sha256sum\s+-c\s+(\S+)")
+    canonical_producer = f"echo '{checksum}  {output}'"
+    pipeline = f"{canonical_producer} | sha256sum -c -"
     for index in range(start, len(lines)):
         content = active_shell_content(lines[index])
         if index > start and re.search(r"\b(?:curl|wget)\b", content):
             return False
         if not content:
             continue
-        for match in check_command.finditer(content):
-            checksum_file = match.group(2).strip("'\"")
-            if checksum_file == "-":
-                command_start = match.start() + len(match.group("prefix"))
-                producer = re.fullmatch(r"(?P<command>.+?)\s*\|\s*", content[:command_start])
-                if producer and not content[match.end():].strip() and emits_checksum_unambiguously(producer.group("command"), binding):
-                    return True
-                continue
-            for producer in lines[start:index]:
-                producer_content = active_shell_content(producer)
-                file_producer = re.fullmatch(r"(?P<command>.+?)\s+>\s*(?P<file>\S+)", producer_content)
-                if not file_producer:
-                    continue
-                if file_producer.group("file").strip("'\"") == checksum_file and emits_checksum_unambiguously(file_producer.group("command"), binding):
+        if content == pipeline:
+            return True
+        checksum_file = re.fullmatch(r"sha256sum -c (\S+)", content)
+        if checksum_file:
+            filename = checksum_file.group(1)
+            for candidate in lines[start:index]:
+                producer_content = active_shell_content(candidate)
+                if producer_content == f"{canonical_producer} > {filename}":
                     return True
     return False
 

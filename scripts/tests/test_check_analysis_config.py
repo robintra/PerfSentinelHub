@@ -49,6 +49,8 @@ sonar.sourceEncoding=UTF-8
 def secret_inventory(**entry_overrides):
     entries = []
     for name, purpose in (
+        ("CI_GATE_APP_ID", "Identify the dedicated CI gate GitHub App."),
+        ("CI_GATE_APP_PRIVATE_KEY", "Mint a short-lived CI gate installation token."),
         ("QODANA_TOKEN", "Authenticate the trusted Qodana CI analysis job."),
         ("SONAR_TOKEN", "Authenticate the trusted SonarCloud analysis job."),
     ):
@@ -121,6 +123,8 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
                 root,
                 workflow=(
                     "jobs:\n  analysis:\n    env:\n"
+                    "      CI_GATE_APP_ID: ${{ secrets.CI_GATE_APP_ID }}\n"
+                    "      CI_GATE_APP_PRIVATE_KEY: ${{ secrets.CI_GATE_APP_PRIVATE_KEY }}\n"
                     "      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}\n"
                     "      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n"
                 ),
@@ -129,6 +133,22 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
             result = run_checker(root)
 
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_requires_dedicated_gate_app_secret_metadata(self):
+        for missing in ("CI_GATE_APP_ID", "CI_GATE_APP_PRIVATE_KEY"):
+            with self.subTest(missing=missing):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    inventory = secret_inventory()
+                    inventory["secrets"] = [
+                        entry for entry in inventory["secrets"] if entry["name"] != missing
+                    ]
+                    write_repository(root, secrets=inventory)
+
+                    result = run_checker(root)
+
+                    self.assertEqual(1, result.returncode)
+                    self.assertIn(missing, result.stderr)
 
     def test_rejects_starter_profile_and_commented_failure_conditions(self):
         cases = (

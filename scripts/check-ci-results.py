@@ -20,6 +20,7 @@ EXPENSIVE = {
     "helm",
     "native-aot",
     "oci",
+    "qodana",
     "quality-tests-coverage",
     "sonar",
 }
@@ -45,6 +46,7 @@ def expected_results(mode: str, decision: str) -> dict[str, set[str]]:
         for job in EXPENSIVE:
             expected[job] = {"success", "skipped"}
     if mode in {"fork", "dispatch"}:
+        expected["qodana"] = {"skipped"}
         expected["sonar"] = {"skipped"}
     return expected
 

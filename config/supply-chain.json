@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "inventory": [
+    {
+      "name": "dotnet-sdk",
+      "kind": "dotnet-sdk",
+      "version": "10.0.302",
+      "digest_or_sha": "sha512:b2286dec9177e8b5543ff2fe95c84db358b87ec2a36a0d34a29033d70279940fd1134af56c4299648f8950db2d6ce35237698cf2818d9abc670c2c1664c92ac0",
+      "released_at": "2026-07-14T00:00:00Z",
+      "source": "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable .NET 10 SDK older than the 72-hour stabilization window."
+    },
+    {
+      "name": "Microsoft.AspNetCore.Mvc.Testing",
+      "kind": "nuget",
+      "version": "10.0.10",
+      "digest_or_sha": "sha512-base64:pTWE4RtRbb9sl/U9QjZA5oapEZ01ZEMfRilZvvh55ZW97caTQ2XuAF6sgc+7ojKWBbR2qrcWVo5P80gMPuW/tQ==",
+      "released_at": "2026-07-14T17:00:57Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.aspnetcore.mvc.testing/10.0.10.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable supported ASP.NET Core testing package."
+    },
+    {
+      "name": "Microsoft.Data.Sqlite",
+      "kind": "nuget",
+      "version": "10.0.10",
+      "digest_or_sha": "sha512-base64:58JwZ39lCvRXHfV5O6RQfbHEDu8ZsXI7weRoVRR4jrGRxxkS+qyeuGrN2xD+9VYEICApYr0iTSL6PuU+DdsvPg==",
+      "released_at": "2026-07-14T17:00:57Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.10.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable supported SQLite provider."
+    },
+    {
+      "name": "Microsoft.Extensions.TimeProvider.Testing",
+      "kind": "nuget",
+      "version": "10.8.0",
+      "digest_or_sha": "sha512-base64:xXcxGfXSO/8o7IfYK36r3eZTl9RMKAl5K6x3x6o/QQBolI0t8vsLIGmhc3HJBTd11u1uPLHz61VnOTSTmY7ZVA==",
+      "released_at": "2026-07-14T21:24:42Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.timeprovider.testing/10.8.0.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable test clock package."
+    },
+    {
+      "name": "Microsoft.NET.Test.Sdk",
+      "kind": "nuget",
+      "version": "18.8.1",
+      "digest_or_sha": "sha512-base64:dknJL3/9Y3t4XuCBqnc0PevPxgLsUMmVhjwup/b1HNovA8zWcj3XsfIf7c6p05363DWcqL7X/YhDL9B+Zymv1w==",
+      "released_at": "2026-07-14T13:07:09Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.test.sdk/18.8.1.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable test SDK compatible with the locked test suite."
+    },
+    {
+      "name": "SQLitePCLRaw.bundle_e_sqlite3",
+      "kind": "nuget",
+      "version": "3.0.5",
+      "digest_or_sha": "sha512-base64:SW8iASIyWMrLzqabUHYQRvALhvD4ylSBsj4PgEVGwc36kQjc9xT5kSV/XQ9rU7nIpBWD+LPyX3Hlw5FzyUzGeQ==",
+      "released_at": "2026-07-27T14:12:50Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/sqlitepclraw.bundle_e_sqlite3/3.0.5.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable bundle required for NativeAOT SQLite."
+    },
+    {
+      "name": "xunit.v3",
+      "kind": "nuget",
+      "version": "3.2.2",
+      "digest_or_sha": "sha512-base64:L+4/4y0Uqcg8/d6hfnxhnwh4j9FaeULvefTwrk30rr1o4n/vdPfyUQ8k0yzH8VJx7bmFEkDdcRfbtbjEHlaYcA==",
+      "released_at": "2026-01-14T22:26:25Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/3.2.2.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable xUnit v3 meta-package."
+    },
+    {
+      "name": "xunit.runner.visualstudio",
+      "kind": "nuget",
+      "version": "3.1.5",
+      "digest_or_sha": "sha512-base64:tKi7dSTwP4m5m9eXPM2Ime4Kn7xNf4x4zT9sdLO/G4hZVnQCRiMTWoSZqI/pYTVeI27oPPqHBKYI/DjJ9GsYgA==",
+      "released_at": "2025-09-27T23:39:53Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.runner.visualstudio/3.1.5.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Visual Studio runner compatible with xUnit v3."
+    },
+    {
+      "name": "actions/checkout",
+      "kind": "github-action",
+      "version": "7.0.1",
+      "digest_or_sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "released_at": "2026-07-20T15:10:05Z",
+      "source": "https://github.com/actions/checkout/releases/tag/v7.0.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable checkout action, pinned to its release commit."
+    },
+    {
+      "name": "actions/setup-dotnet",
+      "kind": "github-action",
+      "version": "6.0.0",
+      "digest_or_sha": "a98b56852c35b8e3190ac28c8c2271da59106c68",
+      "released_at": "2026-07-16T02:56:10Z",
+      "source": "https://github.com/actions/setup-dotnet/releases/tag/v6.0.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable .NET setup action, pinned to its release commit."
+    },
+    {
+      "name": "azure/setup-helm",
+      "kind": "github-action",
+      "version": "5.0.1",
+      "digest_or_sha": "9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310",
+      "released_at": "2026-06-23T20:07:19Z",
+      "source": "https://github.com/Azure/setup-helm/releases/tag/v5.0.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Helm setup action, pinned to its release commit."
+    },
+    {
+      "name": "aquasecurity/trivy-action",
+      "kind": "github-action",
+      "version": "0.36.0",
+      "digest_or_sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
+      "released_at": "2026-04-22T09:39:33Z",
+      "source": "https://github.com/aquasecurity/trivy-action/releases/tag/v0.36.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Trivy action, pinned to its signed release commit."
+    },
+    {
+      "name": "mcr.microsoft.com/dotnet/sdk",
+      "kind": "container",
+      "version": "10.0.302-noble-aot",
+      "digest_or_sha": "sha256:dbf0906fc695ba77ea281f62e9f139f34827d520f0a0900fd939c6297515d43f",
+      "released_at": "2026-07-14T00:00:00Z",
+      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.302-noble-aot",
+      "stabilization_exempt": false,
+      "reason": "Official NativeAOT SDK image matching the locked SDK."
+    },
+    {
+      "name": "mcr.microsoft.com/dotnet/runtime-deps",
+      "kind": "container",
+      "version": "10.0.10-noble-chiseled-extra",
+      "digest_or_sha": "sha256:fb2d373f44be85cb0d12fec9f4a464ce9cffce2ddf023cd1f5ecc5b146b8186c",
+      "released_at": "2026-07-14T00:00:00Z",
+      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+      "stabilization_exempt": false,
+      "reason": "Official chiseled runtime dependencies image matching .NET 10.0.10."
+    },
+    {
+      "name": "helm",
+      "kind": "github-release",
+      "version": "4.2.3",
+      "digest_or_sha": "sha256:2204ce0f528781a059a1035c775a9cb1aad70067",
+      "released_at": "2026-07-09T20:56:43Z",
+      "source": "https://github.com/helm/helm/releases/tag/v4.2.3",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Helm release; release commit is retained for the setup action provenance."
+    },
+    {
+      "name": "qodana-action",
+      "kind": "github-action",
+      "version": "2026.2.0",
+      "digest_or_sha": "b588768b6e7e6da579e518bc584f79de0d243692",
+      "released_at": "2026-07-29T08:04:23Z",
+      "source": "https://github.com/JetBrains/qodana-action/releases/tag/v2026.2.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Qodana action reserved for the quality gate."
+    },
+    {
+      "name": "sonarqube-scan-action",
+      "kind": "github-action",
+      "version": "8.2.1",
+      "digest_or_sha": "22918119ff8e1ca75a623e15c8296b6ea4fbe28f",
+      "released_at": "2026-07-15T09:50:00Z",
+      "source": "https://github.com/SonarSource/sonarqube-scan-action/releases/tag/v8.2.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Sonar scan action reserved for the quality gate."
+    },
+    {
+      "name": "trivy",
+      "kind": "download",
+      "version": "0.70.0",
+      "digest_or_sha": "sha256:8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9",
+      "released_at": "2026-04-17T06:50:02Z",
+      "source": "https://github.com/aquasecurity/trivy/releases/tag/v0.70.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Trivy binary with a published Linux checksum."
+    },
+    {
+      "name": "cosign",
+      "kind": "download",
+      "version": "3.1.3",
+      "digest_or_sha": "sha256:4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71",
+      "released_at": "2026-08-06T01:09:23Z",
+      "source": "https://github.com/sigstore/cosign/releases/tag/v3.1.3",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Cosign binary older than the 72-hour window."
+    },
+    {
+      "name": "syft",
+      "kind": "download",
+      "version": "1.50.0",
+      "digest_or_sha": "sha256:bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788",
+      "released_at": "2026-07-28T17:44:08Z",
+      "source": "https://github.com/anchore/syft/releases/tag/v1.50.0",
+      "stabilization_exempt": false,
+      "reason": "Newest Syft stable release outside the 72-hour window."
+    },
+    {
+      "name": "osv-scanner",
+      "kind": "download",
+      "version": "2.5.0",
+      "digest_or_sha": "sha256:edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c",
+      "released_at": "2026-08-07T05:23:52Z",
+      "source": "https://github.com/google/osv-scanner/releases/tag/v2.5.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable OSV-Scanner release, older than 72 hours at the audit point."
+    },
+    {
+      "name": "gitleaks",
+      "kind": "download",
+      "version": "8.30.1",
+      "digest_or_sha": "sha256:551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+      "released_at": "2026-03-21T02:17:58Z",
+      "source": "https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Gitleaks binary with a published Linux checksum."
+    },
+    {
+      "name": "trufflehog",
+      "kind": "download",
+      "version": "3.96.0",
+      "digest_or_sha": "sha256:7105f1cd6577f058a9e39d0578f1a99c8a1e481e4d3512cd8a09acfe22a0fdc0",
+      "released_at": "2026-07-24T18:23:23Z",
+      "source": "https://github.com/trufflesecurity/trufflehog/releases/tag/v3.96.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable TruffleHog Linux archive checksum."
+    },
+    {
+      "name": "zizmor",
+      "kind": "download",
+      "version": "1.29.0",
+      "digest_or_sha": "sha256:dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839",
+      "released_at": "2026-08-01T21:14:45Z",
+      "source": "https://github.com/zizmorcore/zizmor/releases/tag/v1.29.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Zizmor Linux archive checksum."
+    },
+    {
+      "name": "actionlint",
+      "kind": "download",
+      "version": "1.7.12",
+      "digest_or_sha": "sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+      "released_at": "2026-03-30T17:49:21Z",
+      "source": "https://github.com/rhysd/actionlint/releases/tag/v1.7.12",
+      "stabilization_exempt": false,
+      "reason": "Latest stable actionlint Linux archive checksum."
+    },
+    {
+      "name": "slsa-github-generator",
+      "kind": "github-action",
+      "version": "2.1.0",
+      "digest_or_sha": "f7dd8c54c2067bafc12ca7a55595d5ee9b75204a",
+      "released_at": "2025-02-24T19:32:29Z",
+      "source": "https://github.com/slsa-framework/slsa-github-generator/releases/tag/v2.1.0",
+      "stabilization_exempt": false,
+      "reason": "Latest stable SLSA generator release reserved for provenance generation."
+    }
+  ]
+}

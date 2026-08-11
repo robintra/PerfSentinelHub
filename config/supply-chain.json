@@ -245,6 +245,26 @@
       "reason": "Latest stable Trivy action, pinned to its signed release commit."
     },
     {
+      "name": "github/codeql-action",
+      "kind": "github-action",
+      "version": "4.37.6",
+      "digest_or_sha": "5595ccaf912efad79be6eef63a5619ff05969be3",
+      "released_at": "2026-08-04T13:34:40Z",
+      "source": "https://github.com/github/codeql-action/releases/tag/v4.37.6",
+      "stabilization_exempt": false,
+      "reason": "Latest stable CodeQL action release older than 72 hours."
+    },
+    {
+      "name": "ossf/scorecard-action",
+      "kind": "github-action",
+      "version": "2.4.4",
+      "digest_or_sha": "2d1146689b8cda280b9bc96326124645441f03bc",
+      "released_at": "2026-07-23T21:12:46Z",
+      "source": "https://github.com/ossf/scorecard-action/releases/tag/v2.4.4",
+      "stabilization_exempt": false,
+      "reason": "Latest stable OpenSSF Scorecard action, pinned to its release commit."
+    },
+    {
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
       "version": "10.0.302-noble-aot",

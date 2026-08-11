@@ -1,0 +1,417 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.csproj'
+      - '**/packages.lock.json'
+      - '.config/dotnet-tools.json'
+      - '.gitleaksignore'
+      - '.github/workflows/**'
+      - 'config/security-exceptions.json'
+      - 'config/secret-inventory.json'
+      - 'config/supply-chain.json'
+      - 'deploy/helm/**'
+      - 'Directory.Packages.props'
+      - 'Dockerfile'
+      - 'global.json'
+      - 'LICENSE'
+      - 'NuGet.Config'
+      - 'osv-scanner.toml'
+      - 'qodana.yaml'
+      - 'scripts/check-*.py'
+      - 'scripts/download-*.sh'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-audit:
+    name: Dependencies, history, workflows, and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.302
+          cache: false
+      - name: Install checksum-verified audit tools
+        id: tools
+        run: |
+          mkdir -p artifacts/security "$RUNNER_TEMP/security-audit/tools"
+          cd "$RUNNER_TEMP/security-audit"
+          /bin/dash "$GITHUB_WORKSPACE/scripts/download-security-audit-tools.sh"
+          tar -xzf tools/gitleaks.tar.gz -C tools gitleaks
+          tar -xzf tools/syft.tar.gz -C tools syft
+          tar -xzf tools/zizmor.tar.gz -C tools zizmor
+          chmod 0755 tools/osv-scanner
+          echo "$RUNNER_TEMP/security-audit/tools" >> "$GITHUB_PATH"
+      - name: Validate exception and immutable-input policies
+        id: policy
+        continue-on-error: true
+        run: |
+          python3 scripts/check-security-exceptions.py
+          python3 scripts/check-supply-chain.py
+      - name: Run locked transitive NuGet audit
+        id: nuget
+        continue-on-error: true
+        run: make audit
+      - name: Scan vulnerabilities and license policy with OSV-Scanner
+        id: osv
+        continue-on-error: true
+        run: osv-scanner scan source --recursive --config=osv-scanner.toml --licenses=MIT,Apache-2.0,blessing --format sarif --output-file artifacts/security/osv.sarif .
+      - name: Scan the complete Git history with Gitleaks
+        id: gitleaks
+        continue-on-error: true
+        run: gitleaks git --no-banner --redact --log-opts=--all --gitleaks-ignore-path=.gitleaksignore --report-format sarif --report-path artifacts/security/gitleaks.sarif .
+      - name: Audit GitHub workflows with Zizmor
+        id: zizmor
+        continue-on-error: true
+        run: |
+          NO_COLOR=1 zizmor --persona=auditor --format=sarif . > artifacts/security/zizmor.sarif
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('artifacts/security/zizmor.sarif').read_text(encoding='utf-8'))
+          findings = sum(len(run.get('results', [])) for run in report.get('runs', []))
+          if findings:
+              raise SystemExit(f'zizmor reported {findings} finding(s)')
+          PY
+      - name: Generate SPDX SBOM and enforce package-source policy
+        id: sbom
+        continue-on-error: true
+        run: |
+          syft scan dir:. -o spdx-json=artifacts/security/source.spdx.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('artifacts/security/source.spdx.json').read_text(encoding='utf-8'))
+          packages = report.get('packages')
+          if not isinstance(packages, list):
+              raise SystemExit('SBOM packages must be an array')
+          dependencies = [
+              package
+              for package in packages
+              if not str(package.get('SPDXID', '')).startswith('SPDXRef-DocumentRoot-Directory')
+          ]
+          if not dependencies:
+              raise SystemExit('SBOM contains no dependency packages')
+          errors = []
+          for package in dependencies:
+              name = package.get('name', '<unnamed>')
+              references = package.get('externalRefs', [])
+              has_source = any(
+                  reference.get('referenceType') == 'purl'
+                  and str(reference.get('referenceLocator', '')).startswith('pkg:')
+                  for reference in references
+                  if isinstance(reference, dict)
+              )
+              if not has_source:
+                  errors.append(f'{name}: package source is unknown')
+          if errors:
+              print(*errors, sep=chr(10))
+              raise SystemExit(1)
+          PY
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/osv.sarif
+          category: security-audit/osv
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/gitleaks.sarif
+          category: security-audit/gitleaks
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/zizmor.sarif
+          category: security-audit/zizmor
+      - name: Fail when a source audit did not pass
+        if: ${{ always() }}
+        env:
+          TOOLS_OUTCOME: ${{ steps.tools.outcome }}
+          POLICY_OUTCOME: ${{ steps.policy.outcome }}
+          NUGET_OUTCOME: ${{ steps.nuget.outcome }}
+          OSV_OUTCOME: ${{ steps.osv.outcome }}
+          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
+          ZIZMOR_OUTCOME: ${{ steps.zizmor.outcome }}
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
+        run: |
+          test "$TOOLS_OUTCOME" = success
+          test "$POLICY_OUTCOME" = success
+          test "$NUGET_OUTCOME" = success
+          test "$OSV_OUTCOME" = success
+          test "$GITLEAKS_OUTCOME" = success
+          test "$ZIZMOR_OUTCOME" = success
+          test "$SBOM_OUTCOME" = success
+
+  trivy:
+    name: Trivy filesystem, configuration, and image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Prepare SARIF directory
+        run: mkdir -p artifacts/security
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        id: trivy-fs
+        continue-on-error: true
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: artifacts/security/trivy-fs.sarif
+          exit-code: 1
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+          version: v0.70.0
+          cache: false
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        id: trivy-config
+        continue-on-error: true
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: artifacts/security/trivy-config.sarif
+          exit-code: 1
+          severity: HIGH,CRITICAL
+          version: v0.70.0
+          cache: false
+      - name: Build the audit image without publishing
+        id: image
+        run: docker build --platform linux/amd64 -t perf-sentinel-hub:security-audit .
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        id: trivy-image
+        continue-on-error: true
+        with:
+          image-ref: perf-sentinel-hub:security-audit
+          format: sarif
+          output: artifacts/security/trivy-image.sarif
+          exit-code: 1
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+          version: v0.70.0
+          cache: false
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/trivy-fs.sarif
+          category: security-audit/trivy-fs
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/trivy-config.sarif
+          category: security-audit/trivy-config
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/trivy-image.sarif
+          category: security-audit/trivy-image
+      - name: Fail when a Trivy scan did not pass
+        if: ${{ always() }}
+        env:
+          IMAGE_OUTCOME: ${{ steps.image.outcome }}
+          FILESYSTEM_OUTCOME: ${{ steps.trivy-fs.outcome }}
+          CONFIG_OUTCOME: ${{ steps.trivy-config.outcome }}
+          IMAGE_SCAN_OUTCOME: ${{ steps.trivy-image.outcome }}
+        run: |
+          test "$IMAGE_OUTCOME" = success
+          test "$FILESYSTEM_OUTCOME" = success
+          test "$CONFIG_OUTCOME" = success
+          test "$IMAGE_SCAN_OUTCOME" = success
+
+  qodana:
+    name: Blocking Qodana audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Run the digest-pinned Qodana audit
+        id: qodana
+        continue-on-error: true
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+        run: make qodana
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/qodana/qodana.sarif.json
+          category: security-audit/qodana
+      - name: Fail when Qodana did not pass
+        if: ${{ always() && steps.qodana.outcome != 'success' }}
+        run: exit 1
+
+  scorecard:
+    name: OpenSSF Scorecard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Prepare SARIF directory
+        run: mkdir -p artifacts/security
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        id: scorecard
+        continue-on-error: true
+        with:
+          results_file: artifacts/security/scorecard.sarif
+          results_format: sarif
+          repo_token: ${{ github.token }}
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: ${{ always() }}
+        with:
+          sarif_file: artifacts/security/scorecard.sarif
+          category: security-audit/scorecard
+      - name: Fail when Scorecard did not pass
+        if: ${{ always() && steps.scorecard.outcome != 'success' }}
+        run: exit 1
+
+  notify:
+    name: Reconcile the scheduled audit alert
+    needs: [source-audit, trivy, qodana, scorecard]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const needs = JSON.parse(process.env.NEEDS_JSON);
+            const expected = ['qodana', 'scorecard', 'source-audit', 'trivy'];
+            if (Object.keys(needs).sort().join(',') !== expected.join(',')) {
+              throw new Error('scheduled audit result set is incomplete');
+            }
+            const failures = expected.filter(name => needs[name].result !== 'success');
+            const title = '[' + context.workflow + '] scheduled failure';
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              labels: 'security-audit',
+              per_page: 100
+            });
+            const matches = issues
+              .filter(issue => !issue.pull_request && issue.title === title)
+              .sort((left, right) => left.number - right.number);
+            if (failures.length === 0) {
+              for (const issue of matches.filter(issue => issue.state === 'open')) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                  state_reason: 'completed'
+                });
+              }
+              return;
+            }
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'security-audit'
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'security-audit',
+                color: 'b60205',
+                description: 'Automated security audit alert'
+              });
+            }
+            const runUrl = context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId;
+            const body = [
+              'The scheduled security audit did not complete successfully.',
+              '',
+              'Failed or incomplete jobs: ' + failures.join(', '),
+              'Run: ' + runUrl,
+              '',
+              'Scanner output, SARIF contents, tokens, and dependency credentials are deliberately omitted.'
+            ].join(String.fromCharCode(10));
+            if (matches.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['security-audit']
+              });
+              return;
+            }
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: matches[0].number,
+              body: body,
+              labels: ['security-audit'],
+              state: 'open'
+            });
+            for (const duplicate of matches.slice(1).filter(issue => issue.state === 'open')) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: duplicate.number,
+                state: 'closed',
+                state_reason: 'not_planned'
+              });
+            }

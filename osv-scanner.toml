@@ -1,0 +1,6 @@
+[[PackageOverrides]]
+name = "SQLite"
+version = "3.53.4"
+ecosystem = "NuGet"
+license.override = ["blessing"]
+reason = "SQLite is distributed under the SPDX-listed SQLite Blessing."

@@ -1,0 +1,72 @@
+name: Release Verification
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag; empty selects the latest stable release
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-verification-${{ inputs.tag || github.event.release.tag_name || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  checksums:
+    name: Verify public release checksums
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - name: Download the selected public stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: |
+          tag="$REQUESTED_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v0[.][0-9]+[.][0-9]+$")))] | first | .tag_name')"
+          fi
+          printf '%s' "$tag" | grep -Eq '^v0[.][0-9]+[.][0-9]+$'
+          release_state="$(gh release view "$tag" --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')"
+          test "$release_state" = "false	false	$tag"
+          mkdir -p "$RUNNER_TEMP/release-verification"
+          gh release download "$tag" --dir "$RUNNER_TEMP/release-verification"
+      - name: Verify SHA256SUMS and the exact asset set
+        run: |
+          cd "$RUNNER_TEMP/release-verification"
+          python3 - <<'PY'
+          import hashlib
+          import re
+          from pathlib import Path
+
+          root = Path('.')
+          files = sorted(path.name for path in root.iterdir() if path.is_file())
+          if 'SHA256SUMS' not in files or len(files) < 2:
+              raise SystemExit('release must contain SHA256SUMS and at least one artifact')
+          checksums = {}
+          pattern = re.compile(r'^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$')
+          for line in Path('SHA256SUMS').read_text(encoding='utf-8').splitlines():
+              match = pattern.fullmatch(line)
+              if match is None or match.group(2) == 'SHA256SUMS' or match.group(2) in checksums:
+                  raise SystemExit('SHA256SUMS is malformed or contains a duplicate')
+              checksums[match.group(2)] = match.group(1)
+          if set(checksums) != set(files) - {'SHA256SUMS'}:
+              raise SystemExit('SHA256SUMS does not describe the exact release asset set')
+          for name, expected in checksums.items():
+              digest = hashlib.sha256()
+              with Path(name).open('rb') as artifact:
+                  for chunk in iter(lambda: artifact.read(1024 * 1024), b''):
+                      digest.update(chunk)
+              if digest.hexdigest() != expected:
+                  raise SystemExit(f'{name}: sha256 mismatch')
+          PY

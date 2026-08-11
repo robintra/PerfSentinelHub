@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY / "scripts" / "check-supply-chain.py"
+ARTIFACT_URL = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+CHECKSUM = "d" * 64
 SPEC = importlib.util.spec_from_file_location("supply_chain_checker", CHECKER)
 checker = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(checker)
@@ -45,6 +47,22 @@ def run_checker(root, online=False):
     if online:
         arguments.append("--online")
     return subprocess.run(arguments, cwd=root, text=True, capture_output=True, check=False)
+
+
+def run_download_lines(*lines, items=None):
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "install-tools.sh").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if items is None:
+            items = (
+                inventory_item(
+                    kind="download",
+                    digest_or_sha=f"sha256:{CHECKSUM}",
+                    artifact_url=ARTIFACT_URL,
+                ),
+            )
+        write_inventory(root, *items)
+        return run_checker(root)
 
 
 class SupplyChainCheckerTests(unittest.TestCase):
@@ -160,6 +178,256 @@ class SupplyChainCheckerTests(unittest.TestCase):
             result = run_checker(root)
 
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_accepts_canonical_download_to_safe_relative_path(self):
+        destination = "tools/tool-1.2_3.tar.gz"
+
+        result = run_download_lines(
+            f"curl -fsSL {ARTIFACT_URL} -o {destination}",
+            f"echo '{CHECKSUM}  {destination}' | sha256sum -c -",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_noncanonical_download_command_suffixes(self):
+        suffixes = {
+            "semicolon": " ; true",
+            "and": " && true",
+            "or": " || true",
+            "pipe": " | true",
+            "stdout redirect": " >/dev/null",
+            "stderr redirect": " 2>/dev/null",
+            "inline comment": " # comment",
+            "trailing whitespace": " ",
+        }
+        for name, suffix in suffixes.items():
+            with self.subTest(name=name):
+                result = run_download_lines(
+                    f"curl -fsSL {ARTIFACT_URL} -o tool{suffix}",
+                    f"echo '{CHECKSUM}  tool' | sha256sum -c -",
+                )
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical", result.stderr)
+
+    def test_rejects_obfuscated_downloaders_with_literal_url(self):
+        for downloader in (r"c\url", "cu''rl", "w''get"):
+            with self.subTest(downloader=downloader):
+                result = run_download_lines(
+                    f"{downloader} -fsSL {ARTIFACT_URL} -o tool",
+                )
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical", result.stderr)
+
+    def test_rejects_combined_downloader_and_url_obfuscation(self):
+        commands = (
+            rf"c\url -fsSL h\ttps://github.com/example/tool/releases/download/v1.2.3/tool -o tool",
+            f"cu''rl -fsSL HTTPS://github.com/example/tool/releases/download/v1.2.3/tool -o tool",
+            f"cu''rl -fsSL https:''//github.com/example/tool/releases/download/v1.2.3/tool -o tool",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                result = run_download_lines(command)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical", result.stderr)
+
+    def test_rejects_download_declarations_outside_shell_scripts(self):
+        files = {
+            "ci.yml": (
+                "steps:\n"
+                "  - run: >\n"
+                f"      curl -fsSL {ARTIFACT_URL} -o tool\n"
+                f"      echo '{CHECKSUM}  tool' | sha256sum -c -\n"
+            ),
+            "Dockerfile": (
+                "RUN <<EOF\n"
+                f"curl -fsSL {ARTIFACT_URL} -o tool\n"
+                f"echo '{CHECKSUM}  tool' | sha256sum -c -\n"
+                "EOF\n"
+            ),
+        }
+        for filename, content in files.items():
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / filename).write_text(content, encoding="utf-8")
+                write_inventory(
+                    root,
+                    inventory_item(
+                        kind="download",
+                        digest_or_sha=f"sha256:{CHECKSUM}",
+                        artifact_url=ARTIFACT_URL,
+                    ),
+                )
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("shell scripts", result.stderr)
+
+    def test_rejects_non_lf_separators_between_download_and_check(self):
+        separators = ("\r\n", "\r", "\v", "\f", "\x85", "\u2028", "\u2029")
+        for separator in separators:
+            with self.subTest(separator=ascii(separator)):
+                result = run_download_lines(
+                    f"curl -fsSL {ARTIFACT_URL} -o tool{separator}"
+                    f"echo '{CHECKSUM}  tool' | sha256sum -c -",
+                )
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical", result.stderr)
+
+    def test_rejects_noncanonical_sha256_prefix(self):
+        digest = f"SHA256:{CHECKSUM}"
+        result = run_download_lines(
+            f"curl -fsSL {ARTIFACT_URL} -o tool",
+            f"echo '{digest}  tool' | sha256sum -c -",
+            items=(
+                inventory_item(
+                    kind="download",
+                    digest_or_sha=digest,
+                    artifact_url=ARTIFACT_URL,
+                ),
+            ),
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("sha256 checksum", result.stderr)
+
+    def test_rejects_historical_unsafe_download_destinations(self):
+        destinations = (
+            "tool$(pwd)",
+            "tool`pwd`",
+            "tool&&true",
+            "tool>/dev/null",
+            "tool*",
+            "../tool",
+        )
+        for destination in destinations:
+            with self.subTest(destination=destination):
+                result = run_download_lines(
+                    f"curl -fsSL {ARTIFACT_URL} -o {destination}",
+                    f"echo '{CHECKSUM}  {destination}' | sha256sum -c -",
+                )
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical", result.stderr)
+
+    def test_rejects_each_shell_metacharacter_in_download_destination(self):
+        metacharacters = ("$", "`", ";", "&", "|", ">", "<", "*", "?", "[", "]", "(", ")", "\\", "'", '"')
+        for metacharacter in metacharacters:
+            with self.subTest(metacharacter=metacharacter):
+                destination = f"tool{metacharacter}suffix"
+                result = run_download_lines(
+                    f"curl -fsSL {ARTIFACT_URL} -o {destination}",
+                    f"echo '{CHECKSUM}  {destination}' | sha256sum -c -",
+                )
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical", result.stderr)
+
+    def test_rejects_download_destination_with_spaces(self):
+        result = run_download_lines(
+            f"curl -fsSL {ARTIFACT_URL} -o 'tool file'",
+            f"echo '{CHECKSUM}  tool' | sha256sum -c -",
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("canonical", result.stderr)
+
+    def test_rejects_download_with_noncanonical_option_order(self):
+        result = run_download_lines(
+            f"curl -o tool -fsSL {ARTIFACT_URL}",
+            f"echo '{CHECKSUM}  tool' | sha256sum -c -",
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("canonical", result.stderr)
+
+    def test_rejects_unsafe_artifact_url(self):
+        artifact_url = f"{ARTIFACT_URL}$(pwd)"
+        result = run_download_lines(
+            f"curl -fsSL {artifact_url} -o tool",
+            f"echo '{CHECKSUM}  tool' | sha256sum -c -",
+            items=(
+                inventory_item(
+                    kind="download",
+                    digest_or_sha=f"sha256:{CHECKSUM}",
+                    artifact_url=artifact_url,
+                ),
+            ),
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("official artifact_url", result.stderr)
+
+    def test_rejects_ambiguous_download_inventory(self):
+        result = run_download_lines(
+            f"curl -fsSL {ARTIFACT_URL} -o tool",
+            f"echo '{CHECKSUM}  tool' | sha256sum -c -",
+            items=(
+                inventory_item(
+                    name="example-tool-one",
+                    kind="download",
+                    digest_or_sha=f"sha256:{CHECKSUM}",
+                    artifact_url=ARTIFACT_URL,
+                ),
+                inventory_item(
+                    name="example-tool-two",
+                    kind="download",
+                    digest_or_sha="sha256:" + "e" * 64,
+                    artifact_url=ARTIFACT_URL,
+                ),
+            ),
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("ambiguous", result.stderr)
+
+    def test_rejects_case_alias_download_inventory(self):
+        alias_url = ARTIFACT_URL.replace("example/tool", "Example/Tool")
+        errors = checker.validate_inventory(
+            [
+                inventory_item(
+                    name="example-tool-one",
+                    kind="download",
+                    digest_or_sha=f"sha256:{CHECKSUM}",
+                    artifact_url=ARTIFACT_URL,
+                ),
+                inventory_item(
+                    name="example-tool-two",
+                    kind="download",
+                    digest_or_sha="sha256:" + "e" * 64,
+                    source="https://github.com/Example/Tool/releases/tag/v1.2.3",
+                    artifact_url=alias_url,
+                ),
+            ],
+            datetime(2026, 8, 11, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(any("ambiguous download artifact_url" in error for error in errors))
+
+    def test_rejects_download_artifact_from_a_different_source_release(self):
+        mismatches = (
+            "https://github.com/other/tool/releases/download/v1.2.3/tool",
+            "https://github.com/example/other/releases/download/v1.2.3/tool",
+            "https://github.com/example/tool/releases/download/v9.9.9/tool",
+        )
+        for artifact_url in mismatches:
+            with self.subTest(artifact_url=artifact_url):
+                errors = checker.validate_inventory(
+                    [
+                        inventory_item(
+                            kind="download",
+                            digest_or_sha=f"sha256:{CHECKSUM}",
+                            artifact_url=artifact_url,
+                        )
+                    ],
+                    datetime(2026, 8, 11, tzinfo=timezone.utc),
+                )
+
+                self.assertTrue(any("source release" in error for error in errors))
 
     def test_online_check_rejects_a_moved_action_tag(self):
         item = inventory_item(
@@ -280,7 +548,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn("does not bind", result.stderr)
 
-    def test_accepts_active_checksum_file_check(self):
+    def test_rejects_checksum_file_form_as_noncanonical(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             checksum = "d" * 64
@@ -293,7 +561,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
             result = run_checker(root)
 
-            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
 
     def test_rejects_checksum_check_from_dev_null(self):
         with tempfile.TemporaryDirectory() as directory:

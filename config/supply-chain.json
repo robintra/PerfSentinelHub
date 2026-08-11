@@ -6,11 +6,35 @@
       "kind": "dotnet-sdk",
       "version": "10.0.302",
       "digest_or_sha": "sha512:b2286dec9177e8b5543ff2fe95c84db358b87ec2a36a0d34a29033d70279940fd1134af56c4299648f8950db2d6ce35237698cf2818d9abc670c2c1664c92ac0",
-      "released_at": "2026-07-14T00:00:00Z",
+      "released_at": "2026-07-14",
       "source": "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json",
       "artifact_url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-osx-arm64.tar.gz",
       "stabilization_exempt": false,
       "reason": "Latest stable .NET 10 SDK older than the 72-hour stabilization window."
+    },
+    {
+      "name": "Microsoft.DotNet.ILCompiler",
+      "kind": "nuget",
+      "version": "10.0.10",
+      "digest_or_sha": "sha512-base64:Ne9wklPZQTe7T49oaGGqsdkiNgMApx9BPV4+pqw2DMp0KPCvxUJ1x2NIYNKjUJjdpAQIdV4HuOUJlNqyh4nNfA==",
+      "lock_content_hash": "tnG8ntt/Bk6odvHREnGLMo3PEiihy5iSlIFVp0JbIo00GKtNRt2k73eKZbPqR5yaJNIa3z8R86YLwbxfqpb17g==",
+      "released_at": "2026-07-14T17:00:57.217Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.dotnet.ilcompiler/10.0.10.json",
+      "nuget_role": "sdk-aot-base-rid",
+      "stabilization_exempt": false,
+      "reason": "SDK-injected NativeAOT compiler package locked in base and runtime-specific groups."
+    },
+    {
+      "name": "Microsoft.NET.ILLink.Tasks",
+      "kind": "nuget",
+      "version": "10.0.10",
+      "digest_or_sha": "sha512-base64:gE8O7DrRAI3Qir3ySzvdRl7DzVf8XrFfI0vbUXl2GHim3dMPdVol9DxwNh/Tzq9ymok1KU+2wu2qrF5jWNv1pQ==",
+      "lock_content_hash": "f5VCIE7AJpd5YvzNTeMGVzQIgyE9tX+AreTYwQF+REbu+DZo/2Ae+jNSwhPEYrVz6RRkd7y8ubXjk6Nn6Ka+Cg==",
+      "released_at": "2026-07-14T17:00:44.047Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.illink.tasks/10.0.10.json",
+      "nuget_role": "sdk-aot-base",
+      "stabilization_exempt": false,
+      "reason": "SDK-injected NativeAOT linker package locked in the base target group."
     },
     {
       "name": "Microsoft.AspNetCore.Mvc.Testing",
@@ -18,7 +42,7 @@
       "version": "10.0.10",
       "digest_or_sha": "sha512-base64:BgS+jaCu4PCIwFE+9Y4ZJ8kJfjdqdReIf4X0vZxEaeTQA0xLhV0Q2jDuYpZjg1eP3lCRV8tcVuqokuIFPGTfdA==",
       "lock_content_hash": "pTWE4RtRbb9sl/U9QjZA5oapEZ01ZEMfRilZvvh55ZW97caTQ2XuAF6sgc+7ojKWBbR2qrcWVo5P80gMPuW/tQ==",
-      "released_at": "2026-07-14T17:00:59Z",
+      "released_at": "2026-07-14T17:00:59.787Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.aspnetcore.mvc.testing/10.0.10.json",
       "stabilization_exempt": false,
       "reason": "Latest stable supported ASP.NET Core testing package."
@@ -29,7 +53,7 @@
       "version": "10.0.10",
       "digest_or_sha": "sha512-base64:n9Mxz49MQCbxt7nGUfsz6Azh0ODW9G3QDkHnHlmM/vuOMYzLhRkGTKT7n4LUEm0I9CBB5Zh+GGZ2raolleIp1A==",
       "lock_content_hash": "58JwZ39lCvRXHfV5O6RQfbHEDu8ZsXI7weRoVRR4jrGRxxkS+qyeuGrN2xD+9VYEICApYr0iTSL6PuU+DdsvPg==",
-      "released_at": "2026-07-14T17:00:57Z",
+      "released_at": "2026-07-14T17:00:57.44Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.10.json",
       "stabilization_exempt": false,
       "reason": "Latest stable supported SQLite provider."
@@ -40,7 +64,7 @@
       "version": "10.8.0",
       "digest_or_sha": "sha512-base64:7PkLLw8T6j6GCaQRkAsx7XW7Jg2v9B2E/SkJUvwjsx3jTtT2SK5lAPMivIrWi7CsE6wZKnQuSkpWRkFvheNXPA==",
       "lock_content_hash": "xXcxGfXSO/8o7IfYK36r3eZTl9RMKAl5K6x3x6o/QQBolI0t8vsLIGmhc3HJBTd11u1uPLHz61VnOTSTmY7ZVA==",
-      "released_at": "2026-07-14T21:24:42Z",
+      "released_at": "2026-07-14T21:24:42.13Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.timeprovider.testing/10.8.0.json",
       "stabilization_exempt": false,
       "reason": "Latest stable test clock package."
@@ -51,7 +75,7 @@
       "version": "18.8.1",
       "digest_or_sha": "sha512-base64:7ZJBYyRfeaV4hDllSLVb7dtLXQb4SpbAhy+s9Sc+dUV2zwDUTTJtPLYTjanS5kqqm+283NNxIY4271uUY0Pvjw==",
       "lock_content_hash": "dknJL3/9Y3t4XuCBqnc0PevPxgLsUMmVhjwup/b1HNovA8zWcj3XsfIf7c6p05363DWcqL7X/YhDL9B+Zymv1w==",
-      "released_at": "2026-07-14T13:07:09Z",
+      "released_at": "2026-07-14T13:07:09.393Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.test.sdk/18.8.1.json",
       "stabilization_exempt": false,
       "reason": "Latest stable test SDK compatible with the locked test suite."
@@ -62,7 +86,7 @@
       "version": "3.0.5",
       "digest_or_sha": "sha512-base64:EvmAAUwl8MPiDHszFBiTP8hMdjW2VZfOqwnCDqAMBVBDyGa++GFOprw416SE2P8znUOHu+dgvIkvTicCzSOrLw==",
       "lock_content_hash": "SW8iASIyWMrLzqabUHYQRvALhvD4ylSBsj4PgEVGwc36kQjc9xT5kSV/XQ9rU7nIpBWD+LPyX3Hlw5FzyUzGeQ==",
-      "released_at": "2026-07-27T14:12:50Z",
+      "released_at": "2026-07-27T14:12:50.407Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/sqlitepclraw.bundle_e_sqlite3/3.0.5.json",
       "stabilization_exempt": false,
       "reason": "Latest stable bundle required for NativeAOT SQLite."
@@ -73,7 +97,7 @@
       "version": "3.2.2",
       "digest_or_sha": "sha512-base64:lhL0gR/OkQZlVRrDcThrdGC8EYo514iSw1cJP5KqqeoaXcIeL5Oa4/8NWZycYnSaL5WHEibmCvoqmAfrJrv31g==",
       "lock_content_hash": "L+4/4y0Uqcg8/d6hfnxhnwh4j9FaeULvefTwrk30rr1o4n/vdPfyUQ8k0yzH8VJx7bmFEkDdcRfbtbjEHlaYcA==",
-      "released_at": "2026-01-14T22:26:25Z",
+      "released_at": "2026-01-14T22:26:25.47Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/3.2.2.json",
       "stabilization_exempt": false,
       "reason": "Latest stable xUnit v3 meta-package."
@@ -84,7 +108,7 @@
       "version": "3.1.5",
       "digest_or_sha": "sha512-base64:b/tvN9kXtUd3wSSYbC80Ic6y/dYlYbNSvatYiv71iozPhXqM4EaOuHujkIJh85b+wY6dgf25k9ENSy8jN6mlvQ==",
       "lock_content_hash": "tKi7dSTwP4m5m9eXPM2Ime4Kn7xNf4x4zT9sdLO/G4hZVnQCRiMTWoSZqI/pYTVeI27oPPqHBKYI/DjJ9GsYgA==",
-      "released_at": "2025-09-27T23:39:53Z",
+      "released_at": "2025-09-27T23:39:53.19Z",
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.runner.visualstudio/3.1.5.json",
       "stabilization_exempt": false,
       "reason": "Latest stable Visual Studio runner compatible with xUnit v3."
@@ -134,7 +158,7 @@
       "kind": "container",
       "version": "10.0.302-noble-aot",
       "digest_or_sha": "sha256:dbf0906fc695ba77ea281f62e9f139f34827d520f0a0900fd939c6297515d43f",
-      "released_at": "2026-07-14T00:00:00Z",
+      "released_at": "2026-07-14",
       "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.302-noble-aot",
       "stabilization_exempt": false,
       "reason": "Official NativeAOT SDK image matching the locked SDK."
@@ -144,7 +168,7 @@
       "kind": "container",
       "version": "10.0.10-noble-chiseled-extra",
       "digest_or_sha": "sha256:fb2d373f44be85cb0d12fec9f4a464ce9cffce2ddf023cd1f5ecc5b146b8186c",
-      "released_at": "2026-07-14T00:00:00Z",
+      "released_at": "2026-07-14",
       "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
       "stabilization_exempt": false,
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.10."

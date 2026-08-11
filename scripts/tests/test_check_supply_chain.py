@@ -18,6 +18,8 @@ CHECKSUM = "d" * 64
 NUGET_HASH = base64.b64encode(b"n" * 64).decode("ascii")
 NUGET_DIGEST = f"sha512-base64:{NUGET_HASH}"
 NUGET_LOCK_HASH = base64.b64encode(b"l" * 64).decode("ascii")
+ILCOMPILER_LOCK_HASH = "tnG8ntt/Bk6odvHREnGLMo3PEiihy5iSlIFVp0JbIo00GKtNRt2k73eKZbPqR5yaJNIa3z8R86YLwbxfqpb17g=="
+ILLINK_LOCK_HASH = "f5VCIE7AJpd5YvzNTeMGVzQIgyE9tX+AreTYwQF+REbu+DZo/2Ae+jNSwhPEYrVz6RRkd7y8ubXjk6Nn6Ka+Cg=="
 DOWNLOAD_HEADER = ("#!/bin/dash", "set -eu")
 SPEC = importlib.util.spec_from_file_location("supply_chain_checker", CHECKER)
 checker = importlib.util.module_from_spec(SPEC)
@@ -53,7 +55,7 @@ def dotnet_inventory_item():
         kind="dotnet-sdk",
         version="10.0.302",
         digest_or_sha="sha512:" + "a" * 128,
-        released_at="2026-07-14T00:00:00Z",
+        released_at="2026-07-14",
         source=checker.DOTNET_RELEASES,
         artifact_url="https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-linux-x64.tar.gz",
     )
@@ -70,6 +72,31 @@ def nuget_inventory_item(name="Example.Package", version="1.2.3", lock_hash=NUGE
             f"{name.casefold()}/{version}.json"
         ),
         lock_content_hash=lock_hash,
+    )
+
+
+def sdk_aot_inventory_items():
+    return (
+        inventory_item(
+            name="Microsoft.DotNet.ILCompiler",
+            kind="nuget",
+            version="10.0.10",
+            digest_or_sha="sha512-base64:Ne9wklPZQTe7T49oaGGqsdkiNgMApx9BPV4+pqw2DMp0KPCvxUJ1x2NIYNKjUJjdpAQIdV4HuOUJlNqyh4nNfA==",
+            lock_content_hash=ILCOMPILER_LOCK_HASH,
+            released_at="2026-07-14T17:00:57.217Z",
+            source="https://api.nuget.org/v3/registration5-gz-semver2/microsoft.dotnet.ilcompiler/10.0.10.json",
+            nuget_role="sdk-aot-base-rid",
+        ),
+        inventory_item(
+            name="Microsoft.NET.ILLink.Tasks",
+            kind="nuget",
+            version="10.0.10",
+            digest_or_sha="sha512-base64:gE8O7DrRAI3Qir3ySzvdRl7DzVf8XrFfI0vbUXl2GHim3dMPdVol9DxwNh/Tzq9ymok1KU+2wu2qrF5jWNv1pQ==",
+            lock_content_hash=ILLINK_LOCK_HASH,
+            released_at="2026-07-14T17:00:44.047Z",
+            source="https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.illink.tasks/10.0.10.json",
+            nuget_role="sdk-aot-base",
+        ),
     )
 
 
@@ -140,6 +167,57 @@ def write_nuget_project(root, packages, lock_dependencies=None):
             {
                 "version": 2,
                 "dependencies": {"net10.0": lock_dependencies},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_aot_project(
+    root,
+    compiler_version="10.0.10",
+    compiler_hash=ILCOMPILER_LOCK_HASH,
+    linker_version="10.0.10",
+    linker_hash=ILLINK_LOCK_HASH,
+):
+    project = root / "App" / "App.csproj"
+    project.parent.mkdir(parents=True)
+    project.write_text(
+        "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>"
+        "<TargetFramework>net10.0</TargetFramework>"
+        "<PublishAot>true</PublishAot>"
+        "<RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>"
+        "</PropertyGroup></Project>\n",
+        encoding="utf-8",
+    )
+
+    def direct(version, content_hash):
+        return {
+            "type": "Direct",
+            "requested": f"[{version}, )",
+            "resolved": version,
+            "contentHash": content_hash,
+        }
+
+    (project.parent / "packages.lock.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "dependencies": {
+                    "net10.0": {
+                        "Microsoft.DotNet.ILCompiler": direct(
+                            compiler_version, compiler_hash
+                        ),
+                        "Microsoft.NET.ILLink.Tasks": direct(
+                            linker_version, linker_hash
+                        ),
+                    },
+                    "net10.0/linux-x64": {
+                        "Microsoft.DotNet.ILCompiler": direct(
+                            compiler_version, compiler_hash
+                        )
+                    },
+                },
             }
         ),
         encoding="utf-8",
@@ -344,12 +422,12 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 kind="container",
                 version="10.0.10-noble-chiseled-extra",
                 digest_or_sha="sha256:" + "a" * 64,
-                released_at="2026-08-01T00:00:00Z",
+                released_at="2026-08-01",
                 source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
             ),
             "SDK": {
                 **dotnet_inventory_item(),
-                "released_at": "2026-08-01T00:00:00Z",
+                "released_at": "2026-08-01",
             },
         }
         for kind, item in items.items():
@@ -365,6 +443,60 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 )
 
                 self.assertFalse(any("72 hours" in error for error in errors), errors)
+
+    def test_inventory_uses_released_at_precision_at_offline_boundaries(self):
+        precise = inventory_item(
+            name="mcr.microsoft.com/dotnet/runtime-deps",
+            kind="container",
+            version="10.0.10-noble-chiseled-extra",
+            digest_or_sha="sha256:" + "a" * 64,
+            released_at="2026-08-01T12:00:00Z",
+            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+        )
+        date_only = {**precise, "released_at": "2026-08-01"}
+        cases = (
+            (
+                "precise just before 72 hours",
+                precise,
+                datetime(2026, 8, 4, 11, 59, 59, tzinfo=timezone.utc),
+                True,
+            ),
+            (
+                "precise exactly 72 hours",
+                precise,
+                datetime(2026, 8, 4, 12, tzinfo=timezone.utc),
+                False,
+            ),
+            (
+                "precise just after 72 hours",
+                precise,
+                datetime(2026, 8, 4, 12, 0, 1, tzinfo=timezone.utc),
+                False,
+            ),
+            (
+                "date only 73 hours after midnight",
+                date_only,
+                datetime(2026, 8, 4, 1, tzinfo=timezone.utc),
+                True,
+            ),
+            (
+                "date only exactly 96 hours after midnight",
+                date_only,
+                datetime(2026, 8, 5, tzinfo=timezone.utc),
+                False,
+            ),
+        )
+        for name, item, now, rejected in cases:
+            with self.subTest(name=name):
+                errors = checker.validate_inventory([item], now)
+
+                self.assertEqual(
+                    rejected,
+                    any("72 hours" in error for error in errors),
+                    errors,
+                )
+                if not rejected:
+                    self.assertEqual([], errors)
 
     def test_accepts_pinned_declarations_and_stable_inventory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -858,6 +990,82 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("PackageReference", result.stderr)
 
+    def test_rejects_case_insensitive_msbuild_package_versions(self):
+        package = nuget_inventory_item()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item(), package)
+            write_required_declarations(root, ((package["name"], package["version"]),))
+            write_nuget_project(
+                root,
+                ((package["name"], package["version"], package["lock_content_hash"]),),
+            )
+            (root / "App" / "App.csproj").write_text(
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>"
+                "<TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup>"
+                '<PackageReference Include="Example.Package" />'
+                '<packagereference include="Example.Package" version="9.9.9" />'
+                "</ItemGroup></Project>\n",
+                encoding="utf-8",
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("versionless", result.stderr)
+
+    def test_rejects_namespaced_msbuild_identity_attributes(self):
+        package = nuget_inventory_item()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item(), package)
+            write_required_declarations(root, ((package["name"], package["version"]),))
+            write_nuget_project(
+                root,
+                ((package["name"], package["version"], package["lock_content_hash"]),),
+            )
+            (root / "App" / "App.csproj").write_text(
+                '<Project Sdk="Microsoft.NET.Sdk" xmlns:x="urn:foreign">'
+                "<PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>"
+                '<ItemGroup><PackageReference x:Include="Example.Package" /></ItemGroup>'
+                "</Project>\n",
+                encoding="utf-8",
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("canonical", result.stderr)
+
+    def test_rejects_explicit_msbuild_imports_without_scanning_unimported_xml(self):
+        package = nuget_inventory_item()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item(), package)
+            write_required_declarations(root, ((package["name"], package["version"]),))
+            write_nuget_project(
+                root,
+                ((package["name"], package["version"], package["lock_content_hash"]),),
+            )
+            (root / "restore-policy.xml").write_text(
+                "<Project><PropertyGroup>"
+                "<RestoreSources>https://mirror.example/v3/index.json</RestoreSources>"
+                "</PropertyGroup></Project>\n",
+                encoding="utf-8",
+            )
+            project = root / "App" / "App.csproj"
+            project.write_text(
+                project.read_text(encoding="utf-8").replace(
+                    "</Project>", '<Import Project="../restore-policy.xml" /></Project>'
+                ),
+                encoding="utf-8",
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("Import", result.stderr)
+
     def test_rejects_package_references_and_restore_sources_from_props_files(self):
         package = nuget_inventory_item()
         declarations = {
@@ -1060,6 +1268,85 @@ class SupplyChainCheckerTests(unittest.TestCase):
             result = run_checker(root)
 
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_requires_inventory_for_sdk_aot_direct_locks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item())
+            write_required_declarations(root)
+            write_aot_project(root)
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("unexpected direct dependency", result.stderr)
+
+    def test_accepts_inventory_bound_sdk_aot_direct_locks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item(), *sdk_aot_inventory_items())
+            write_required_declarations(root)
+            write_aot_project(root)
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_sdk_aot_lock_version_and_hash_drift(self):
+        drift = {
+            "version": {"compiler_version": "9.9.9"},
+            "hash": {
+                "compiler_hash": base64.b64encode(b"x" * 64).decode("ascii")
+            },
+        }
+        for name, overrides in drift.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(
+                    root, dotnet_inventory_item(), *sdk_aot_inventory_items()
+                )
+                write_required_declarations(root)
+                write_aot_project(root, **overrides)
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("packages.lock.json", result.stderr)
+
+    def test_rejects_sdk_aot_inventory_version_and_hash_drift(self):
+        for field, value in (
+            ("version", "9.9.9"),
+            ("lock_content_hash", base64.b64encode(b"x" * 64).decode("ascii")),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                compiler, linker = sdk_aot_inventory_items()
+                compiler[field] = value
+                if field == "version":
+                    compiler["source"] = (
+                        "https://api.nuget.org/v3/registration5-gz-semver2/"
+                        "microsoft.dotnet.ilcompiler/9.9.9.json"
+                    )
+                write_inventory(root, dotnet_inventory_item(), compiler, linker)
+                write_required_declarations(root)
+                write_aot_project(root)
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("packages.lock.json", result.stderr)
+
+    def test_rejects_noncanonical_nuget_roles(self):
+        for role in (None, "central", "sdk-aot"):
+            with self.subTest(role=role):
+                item = sdk_aot_inventory_items()[0]
+                item["nuget_role"] = role
+
+                errors = checker.validate_inventory(
+                    [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+                )
+
+                self.assertTrue(any("NuGet role" in error for error in errors), errors)
 
     def test_rejects_duplicate_json_keys_and_unknown_inventory_fields(self):
         errors = checker.validate_inventory(
@@ -1480,6 +1767,28 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(any("release timestamp" in error for error in errors))
 
+    def test_online_rejects_github_timestamp_drift_within_a_second(self):
+        item = inventory_item(
+            kind="github-release", released_at="2026-01-01T00:00:00.100Z"
+        )
+        release = {
+            "tag_name": "v1.2.3",
+            "published_at": "2026-01-01T00:00:00.900Z",
+            "draft": False,
+            "prerelease": False,
+        }
+
+        with patch.object(
+            checker,
+            "fetch_json",
+            side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
+        ):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertTrue(any("release timestamp" in error for error in errors), errors)
+
     def test_online_requires_complete_nuget_identity_status_hash_and_timestamp(self):
         item = inventory_item(
             name="Example.Package",
@@ -1542,6 +1851,35 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+    def test_online_rejects_nuget_timestamp_drift_within_a_second(self):
+        item = inventory_item(
+            name="Example.Package",
+            kind="nuget",
+            version="1.2.3",
+            digest_or_sha=NUGET_DIGEST,
+            released_at="2026-01-01T00:00:00.100Z",
+            source="https://api.nuget.org/v3/registration5-gz-semver2/example.package/1.2.3.json",
+        )
+        payload = {
+            "listed": True,
+            "published": "2026-01-01T00:00:00.900Z",
+            "catalogEntry": {
+                "id": "example.package",
+                "version": "1.2.3",
+                "listed": True,
+                "published": "2026-01-01T00:00:00.900Z",
+                "packageHash": NUGET_HASH,
+                "packageHashAlgorithm": "SHA512",
+            },
+        }
+
+        with patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertTrue(any("release timestamp" in error for error in errors), errors)
+
     def test_online_validates_container_date_against_dotnet_metadata(self):
         item = inventory_item(
             name="mcr.microsoft.com/dotnet/sdk",
@@ -1571,13 +1909,69 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(any("release date" in error for error in errors))
 
-    def test_online_uses_a_conservative_stabilization_bound_for_date_only_metadata(self):
+    def test_online_rejects_container_release_precision_drift(self):
         item = inventory_item(
             name="mcr.microsoft.com/dotnet/runtime-deps",
             kind="container",
             version="10.0.10-noble-chiseled-extra",
             digest_or_sha="sha256:" + "a" * 64,
             released_at="2026-08-01T00:00:00Z",
+            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+        )
+        payload = {
+            "releases": [
+                {
+                    "release-date": "2026-08-01",
+                    "release-version": "10.0.10",
+                    "runtime": {"version": "10.0.10"},
+                }
+            ]
+        }
+
+        with patch.object(
+            checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
+        ), patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertTrue(any("release date" in error for error in errors), errors)
+
+    def test_online_rejects_precise_container_timestamp_drift_within_a_second(self):
+        item = inventory_item(
+            name="mcr.microsoft.com/dotnet/runtime-deps",
+            kind="container",
+            version="10.0.10-noble-chiseled-extra",
+            digest_or_sha="sha256:" + "a" * 64,
+            released_at="2026-08-01T12:34:56.100Z",
+            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+        )
+        payload = {
+            "releases": [
+                {
+                    "release-date": "2026-08-01T12:34:56.900Z",
+                    "release-version": "10.0.10",
+                    "runtime": {"version": "10.0.10"},
+                }
+            ]
+        }
+
+        with patch.object(
+            checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
+        ), patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertTrue(any("release date" in error for error in errors), errors)
+
+    def test_online_uses_a_conservative_stabilization_bound_for_date_only_metadata(self):
+        item = inventory_item(
+            name="mcr.microsoft.com/dotnet/runtime-deps",
+            kind="container",
+            version="10.0.10-noble-chiseled-extra",
+            digest_or_sha="sha256:" + "a" * 64,
+            released_at="2026-08-01",
             source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
         )
         payload = {
@@ -1657,7 +2051,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
             kind="container",
             version="10.0.302-noble-aot",
             digest_or_sha="sha256:" + "a" * 64,
-            released_at="2026-07-14T00:00:00Z",
+            released_at="2026-07-14",
             source="https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.302-noble-aot",
         )
         runtime = inventory_item(
@@ -1665,7 +2059,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
             kind="container",
             version="10.0.10-noble-chiseled-extra",
             digest_or_sha="sha256:" + "b" * 64,
-            released_at="2026-07-14T00:00:00Z",
+            released_at="2026-07-14",
             source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
         )
         payload = {
@@ -1695,7 +2089,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
             kind="dotnet-sdk",
             version="10.0.302",
             digest_or_sha="sha512:" + "a" * 128,
-            released_at="2026-07-14T00:00:00Z",
+            released_at="2026-07-14",
             source="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json",
             artifact_url="https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-linux-x64.tar.gz",
         )
@@ -1711,7 +2105,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
     def test_online_applies_the_date_only_bound_to_dotnet_sdk_metadata(self):
         item = {
             **dotnet_inventory_item(),
-            "released_at": "2026-08-01T00:00:00Z",
+            "released_at": "2026-08-01",
         }
         payload = {
             "releases": [

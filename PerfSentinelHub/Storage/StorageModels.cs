@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace PerfSentinelHub.Storage;
 
 public sealed record SourceSnapshot(
@@ -7,34 +9,21 @@ public sealed record SourceSnapshot(
     string ProducerVersion);
 
 public sealed record StoredFinding(
+    [property: SuppressMessage(
+        "ReSharper",
+        "NotAccessedPositionalProperty.Global",
+        Justification = "Queried by storage contract tests; the HTTP writer preserves the original envelope.")]
     string Signature,
     string EnvelopeJson,
-    string Service,
-    string FindingType,
-    string Severity,
-    string Endpoint,
-    string TemplateHash,
-    string? SampleTraceId,
     long FirstSeenMs,
     long LastSeenMs,
     string MaxConfidence,
-    int MaxConfidenceRank,
-    IReadOnlyList<FindingSourceObservation> Sources);
+    List<FindingSourceObservation> Sources);
 
 public sealed record FindingSourceObservation(
-    string Signature,
     string SourceId,
     string SourceName,
     string Environment,
     string ProducerVersion,
-    long FirstSeenMs,
     long LastSeenMs,
     long? UnreachableSinceMs);
-
-public sealed record SourceState(
-    string SourceId,
-    long LastAttemptMs,
-    long? LastSuccessMs,
-    long? UnreachableSinceMs,
-    string? ProducerVersion,
-    string? LastErrorCode);

@@ -1,5 +1,3 @@
-namespace PerfSentinelHub.Api;
-
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,6 +5,8 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
+
+namespace PerfSentinelHub.Api;
 
 public static class ApiEndpoints
 {

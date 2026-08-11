@@ -205,10 +205,10 @@ public sealed class PollingTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var fixture = await File.ReadAllBytesAsync(FixturePath, cancellationToken);
-        var fail = true;
+        var requestCount = 0;
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
-            if (fail)
+            if (Interlocked.Increment(ref requestCount) == 1)
             {
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 return;
@@ -235,7 +235,6 @@ public sealed class PollingTests : IDisposable
         };
 
         await Assert.ThrowsAsync<SourcePollException>(() => poller.PollAsync(source, cancellationToken));
-        fail = false;
         await poller.PollAsync(source, cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);

@@ -12,7 +12,7 @@ public static class FindingEnvelopeWriter
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
-        using var writer = new Utf8JsonWriter(response.BodyWriter);
+        await using var writer = new Utf8JsonWriter(response.BodyWriter);
         writer.WriteStartArray();
 
         foreach (var row in rows)
@@ -46,13 +46,13 @@ public static class FindingEnvelopeWriter
             // Flush as we go: a full 10 000-envelope page would otherwise sit in memory at once.
             if (writer.BytesPending >= 64 * 1024)
             {
-                writer.Flush();
+                await writer.FlushAsync(cancellationToken);
                 await response.BodyWriter.FlushAsync(cancellationToken);
             }
         }
 
         writer.WriteEndArray();
-        writer.Flush();
+        await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
 }

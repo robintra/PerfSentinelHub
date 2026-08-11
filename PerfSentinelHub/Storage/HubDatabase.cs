@@ -143,24 +143,26 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await using (var state = connection.CreateCommand())
         {
             state.Transaction = transaction;
-            // source_state tracks the poll path only: a daemon push must not clear an
-            // unreachable marker, or a permanently broken poll reads as healthy forever.
-            state.CommandText = """
+            // A push may refresh the version of an existing poll state, but it must not create
+            // one: that would report a successful poll before the Hub ever reached the daemon.
+            state.CommandText = fromPoll ? """
                 INSERT INTO source_state(
                   source_id, last_attempt_ms, last_success_ms, unreachable_since_ms,
                   producer_version, last_error_code)
                 VALUES ($source_id, $observed_at, $observed_at, NULL, $producer_version, NULL)
                 ON CONFLICT(source_id) DO UPDATE SET
-                  last_attempt_ms = IIF($from_poll, excluded.last_attempt_ms, source_state.last_attempt_ms),
-                  last_success_ms = IIF($from_poll, excluded.last_success_ms, source_state.last_success_ms),
-                  unreachable_since_ms = IIF($from_poll, NULL, source_state.unreachable_since_ms),
+                  last_attempt_ms = excluded.last_attempt_ms,
+                  last_success_ms = excluded.last_success_ms,
+                  unreachable_since_ms = NULL,
                   producer_version = excluded.producer_version,
-                  last_error_code = IIF($from_poll, NULL, source_state.last_error_code);
+                  last_error_code = NULL;
+                """ : """
+                UPDATE source_state SET producer_version = $producer_version
+                WHERE source_id = $source_id;
                 """;
             state.Parameters.AddWithValue("$source_id", source.SourceId);
             state.Parameters.AddWithValue("$observed_at", observedAtMs);
             state.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
-            state.Parameters.AddWithValue("$from_poll", fromPoll ? 1 : 0);
             await state.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -299,11 +301,9 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               LIMIT $limit
             )
             SELECT
-              f.signature, f.finding_json, f.service, f.finding_type, f.severity,
-              f.endpoint, f.template_hash, f.sample_trace_id, f.first_seen_ms,
-              f.last_seen_ms, f.max_confidence, f.max_confidence_rank,
+              f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
               fs.source_id, fs.source_name, fs.environment, fs.producer_version,
-              fs.first_seen_ms, fs.last_seen_ms, ss.unreachable_since_ms
+              fs.last_seen_ms, ss.unreachable_since_ms
             FROM selected AS f
             LEFT JOIN finding_sources AS fs ON fs.signature = f.signature
             LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
@@ -325,32 +325,23 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                 finding = new StoredFinding(
                     signature,
                     reader.GetString(1),
-                    reader.GetString(2),
-                    reader.GetString(3),
+                    reader.GetInt64(2),
+                    reader.GetInt64(3),
                     reader.GetString(4),
-                    reader.GetString(5),
-                    reader.GetString(6),
-                    reader.IsDBNull(7) ? null : reader.GetString(7),
-                    reader.GetInt64(8),
-                    reader.GetInt64(9),
-                    reader.GetString(10),
-                    reader.GetInt32(11),
                     sources);
                 bySignature.Add(signature, finding);
                 rows.Add(finding);
             }
 
-            if (!reader.IsDBNull(12))
+            if (!reader.IsDBNull(5))
             {
-                ((List<FindingSourceObservation>)finding.Sources).Add(new FindingSourceObservation(
-                    signature,
-                    reader.GetString(12),
-                    reader.GetString(13),
-                    reader.GetString(14),
-                    reader.GetString(15),
-                    reader.GetInt64(16),
-                    reader.GetInt64(17),
-                    reader.IsDBNull(18) ? null : reader.GetInt64(18)));
+                finding.Sources.Add(new FindingSourceObservation(
+                    reader.GetString(5),
+                    reader.GetString(6),
+                    reader.GetString(7),
+                    reader.GetString(8),
+                    reader.GetInt64(9),
+                    reader.IsDBNull(10) ? null : reader.GetInt64(10)));
             }
         }
 

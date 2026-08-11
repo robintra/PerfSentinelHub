@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -97,7 +98,7 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
             using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-            Assert.Equal("1", response.Headers.RetryAfter?.Delta?.TotalSeconds.ToString() ??
+            Assert.Equal("1", response.Headers.RetryAfter?.Delta?.TotalSeconds.ToString(CultureInfo.InvariantCulture) ??
                 response.Headers.GetValues("Retry-After").Single());
         }
         finally
@@ -156,6 +157,7 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
             request.Headers.Add("X-API-Key", apiKey);
         return request;
     }
+
 
     private static string FixturePath => Path.Combine(
         AppContext.BaseDirectory,

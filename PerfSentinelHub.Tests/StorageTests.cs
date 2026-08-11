@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -20,7 +21,15 @@ public sealed class StorageTests
         await database.InitializeAsync(cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
-        var names = await ReadTableNames(connection, cancellationToken);
+        var names = new List<string>();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            names.Add(reader.GetString(0));
         Assert.Equal(
             ["endpoint_heartbeats", "finding_sources", "findings", "schema_migrations", "source_state"],
             names.Order(StringComparer.Ordinal));
@@ -31,7 +40,7 @@ public sealed class StorageTests
     public async Task Reinitializing_the_same_file_preserves_rows()
     {
         using var fixture = TestDatabase.Create();
-        var path = fixture.Path;
+        var path = fixture.DatabasePath;
         var cancellationToken = TestContext.Current.CancellationToken;
         var first = fixture.Database;
         await first.InitializeAsync(cancellationToken);
@@ -54,47 +63,60 @@ public sealed class StorageTests
         Assert.Equal(1234L, (long)(await query.ExecuteScalarAsync(cancellationToken))!);
     }
 
-    private static async Task<IReadOnlyList<string>> ReadTableNames(
-        SqliteConnection connection,
-        CancellationToken cancellationToken)
+    [Fact]
+    public async Task Push_into_a_new_source_does_not_record_a_poll_attempt()
     {
-        var names = new List<string>();
+        using var fixture = TestDatabase.Create();
+        var database = fixture.Database;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await database.InitializeAsync(cancellationToken);
+        var finding = new ParsedFinding(
+            "signature", "{}", "checkout", "slow_sql", "warning", "POST /checkout",
+            "template-hash", "trace", "daemon_production", 4);
+
+        Assert.True(await database.TryUpsertBatchAsync(
+            new SourceSnapshot("push-only", "Push only", "production", "0.11.3"),
+            new ParsedBatch([finding], 0),
+            1234,
+            cancellationToken));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM source_state WHERE source_id = 'push-only';";
+        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync(cancellationToken))!);
+
         command.CommandText = """
-            SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
+            SELECT producer_version FROM finding_sources
+            WHERE source_id = 'push-only' AND signature = 'signature';
             """;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            names.Add(reader.GetString(0));
-        return names;
+        Assert.Equal("0.11.3", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
     private sealed class TestDatabase : IDisposable
     {
         private TestDatabase(string path)
         {
-            Path = path;
+            DatabasePath = path;
             Database = new HubDatabase(
                 Options.Create(new HubOptions { DatabasePath = path }),
                 TimeProvider.System);
         }
 
-        public string Path { get; }
-        public HubDatabase Database { get; }
+        public readonly string DatabasePath;
+        public readonly HubDatabase Database;
 
         public static TestDatabase Create(string? path = null) => new(
-            path ?? System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
+            path ?? Path.Combine(
+                Path.GetTempPath(),
                 $"perf-sentinel-hub-{Guid.NewGuid():N}.db"));
 
         public void Dispose()
         {
             Database.Dispose();
             SqliteConnection.ClearAllPools();
-            File.Delete(Path);
-            File.Delete($"{Path}-shm");
-            File.Delete($"{Path}-wal");
+            File.Delete(DatabasePath);
+            File.Delete($"{DatabasePath}-shm");
+            File.Delete($"{DatabasePath}-wal");
         }
     }
 }

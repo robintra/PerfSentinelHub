@@ -72,8 +72,7 @@ public sealed class SourcePoller(
         InvalidStatusException => "invalid_status",
         InvalidDataException => "invalid_findings",
         SqliteException => "storage_error",
-        HttpRequestException { StatusCode: not null } => "http_error",
-        HttpRequestException => "network_error",
+        HttpRequestException httpException => httpException.StatusCode is null ? "network_error" : "http_error",
         _ => "network_error"
     };
 }

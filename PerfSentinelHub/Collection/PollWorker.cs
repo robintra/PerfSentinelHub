@@ -14,8 +14,10 @@ public sealed class PollWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var concurrency = new SemaphoreSlim(_options.MaxConcurrentPolls);
-        await Task.WhenAll(_options.Sources.Select(source =>
-            RunSourceAsync(source, concurrency, stoppingToken)));
+        var tasks = new List<Task>(_options.Sources.Count);
+        foreach (var source in _options.Sources)
+            tasks.Add(RunSourceAsync(source, concurrency, stoppingToken));
+        await Task.WhenAll(tasks);
     }
 
     private async Task RunSourceAsync(

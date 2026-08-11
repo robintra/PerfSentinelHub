@@ -1,13 +1,35 @@
 NATIVE_RIDS := linux-x64 linux-arm64 osx-arm64 win-x64
 OUTPUT ?= dist
+override COVERAGE_DIR := artifacts/coverage
+override COVERAGE_REPORT := $(COVERAGE_DIR)/coverage.cobertura.xml
 
-.PHONY: restore test publish package-native audit image image-scan helm-lint helm-template verify
+.PHONY: tool-restore restore format build coverage coverage-check python-tests test publish package-native audit image image-scan helm-lint helm-template verify-fast verify
+
+tool-restore:
+	dotnet tool restore
 
 restore:
 	dotnet restore PerfSentinelHub.sln --locked-mode
 
-test: restore
-	dotnet test PerfSentinelHub.sln -c Release --no-restore
+format: restore
+	dotnet format PerfSentinelHub.sln --verify-no-changes --no-restore
+
+build: restore
+	dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
+
+coverage: build
+	rm -rf "$(COVERAGE_DIR)"
+	mkdir -p "$(COVERAGE_DIR)"
+	dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --collect:"XPlat Code Coverage" --results-directory "$(COVERAGE_DIR)"
+	@set -- "$(COVERAGE_DIR)"/*/coverage.cobertura.xml; test "$$#" -eq 1 && test -f "$$1" || { echo "expected exactly one Cobertura report" >&2; exit 1; }; mv "$$1" "$(COVERAGE_REPORT)"
+
+coverage-check: coverage
+	python3 scripts/check-coverage.py --current-report "$(COVERAGE_REPORT)"
+
+python-tests:
+	python3 -m unittest discover -s scripts/tests
+
+test: coverage
 
 publish: restore
 	dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r linux-$${TARGETARCH:-arm64} --self-contained true -p:PublishAot=true --no-restore
@@ -36,4 +58,6 @@ helm-lint:
 helm-template:
 	helm template test deploy/helm/perf-sentinel-hub --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318' >/dev/null
 
-verify: test publish audit image-scan helm-lint helm-template
+verify-fast: tool-restore format python-tests coverage-check
+
+verify: verify-fast publish audit image-scan helm-lint helm-template

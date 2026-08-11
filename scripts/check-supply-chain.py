@@ -32,7 +32,7 @@ REQUIRED_FIELDS = {
     "reason",
 }
 ALLOWED_FIELDS = REQUIRED_FIELDS | {"artifact_url", "expiry", "lock_content_hash", "nuget_role"}
-KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "download", "github-action", "github-release", "nuget"})
+KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "dotnet-tool", "download", "github-action", "github-release", "nuget"})
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 SEMVER_PRERELEASE = re.compile(r"^v?\d+(?:\.\d+){1,3}-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$")
@@ -198,7 +198,7 @@ def is_supported_source(item: dict) -> bool:
         return False
     if kind == "dotnet-sdk":
         return source == DOTNET_RELEASES
-    if kind == "nuget":
+    if kind in ("dotnet-tool", "nuget"):
         return nuget_source_matches(item)
     if kind == "container":
         return container_source_matches(item)
@@ -276,7 +276,7 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
         if kind == "dotnet-sdk" and not DOTNET_SHA512.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: .NET SDK artifacts require a sha512 checksum")
-        if kind == "nuget" and not is_canonical_nuget_digest(item["digest_or_sha"]):
+        if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
             errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
         if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
             errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
@@ -412,6 +412,64 @@ def validate_nuget_config(root: Path, files: list[Path]) -> list[str]:
     except (OSError, ValueError, ElementTree.ParseError):
         return ["NuGet.Config: only the canonical nuget.org source is permitted"]
     return []
+
+
+def validate_dotnet_tools(root: Path, files: list[Path], inventory: list[dict]) -> list[str]:
+    errors = []
+    pins = {
+        item["name"].casefold(): item
+        for item in inventory
+        if isinstance(item, dict)
+        and item.get("kind") == "dotnet-tool"
+        and isinstance(item.get("name"), str)
+    }
+    manifests = [path for path in files if path.name.casefold() == "dotnet-tools.json"]
+    expected_path = root / ".config" / "dotnet-tools.json"
+    if not pins and not manifests:
+        return []
+    if manifests != [expected_path]:
+        return [".config/dotnet-tools.json: exactly one repository-root dotnet tool manifest is required"]
+    try:
+        payload = load_json(expected_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"version", "isRoot", "tools"}
+            or type(payload["version"]) is not int
+            or payload["version"] != 1
+            or payload["isRoot"] is not True
+            or not isinstance(payload["tools"], dict)
+        ):
+            raise ValueError("tool manifest root is not canonical")
+        consumed = set()
+        for name, declaration in payload["tools"].items():
+            key = name.casefold() if isinstance(name, str) else ""
+            commands = declaration.get("commands") if isinstance(declaration, dict) else None
+            expected = pins.get(key)
+            if (
+                not isinstance(name, str)
+                or re.fullmatch(SAFE_NAME, name) is None
+                or expected is None
+                or expected["name"] != name
+                or not isinstance(declaration, dict)
+                or set(declaration) != {"version", "commands"}
+                or declaration.get("version") != expected["version"]
+                or not isinstance(commands, list)
+                or not commands
+                or len(commands) != len(set(commands))
+                or any(
+                    not isinstance(command, str)
+                    or re.fullmatch(SAFE_NAME, command) is None
+                    for command in commands
+                )
+            ):
+                errors.append(f".config/dotnet-tools.json: dotnet tool {name} differs from the inventory")
+                continue
+            consumed.add(key)
+        for key in set(pins) - consumed:
+            errors.append(f".config/dotnet-tools.json: dotnet tool {pins[key]['name']} is missing")
+    except (OSError, KeyError, TypeError, ValueError):
+        errors.append(".config/dotnet-tools.json: unable to parse canonical dotnet tool manifest")
+    return errors
 
 
 def msbuild_name(value: object) -> str:
@@ -915,6 +973,7 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
             )
 
     errors.extend(validate_nuget_config(root, files))
+    errors.extend(validate_dotnet_tools(root, files, inventory))
     package_errors, projects = validate_package_declarations(root, files, inventory)
     errors.extend(package_errors)
     errors.extend(validate_package_locks(root, files, projects, inventory))
@@ -1081,7 +1140,7 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                             )
                         if current_time < stabilization_deadline and item["stabilization_exempt"] is False:
                             errors.append(f"{item['name']}: official container release is newer than 72 hours")
-            elif item["kind"] == "nuget":
+            elif item["kind"] in ("dotnet-tool", "nuget"):
                 payload, _ = cached_json(source)
                 if payload.get("listed") is not True:
                     errors.append(f"{item['name']}: NuGet registration listed status must be true")

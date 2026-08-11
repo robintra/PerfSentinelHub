@@ -81,6 +81,17 @@
       "reason": "Latest stable test SDK compatible with the locked test suite."
     },
     {
+      "name": "coverlet.collector",
+      "kind": "nuget",
+      "version": "10.0.1",
+      "digest_or_sha": "sha512-base64:EfdSZknIPmkbuoqzgOnQ/TIEgRbdSnEjrJUs6qhvxLJPPqsWgNj+lWi9u8ho9CjF/JLC3HRkvadJMt0eZnHcrg==",
+      "lock_content_hash": "27jXSV/0DbVqF5jDrAxuQFZ9oaz6gmG03p8ttxAFk+X0M4woFYj7MoWDLCna5EGLb0CE6OE7X6ZH3Wt5smTtaA==",
+      "released_at": "2026-05-18T08:04:46.64Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/coverlet.collector/10.0.1.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable XPlat coverage collector older than the 72-hour stabilization window."
+    },
+    {
       "name": "SQLitePCLRaw.bundle_e_sqlite3",
       "kind": "nuget",
       "version": "3.0.5",
@@ -112,6 +123,26 @@
       "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.runner.visualstudio/3.1.5.json",
       "stabilization_exempt": false,
       "reason": "Latest stable Visual Studio runner compatible with xUnit v3."
+    },
+    {
+      "name": "dotnet-reportgenerator-globaltool",
+      "kind": "dotnet-tool",
+      "version": "5.5.11",
+      "digest_or_sha": "sha512-base64:WpcbF1qJSyDCdqf4ktTyTQsqXH8Wwp0WmP3FAdln5OXvXWC53ISpztoyGZTH4oh4Y1LR+R9a/IKtl890257a1Q==",
+      "released_at": "2026-07-27T19:23:54.713Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.5.11.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable report generator tool older than the 72-hour stabilization window."
+    },
+    {
+      "name": "dotnet-sonarscanner",
+      "kind": "dotnet-tool",
+      "version": "11.2.1",
+      "digest_or_sha": "sha512-base64:GGLhuNOiN4XdQkrFCd0AXLW4qoc3AjYcxGZxsqmn5Lvys/Bso18y64m0tIFGSb4uAEvVSMAqjz3P6vXBGI2tFg==",
+      "released_at": "2026-04-02T13:11:28.497Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/11.2.1.json",
+      "stabilization_exempt": false,
+      "reason": "Latest stable Sonar .NET scanner tool older than the 72-hour stabilization window."
     },
     {
       "name": "actions/checkout",

@@ -244,7 +244,11 @@ def package(rid: str, version: str, commit_time: int, staging: Path, output: Pat
     if staging.is_symlink() or not staging.is_dir():
         raise ValueError("input must be a real staging directory")
     root = staging.resolve(strict=True)
-    if inside(output.resolve(strict=False), root):
+    try:
+        resolved_output = output.resolve(strict=False)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("output directory cannot be resolved") from error
+    if inside(resolved_output, root):
         raise ValueError("output directory must be outside the staging directory")
     entries = scan_staging(root)
     extension = ".zip" if rid == "win-x64" else ".tar.gz"

@@ -208,6 +208,7 @@ class NativePackageTests(unittest.TestCase):
             result = self.run_packager(publish, loop)
             self.assertNotEqual(0, result.returncode)
             self.assertIn("error:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
 
     def test_rejects_invalid_rid_version_and_timestamp(self):
         cases = (

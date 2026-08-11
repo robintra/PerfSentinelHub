@@ -75,6 +75,19 @@ def nuget_inventory_item(name="Example.Package", version="1.2.3", lock_hash=NUGE
     )
 
 
+def dotnet_tool_inventory_item(name="example.tool", version="1.2.3"):
+    return inventory_item(
+        name=name,
+        kind="dotnet-tool",
+        version=version,
+        digest_or_sha=NUGET_DIGEST,
+        source=(
+            "https://api.nuget.org/v3/registration5-gz-semver2/"
+            f"{name.casefold()}/{version}.json"
+        ),
+    )
+
+
 def sdk_aot_inventory_items():
     return (
         inventory_item(
@@ -135,6 +148,23 @@ def write_required_declarations(root, packages=()):
         '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />\n'
         "  </packageSources>\n"
         "</configuration>\n",
+        encoding="utf-8",
+    )
+
+
+def write_dotnet_tools(root, name="example.tool", version="1.2.3"):
+    manifest = root / ".config" / "dotnet-tools.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "isRoot": True,
+                "tools": {
+                    name: {"version": version, "commands": ["example-tool"]}
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -2310,6 +2340,37 @@ class SupplyChainCheckerTests(unittest.TestCase):
             errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
 
         self.assertTrue(any("did not provide Docker-Content-Digest" in error for error in errors))
+
+    def test_accepts_locked_repository_dotnet_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(
+                root,
+                dotnet_inventory_item(),
+                dotnet_tool_inventory_item(),
+            )
+            write_required_declarations(root)
+            write_dotnet_tools(root)
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_dotnet_tool_version_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(
+                root,
+                dotnet_inventory_item(),
+                dotnet_tool_inventory_item(version="1.2.3"),
+            )
+            write_required_declarations(root)
+            write_dotnet_tools(root, version="1.2.4")
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("dotnet tool", result.stderr)
 
 
 if __name__ == "__main__":

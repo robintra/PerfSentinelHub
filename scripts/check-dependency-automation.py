@@ -34,7 +34,7 @@ SEMVER_PRERELEASE = re.compile(
     r"^v?\d+(?:\.\d+){1,3}-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$"
 )
 UNSTABLE_CONTAINER_TAG = re.compile(
-    r"(?:^|[._-])(?:alpha|beta|rc|preview|pre|nightly|snapshot|canary|unstable|dev)[0-9]*(?:[._-]|$)",
+    r"(?:^|[._-])(?:alpha|beta|rc|preview|pre|eap|nightly|snapshot|canary|unstable|dev)[0-9]*(?:[._-]|$)",
     re.IGNORECASE,
 )
 RENOVATE_FILES = (
@@ -45,10 +45,14 @@ RENOVATE_FILES = (
     ".github/renovate.json",
     ".github/renovate.json5",
 )
-AUTO_MERGE = re.compile(
-    r"auto.?merge|merge\s+dependabot|dependabot.{0,120}(?:gh\s+pr\s+merge|enablePullRequestAutoMerge)",
-    re.IGNORECASE | re.DOTALL,
+AUTO_MERGE_MARKER = re.compile(
+    r"auto.?merge|merge\s+dependabot|enablePullRequestAutoMerge", re.IGNORECASE
 )
+DEPENDABOT_IDENTITY = re.compile(
+    r"(?<![a-z0-9_-])dependabot(?:\[bot\])?(?![a-z0-9_-])", re.IGNORECASE
+)
+GITHUB_ACTOR = re.compile(r"(?<![a-z0-9_])github\s*\.\s*actor(?![a-z0-9_])", re.IGNORECASE)
+WORKFLOW_TOKEN = re.compile(r"--[a-z0-9-]+|[a-z0-9_./\[\]-]+", re.IGNORECASE)
 YAML_KEY = re.compile(r"^(?P<key>[a-z][a-z0-9-]*):(?: (?P<value>.+))?$")
 
 
@@ -130,6 +134,17 @@ def load_dependabot_yaml(path):
     return parsed
 
 
+def has_dependabot_gh_auto_merge(text):
+    if GITHUB_ACTOR.search(text) is None or DEPENDABOT_IDENTITY.search(text) is None:
+        return False
+    normalized = re.sub(r"\\\s*\r?\n\s*", " ", text.casefold())
+    tokens = WORKFLOW_TOKEN.findall(normalized)
+    for index in range(len(tokens) - 2):
+        if tokens[index : index + 3] == ["gh", "pr", "merge"]:
+            return "--auto" in tokens[index + 3 :]
+    return False
+
+
 def validate_ownership(root):
     errors = []
     for relative in RENOVATE_FILES:
@@ -141,7 +156,9 @@ def validate_ownership(root):
         except OSError as error:
             errors.append(f"{workflow.relative_to(root)}: unable to inspect workflow: {error}")
             continue
-        if "dependabot" in text.casefold() and AUTO_MERGE.search(text):
+        if DEPENDABOT_IDENTITY.search(text) and (
+            AUTO_MERGE_MARKER.search(text) or has_dependabot_gh_auto_merge(text)
+        ):
             errors.append(f"{workflow.relative_to(root)}: Dependabot auto-merge is forbidden")
         if "renovatebot/" in text.casefold():
             errors.append(f"{workflow.relative_to(root)}: Renovate duplicates Dependabot ownership")
@@ -186,7 +203,13 @@ def validate_update(entry):
         errors.append(f"{ecosystem}: unsupported or missing Dependabot options")
     if entry.get("schedule") != SCHEDULE:
         errors.append(f"{ecosystem}: ordinary updates must run Monday at 06:00 Europe/Paris")
-    if entry.get("cooldown") != {"default-days": 3}:
+    cooldown = entry.get("cooldown")
+    if (
+        not isinstance(cooldown, dict)
+        or set(cooldown) != {"default-days"}
+        or type(cooldown.get("default-days")) is not int
+        or cooldown["default-days"] != 3
+    ):
         errors.append(f"{ecosystem}: ordinary updates require an unbypassed three-day cooldown")
     limit = entry.get("open-pull-requests-limit")
     labels = entry.get("labels")
@@ -232,7 +255,8 @@ def validate_config(root):
         return [f".github/dependabot.yml: invalid strict YAML/JSON: {error}"]
     if not isinstance(config, dict) or set(config) != {"version", "updates"}:
         return [".github/dependabot.yml: only version and updates are permitted"]
-    if config.get("version") != 2 or not isinstance(config.get("updates"), list):
+    version = config.get("version")
+    if type(version) is not int or version != 2 or not isinstance(config.get("updates"), list):
         return [".github/dependabot.yml: version 2 and an updates array are required"]
 
     errors = []

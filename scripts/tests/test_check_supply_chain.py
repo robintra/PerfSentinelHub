@@ -489,6 +489,26 @@ class SupplyChainCheckerTests(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn("prerelease", result.stderr)
 
+    def test_rejects_eap_container_inventory_versions(self):
+        now = datetime(2026, 8, 11, tzinfo=timezone.utc)
+        for version in ("2026.1-eap", "2026.1_EAP", "2026.1.EaP"):
+            with self.subTest(version=version):
+                item = inventory_item(
+                    name="jetbrains/qodana-dotnet",
+                    kind="container",
+                    version=version,
+                    digest_or_sha="sha256:" + "c" * 64,
+                    released_at="2026-04-21T09:02:03.110286Z",
+                    source=(
+                        "https://hub.docker.com/v2/namespaces/jetbrains/repositories/"
+                        f"qodana-dotnet/tags/{version}"
+                    ),
+                )
+
+                errors = checker.validate_inventory([item], now)
+
+                self.assertTrue(any("prerelease" in error for error in errors), errors)
+
     def test_rejects_recent_non_exempt_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

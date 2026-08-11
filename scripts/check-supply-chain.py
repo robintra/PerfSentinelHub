@@ -36,6 +36,10 @@ KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "dotnet-tool", "download", "
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 SEMVER_PRERELEASE = re.compile(r"^v?\d+(?:\.\d+){1,3}-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$")
+UNSTABLE_CONTAINER_TAG = re.compile(
+    r"(?:^|[._-])(?:alpha|beta|rc|preview|pre|eap|nightly|snapshot|canary|unstable|dev)[0-9]*(?:[._-]|$)",
+    re.IGNORECASE,
+)
 FROM_LINE = re.compile(r"^\s*FROM\s+(?:--platform=\S+\s+)?([^\s]+)", re.IGNORECASE)
 SAFE_NAME = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 SAFE_RELATIVE_PATH = rf"{SAFE_NAME}(?:/{SAFE_NAME})*"
@@ -254,7 +258,12 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             errors.append(f"{name}: unsupported official source")
         if not isinstance(item["reason"], str) or not item["reason"].strip():
             errors.append(f"{name}: reason must explain the pin")
-        if kind != "container" and SEMVER_PRERELEASE.fullmatch(str(item["version"])):
+        prerelease = (
+            UNSTABLE_CONTAINER_TAG.search(str(item["version"]))
+            if kind == "container"
+            else SEMVER_PRERELEASE.fullmatch(str(item["version"]))
+        )
+        if prerelease:
             errors.append(f"{name}: prerelease versions are not permitted")
         try:
             release_value = item["released_at"]

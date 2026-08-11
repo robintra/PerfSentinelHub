@@ -250,6 +250,21 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn("owner", result.stderr)
 
+    def test_requires_exact_integer_secret_inventory_schema_version(self):
+        cases = ((True, 1), (1.0, 1), ("1", 1), (1, 0))
+        for schema_version, expected_status in cases:
+            with self.subTest(schema_version=schema_version):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    inventory = secret_inventory()
+                    inventory["schema_version"] = schema_version
+                    write_repository(root, secrets=inventory)
+
+                    result = run_checker(root)
+
+                    self.assertEqual(expected_status, result.returncode, result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_rejects_field_or_metadata_that_resembles_a_secret_value(self):
         cases = (
             secret_inventory(value="sqa_abcdefghijklmnopqrstuvwxyz012345"),

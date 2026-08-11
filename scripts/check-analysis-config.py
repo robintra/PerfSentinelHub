@@ -202,7 +202,12 @@ def validate_secret_inventory(root: Path) -> tuple[list[str], set[str]]:
     if not isinstance(payload, dict) or set(payload) != {"schema_version", "secrets"}:
         return ["config/secret-inventory.json: only schema_version and secrets are permitted"], names
     entries = payload.get("secrets")
-    if payload.get("schema_version") != 1 or not isinstance(entries, list):
+    schema_version = payload.get("schema_version")
+    if (
+        type(schema_version) is not int
+        or schema_version != 1
+        or not isinstance(entries, list)
+    ):
         return ["config/secret-inventory.json: schema_version 1 and a secrets array are required"], names
     for index, entry in enumerate(entries):
         label = f"config/secret-inventory.json: entry {index + 1}"

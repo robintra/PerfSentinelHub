@@ -292,7 +292,7 @@
       "released_at": "2026-04-21T09:02:03.110286Z",
       "source": "https://hub.docker.com/v2/namespaces/jetbrains/repositories/qodana-dotnet/tags/2026.1",
       "stabilization_exempt": false,
-      "reason": "Latest eligible stable Qodana for .NET image; Task 13 re-evaluates 2026.2 after stabilization and Renovate manages later upgrades."
+      "reason": "Latest eligible stable Qodana for .NET image; Task 13 re-evaluates 2026.2 after stabilization and Dependabot manages later upgrades."
     },
     {
       "name": "helm",

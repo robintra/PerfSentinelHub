@@ -922,7 +922,9 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
                 else:
                     name = action.group("name")
                     sha = action.group("sha")
-                    expected = pins.get(name)
+                    parts = name.split("/")
+                    repository = "/".join(parts[:2])
+                    expected = pins.get(repository)
                     if expected is None or expected.get("kind") != "github-action":
                         errors.append(f"{path.relative_to(root)}:{number}: action {name} is absent from the inventory")
                     elif expected["digest_or_sha"].lower() != sha.lower():

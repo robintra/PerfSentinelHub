@@ -735,6 +735,31 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
             self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_accepts_pinned_subactions_from_an_inventoried_action_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            action_sha = "b" * 40
+            (root / "ci.yml").write_text(
+                "steps:\n"
+                f"  - uses: github/codeql-action/init@{action_sha}\n"
+                f"  - uses: github/codeql-action/analyze@{action_sha}\n",
+                encoding="utf-8",
+            )
+            write_inventory(
+                root,
+                dotnet_inventory_item(),
+                inventory_item(
+                    name="github/codeql-action",
+                    digest_or_sha=action_sha,
+                    source="https://github.com/github/codeql-action/releases/tag/v1.2.3",
+                ),
+            )
+            write_required_declarations(root)
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_accepts_canonical_download_to_safe_relative_path(self):
         destination = "tools/tool-1.2_3.tar.gz"
 

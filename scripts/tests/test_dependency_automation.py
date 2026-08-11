@@ -183,6 +183,41 @@ class DependencyAutomationTests(unittest.TestCase):
                     "three-day cooldown",
                 )
 
+    def test_rejects_non_integer_policy_numbers(self):
+        cases = (
+            (
+                "version",
+                (True, 2.0, "2"),
+                lambda config, value: config.__setitem__("version", value),
+                "version 2",
+            ),
+            (
+                "cooldown",
+                (True, 3.0, "3"),
+                lambda config, value: config["updates"][0]["cooldown"].__setitem__(
+                    "default-days", value
+                ),
+                "three-day cooldown",
+            ),
+            (
+                "pull-request-limit",
+                (True, 5.0, "5"),
+                lambda config, value: config["updates"][0].__setitem__(
+                    "open-pull-requests-limit", value
+                ),
+                "bounded and labeled",
+            ),
+        )
+        for field, values, mutate, diagnostic in cases:
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    self.check_invalid(
+                        lambda config, _root, mutate=mutate, value=value: mutate(
+                            config, value
+                        ),
+                        diagnostic,
+                    )
+
     def test_rejects_prerelease_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -212,18 +247,19 @@ class DependencyAutomationTests(unittest.TestCase):
             self.assertIn("stable-only", result.stderr)
 
     def test_rejects_a_prerelease_container_version(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            write_repository(root)
-            inventory_path = root / "config" / "supply-chain.json"
-            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-            inventory["inventory"][1]["version"] = "1.2.4-rc.1"
-            inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+        for version in ("1.2.4-rc.1", "2026.1-eap", "2026.1_EAP", "2026.1.EaP"):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_repository(root)
+                inventory_path = root / "config" / "supply-chain.json"
+                inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+                inventory["inventory"][1]["version"] = version
+                inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
 
-            result = run_checker(root)
+                result = run_checker(root)
 
-            self.assertEqual(1, result.returncode)
-            self.assertIn("stable-only", result.stderr)
+                self.assertEqual(1, result.returncode)
+                self.assertIn("stable-only", result.stderr)
 
     def test_rejects_security_grouping(self):
         def group_security(config, _root):
@@ -263,7 +299,34 @@ class DependencyAutomationTests(unittest.TestCase):
             workflow = root / ".github" / "workflows" / "dependabot-automerge.yml"
             workflow.parent.mkdir(parents=True, exist_ok=True)
             workflow.write_text(
-                "name: Dependabot\nrun-name: merge Dependabot pull request\n",
+                "name: Dependency updates\n"
+                "jobs:\n"
+                "  merge:\n"
+                "    if: ${{ github.actor == 'dependabot[bot]' }}\n"
+                f"    # {'distance-' * 30}\n"
+                "    steps:\n"
+                "      - run: gh pr merge \"$PR_URL\" --squash --auto\n",
+                encoding="utf-8",
+            )
+
+        self.check_invalid(add_auto_merge, "auto-merge")
+
+    def test_rejects_lexically_obfuscated_dependabot_auto_merge_workflows(self):
+        def add_auto_merge(_config, root):
+            workflow = root / ".github" / "workflows" / "merge.yml"
+            workflow.parent.mkdir(parents=True, exist_ok=True)
+            workflow.write_text(
+                "name: Dependency updates\n"
+                "jobs:\n"
+                "  merge:\n"
+                "    if: ${{ github . actor == 'DEPENDABOT[bot]' }}\n"
+                "    steps:\n"
+                "      - run: gh pr merge \"$MANUAL_PR_URL\" --squash\n"
+                "      - run: |\n"
+                "          gh \\\n"
+                "            pr \\\n"
+                "            merge \"$PR_URL\" --squash \\\n"
+                "            --auto\n",
                 encoding="utf-8",
             )
 

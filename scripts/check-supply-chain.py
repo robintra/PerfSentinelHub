@@ -28,10 +28,15 @@ REQUIRED_FIELDS = {
 }
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
-PRERELEASE = re.compile(r"(?:^|[-._])(alpha|beta|preview|rc|dev|nightly|canary)(?:[-._]?\d|$)", re.IGNORECASE)
+SEMVER_PRERELEASE = re.compile(r"^v?\d+(?:\.\d+){1,3}-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$")
 USES_LINE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)")
 FROM_LINE = re.compile(r"^\s*FROM\s+(?:--platform=\S+\s+)?([^\s]+)", re.IGNORECASE)
 PACKAGE_VERSION = re.compile(r'<PackageVersion\s+Include="([^"]+)"\s+Version="([^"]+)"')
+GITHUB_RELEASE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/releases/tag/([^/]+)$", re.IGNORECASE)
+GITHUB_ARTIFACT = re.compile(r"^https://github\.com/[^/]+/[^/]+/releases/download/[^/]+/[^/]+$", re.IGNORECASE)
+NUGET_REGISTRATION = re.compile(r"^https://api\.nuget\.org/v3/registration5-gz-semver2/[^/]+/[^/]+\.json$", re.IGNORECASE)
+DOTNET_RELEASES = "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json"
+DOWNLOAD_URL = re.compile(r"https://[^\s'\"\\]+")
 
 
 def parse_timestamp(value: str) -> datetime:
@@ -52,6 +57,18 @@ def inventory_by_name(inventory: list[dict]) -> dict[str, dict]:
     return {item["name"]: item for item in inventory if isinstance(item, dict) and "name" in item}
 
 
+def is_supported_source(item: dict) -> bool:
+    source = item["source"]
+    kind = item["kind"]
+    if kind == "dotnet-sdk":
+        return source == DOTNET_RELEASES
+    if kind == "nuget":
+        return bool(NUGET_REGISTRATION.fullmatch(source))
+    if kind == "container":
+        return source.startswith("https://mcr.microsoft.com/v2/") and "/manifests/" in source
+    return bool(GITHUB_RELEASE.fullmatch(source))
+
+
 def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     for item in inventory:
@@ -63,11 +80,11 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
         if missing:
             errors.append(f"{name}: missing required fields: {', '.join(sorted(missing))}")
             continue
-        if not isinstance(item["source"], str) or not item["source"].startswith("https://"):
-            errors.append(f"{name}: source must be an official HTTPS URL")
+        if not isinstance(item["source"], str) or not is_supported_source(item):
+            errors.append(f"{name}: unsupported official source")
         if not isinstance(item["reason"], str) or not item["reason"].strip():
             errors.append(f"{name}: reason must explain the pin")
-        if PRERELEASE.search(str(item["version"])):
+        if item["kind"] != "container" and SEMVER_PRERELEASE.fullmatch(str(item["version"])):
             errors.append(f"{name}: prerelease versions are not permitted")
         try:
             age = now - parse_timestamp(item["released_at"])
@@ -76,10 +93,17 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             continue
         if not item["stabilization_exempt"] and age < timedelta(hours=72):
             errors.append(f"{name}: ordinary releases must be at least 72 hours old")
+        if item["kind"] in {"github-action", "github-release"} and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
+            errors.append(f"{name}: GitHub releases require a raw release commit SHA")
         if item["kind"] == "github-action" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: GitHub Actions require a full commit SHA")
         if item["kind"] in {"container", "download"} and not SHA256.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
+        if item["kind"] == "download" and not GITHUB_ARTIFACT.fullmatch(str(item.get("artifact_url", ""))):
+            errors.append(f"{name}: downloaded tools require an official artifact_url")
+        match = GITHUB_RELEASE.fullmatch(str(item["source"]))
+        if item["kind"] == "github-action" and match and item["name"].lower() != f"{match.group(1)}/{match.group(2)}".lower():
+            errors.append(f"{name}: action name must match its owner/repository source")
     return errors
 
 
@@ -117,8 +141,23 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
                         errors.append(f"{path.relative_to(root)}:{number}: container {image_name} is absent from the inventory")
                     elif expected["digest_or_sha"].lower() != digest.lower():
                         errors.append(f"{path.relative_to(root)}:{number}: container {image_name} differs from the inventory")
-            if can_download_tools and re.search(r"\b(?:curl|wget)\b", line) and not any("sha256" in candidate.lower() for candidate in lines[number - 1:number + 2]):
-                errors.append(f"{path.relative_to(root)}:{number}: downloaded tools require a sha256 checksum")
+            if can_download_tools and re.search(r"\b(?:curl|wget)\b", line):
+                url_match = DOWNLOAD_URL.search(line)
+                output_match = re.search(r"(?:^|\s)-o\s+(\S+)", line)
+                if not url_match or not output_match:
+                    errors.append(f"{path.relative_to(root)}:{number}: downloaded tools require a URL and -o output")
+                    continue
+                artifact_url = url_match.group(0)
+                output = output_match.group(1).strip("'\"")
+                expected = next((item for item in inventory if item.get("kind") == "download" and item.get("artifact_url") == artifact_url), None)
+                if expected is None:
+                    errors.append(f"{path.relative_to(root)}:{number}: download URL is absent from the inventory")
+                    continue
+                checksum = expected["digest_or_sha"].removeprefix("sha256:")
+                binding = re.compile(rf"{re.escape(checksum)}\s+\*?{re.escape(output)}(?:[\s'\"]|$)")
+                nearby = lines[number - 1:number + 2]
+                if not any("sha256sum" in candidate and binding.search(candidate) for candidate in nearby):
+                    errors.append(f"{path.relative_to(root)}:{number}: download does not bind {output} to its inventory checksum")
 
     global_json = root / "global.json"
     if global_json.exists():
@@ -175,11 +214,10 @@ def fetch_manifest_digest(url: str) -> str | None:
 
 def validate_online(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
-    github_release = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/releases/tag/([^/]+)$", re.IGNORECASE)
     for item in inventory:
         source = item["source"]
         try:
-            match = github_release.match(source)
+            match = GITHUB_RELEASE.fullmatch(source)
             if match:
                 owner, repository, tag = match.groups()
                 release, _ = fetch_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
@@ -189,18 +227,49 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     errors.append(f"{item['name']}: official release tag moved or differs from inventory")
                 if release.get("published_at") and parse_timestamp(release["published_at"]) > now - timedelta(hours=72) and not item["stabilization_exempt"]:
                     errors.append(f"{item['name']}: official release is newer than 72 hours")
-                if item["kind"] == "github-action":
+                if item["kind"] in {"github-action", "github-release"}:
                     commit, _ = fetch_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
                     if commit.get("sha", "").lower() != item["digest_or_sha"].lower():
                         errors.append(f"{item['name']}: official release commit moved")
-            elif "/v2/" in source and "/manifests/" in source:
+                if item["kind"] == "download":
+                    artifact = next((asset for asset in release.get("assets", []) if asset.get("browser_download_url") == item["artifact_url"]), None)
+                    if artifact is None or artifact.get("digest") is None:
+                        errors.append(f"{item['name']}: publisher did not provide the recorded download artifact checksum")
+                    elif artifact["digest"].lower() != item["digest_or_sha"].lower():
+                        errors.append(f"{item['name']}: publisher checksum differs from inventory")
+            elif item["kind"] == "container":
                 digest = fetch_manifest_digest(source)
-                if digest and digest.lower() != item["digest_or_sha"].lower():
+                if digest is None:
+                    errors.append(f"{item['name']}: registry did not provide Docker-Content-Digest")
+                elif digest.lower() != item["digest_or_sha"].lower():
                     errors.append(f"{item['name']}: container manifest digest moved")
-            elif "api.nuget.org/v3/registration" in source:
+            elif item["kind"] == "nuget":
                 payload, _ = fetch_json(source)
                 if payload.get("listed") is False:
                     errors.append(f"{item['name']}: NuGet package is unlisted")
+                catalog = payload.get("catalogEntry")
+                if isinstance(catalog, str):
+                    catalog, _ = fetch_json(catalog)
+                if not isinstance(catalog, dict) or catalog.get("version") != item["version"]:
+                    errors.append(f"{item['name']}: NuGet version differs from inventory")
+                published = catalog.get("published") if isinstance(catalog, dict) else None
+                if not isinstance(published, str) or parse_timestamp(published).replace(microsecond=0) != parse_timestamp(item["released_at"]).replace(microsecond=0):
+                    errors.append(f"{item['name']}: NuGet release timestamp differs from inventory")
+                if not isinstance(catalog, dict) or f"sha512-base64:{catalog.get('packageHash', '')}" != item["digest_or_sha"]:
+                    errors.append(f"{item['name']}: NuGet checksum differs from inventory")
+            elif item["kind"] == "dotnet-sdk":
+                payload, _ = fetch_json(source)
+                release = next((candidate for candidate in payload.get("releases", []) if candidate.get("sdk", {}).get("version") == item["version"]), None)
+                if release is None:
+                    errors.append(f"{item['name']}: .NET metadata does not contain the pinned SDK")
+                    continue
+                if release.get("release-date") != parse_timestamp(item["released_at"]).date().isoformat():
+                    errors.append(f"{item['name']}: .NET metadata release timestamp differs from inventory")
+                artifact = next((file for file in release.get("sdk", {}).get("files", []) if file.get("url") == item.get("artifact_url")), None)
+                if artifact is None or f"sha512:{artifact.get('hash', '')}" != item["digest_or_sha"]:
+                    errors.append(f"{item['name']}: .NET metadata digest differs from inventory")
+            else:
+                errors.append(f"{item['name']}: unsupported official source")
         except (URLError, ValueError, json.JSONDecodeError, TimeoutError) as error:
             errors.append(f"{item['name']}: unable to verify official source: {error}")
     return errors

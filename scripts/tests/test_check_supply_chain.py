@@ -19,7 +19,7 @@ SPEC.loader.exec_module(checker)
 
 def inventory_item(**overrides):
     item = {
-        "name": "example-tool",
+        "name": "example/tool",
         "kind": "github-action",
         "version": "1.2.3",
         "digest_or_sha": "a" * 40,
@@ -53,7 +53,14 @@ class SupplyChainCheckerTests(unittest.TestCase):
             root = Path(directory)
             workflow = root / "ci.yml"
             workflow.write_text("steps:\n  - uses: actions/checkout@v7\n", encoding="utf-8")
-            write_inventory(root, inventory_item())
+            write_inventory(
+                root,
+                inventory_item(
+                    kind="download",
+                    digest_or_sha="sha256:" + "a" * 64,
+                    artifact_url="https://github.com/example/tool/releases/download/v1.2.3/tool",
+                ),
+            )
 
             result = run_checker(root)
 
@@ -75,9 +82,16 @@ class SupplyChainCheckerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "install-tools.sh").write_text(
-                "curl -fsSL https://example.invalid/tool -o tool\n", encoding="utf-8"
+                "curl -fsSL https://github.com/example/tool/releases/download/v1.2.3/tool -o tool\n", encoding="utf-8"
             )
-            write_inventory(root, inventory_item())
+            write_inventory(
+                root,
+                inventory_item(
+                    kind="download",
+                    digest_or_sha="sha256:" + "a" * 64,
+                    artifact_url="https://github.com/example/tool/releases/download/v1.2.3/tool",
+                ),
+            )
 
             result = run_checker(root)
 
@@ -117,22 +131,29 @@ class SupplyChainCheckerTests(unittest.TestCase):
             (root / "Dockerfile").write_text(
                 f"FROM alpine:3.22@sha256:{image_digest}\n", encoding="utf-8"
             )
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
             (root / "install-tools.sh").write_text(
-                f"curl -fsSL https://example.invalid/tool -o tool\necho '{checksum}  tool' | sha256sum -c -\n",
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' | sha256sum -c -\n",
                 encoding="utf-8",
             )
             write_inventory(
                 root,
-                inventory_item(name="actions/checkout", digest_or_sha=action_sha),
+                inventory_item(
+                    name="actions/checkout",
+                    digest_or_sha=action_sha,
+                    source="https://github.com/actions/checkout/releases/tag/v1.2.3",
+                ),
                 inventory_item(
                     name="alpine",
                     kind="container",
                     digest_or_sha=f"sha256:{image_digest}",
+                    source="https://mcr.microsoft.com/v2/alpine/manifests/3.22",
                 ),
                 inventory_item(
                     name="example-tool",
                     kind="download",
                     digest_or_sha=f"sha256:{checksum}",
+                    artifact_url=artifact_url,
                 ),
             )
 
@@ -159,6 +180,139 @@ class SupplyChainCheckerTests(unittest.TestCase):
             headers = checker.request_headers("https://api.github.com/repos/example/tool/releases", "application/json")
 
         self.assertEqual("Bearer test-token", headers["Authorization"])
+
+    def test_rejects_complete_semver_prerelease_suffixes(self):
+        for suffix in ("pre", "eap", "m1", "anything"):
+            with self.subTest(suffix=suffix):
+                errors = checker.validate_inventory(
+                    [inventory_item(version=f"1.2.3-{suffix}")],
+                    datetime(2026, 8, 11, tzinfo=timezone.utc),
+                )
+                self.assertTrue(any("prerelease" in error for error in errors))
+
+    def test_rejects_unsupported_source_host(self):
+        errors = checker.validate_inventory(
+            [inventory_item(source="https://mirror.example.invalid/tool")],
+            datetime(2026, 8, 11, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(any("unsupported official source" in error for error in errors))
+
+    def test_rejects_invalid_helm_commit_identifier(self):
+        errors = checker.validate_inventory(
+            [inventory_item(name="helm", kind="github-release", digest_or_sha="sha256:" + "a" * 40)],
+            datetime(2026, 8, 11, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(any("raw release commit SHA" in error for error in errors))
+
+    def test_accepts_exact_future_action_owner_names(self):
+        names = {item["name"] for item in json.loads((REPOSITORY / "config" / "supply-chain.json").read_text())["inventory"]}
+
+        self.assertTrue(
+            {
+                "JetBrains/qodana-action",
+                "SonarSource/sonarqube-scan-action",
+                "slsa-framework/slsa-github-generator",
+            }.issubset(names)
+        )
+
+    def test_rejects_download_not_checked_against_its_inventory_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{'e' * 64}  tool' | sha256sum -c -\n",
+                encoding="utf-8",
+            )
+            write_inventory(
+                root,
+                inventory_item(
+                    kind="download",
+                    digest_or_sha=f"sha256:{expected}",
+                    artifact_url=artifact_url,
+                ),
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
+    def test_online_rejects_dotnet_metadata_digest_drift(self):
+        item = inventory_item(
+            name="dotnet-sdk",
+            kind="dotnet-sdk",
+            version="10.0.302",
+            digest_or_sha="sha512:" + "a" * 128,
+            released_at="2026-07-14T00:00:00Z",
+            source="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json",
+            artifact_url="https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-linux-x64.tar.gz",
+        )
+        payload = {
+            "releases": [{"release-date": "2026-07-14", "sdk": {"version": "10.0.302", "files": [{"url": item["artifact_url"], "hash": "b" * 128}]}}]
+        }
+
+        with patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+
+        self.assertTrue(any(".NET metadata digest" in error for error in errors))
+
+    def test_online_rejects_nuget_version_hash_and_timestamp_drift(self):
+        item = inventory_item(
+            name="Example.Package",
+            kind="nuget",
+            version="1.2.3",
+            digest_or_sha="sha512-base64:expected",
+            released_at="2026-01-01T00:00:00Z",
+            source="https://api.nuget.org/v3/registration5-gz-semver2/example.package/1.2.3.json",
+        )
+        payload = {
+            "listed": True,
+            "published": "2026-01-02T00:00:00Z",
+            "catalogEntry": {"version": "1.2.4"},
+            "packageContent": "https://api.nuget.org/v3-flatcontainer/example.package/1.2.3/example.package.1.2.3.nupkg",
+        }
+
+        with patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+
+        self.assertTrue(any("NuGet version" in error for error in errors))
+        self.assertTrue(any("NuGet release timestamp" in error for error in errors))
+        self.assertTrue(any("NuGet checksum" in error for error in errors))
+
+    def test_online_rejects_publisher_download_checksum_drift(self):
+        artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+        item = inventory_item(
+            name="tool",
+            kind="download",
+            digest_or_sha="sha256:" + "a" * 64,
+            artifact_url=artifact_url,
+        )
+        release = {
+            "tag_name": "v1.2.3",
+            "published_at": "2026-01-01T00:00:00Z",
+            "assets": [{"browser_download_url": artifact_url, "digest": "sha256:" + "b" * 64}],
+        }
+
+        with patch.object(checker, "fetch_json", return_value=(release, {})):
+            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+
+        self.assertTrue(any("publisher checksum" in error for error in errors))
+
+    def test_online_rejects_container_without_response_digest(self):
+        item = inventory_item(
+            name="example/container",
+            kind="container",
+            digest_or_sha="sha256:" + "a" * 64,
+            source="https://mcr.microsoft.com/v2/example/container/manifests/1.2.3",
+        )
+
+        with patch.object(checker, "fetch_manifest_digest", return_value=None):
+            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+
+        self.assertTrue(any("did not provide Docker-Content-Digest" in error for error in errors))
 
 
 if __name__ == "__main__":

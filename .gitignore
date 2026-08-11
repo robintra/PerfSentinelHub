@@ -8,6 +8,7 @@ riderModule.iml
 .dotnet/
 TestResults/
 graphify-out/
+artifacts/
 
 # SQLite du hub (§7) : jamais dans le dépôt
 *.db

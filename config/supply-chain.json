@@ -205,6 +205,16 @@
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.10."
     },
     {
+      "name": "jetbrains/qodana-dotnet",
+      "kind": "container",
+      "version": "2026.1",
+      "digest_or_sha": "sha256:c893fb5f5dbe54cd4b9c2cb1bd11d711242add66c5a3ac65fe7fc302cdb8c0a3",
+      "released_at": "2026-04-21T09:02:03.110286Z",
+      "source": "https://hub.docker.com/v2/namespaces/jetbrains/repositories/qodana-dotnet/tags/2026.1",
+      "stabilization_exempt": false,
+      "reason": "Latest eligible stable Qodana for .NET image; Task 13 re-evaluates 2026.2 after stabilization and Renovate manages later upgrades."
+    },
+    {
       "name": "helm",
       "kind": "github-release",
       "version": "4.2.3",

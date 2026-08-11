@@ -175,13 +175,30 @@ def nuget_source_matches(item: dict) -> bool:
 
 def container_source_matches(item: dict) -> bool:
     source = urlsplit(item["source"])
-    match = re.fullmatch(rf"/v2/(?P<repository>{SAFE_RELATIVE_PATH})/manifests/(?P<tag>{SAFE_VERSION})", source.path)
-    return bool(
+    mcr_match = re.fullmatch(rf"/v2/(?P<repository>{SAFE_RELATIVE_PATH})/manifests/(?P<tag>{SAFE_VERSION})", source.path)
+    if (
         source.scheme == "https"
         and source.netloc == "mcr.microsoft.com"
-        and match
-        and item["name"] == f"mcr.microsoft.com/{match.group('repository')}"
-        and item["version"] == match.group("tag")
+        and mcr_match
+        and item["name"] == f"mcr.microsoft.com/{mcr_match.group('repository')}"
+        and item["version"] == mcr_match.group("tag")
+        and source.query == ""
+        and source.fragment == ""
+    ):
+        return True
+    docker_hub_match = re.fullmatch(
+        rf"/v2/namespaces/(?P<namespace>{SAFE_NAME})/repositories/"
+        rf"(?P<repository>{SAFE_NAME})/tags/(?P<tag>{SAFE_VERSION})",
+        source.path,
+    )
+    return bool(
+        source.scheme == "https"
+        and source.netloc == "hub.docker.com"
+        and docker_hub_match
+        and docker_hub_match.group("namespace") == "jetbrains"
+        and item["name"]
+        == f"{docker_hub_match.group('namespace')}/{docker_hub_match.group('repository')}"
+        and item["version"] == docker_hub_match.group("tag")
         and source.query == ""
         and source.fragment == ""
     )
@@ -373,7 +390,7 @@ def validate_download_script(path: Path, root: Path, text: str, inventory: list[
 
 
 def structured_files(root: Path) -> list[Path]:
-    ignored = {".git", "bin", "obj", "__pycache__"}
+    ignored = {".dotnet", ".git", "artifacts", "bin", "obj", "__pycache__"}
     return sorted(
         path
         for path in root.rglob("*")
@@ -1115,31 +1132,49 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     elif artifact["digest"].lower() != item["digest_or_sha"].lower():
                         errors.append(f"{item['name']}: publisher checksum differs from inventory")
             elif item["kind"] == "container":
-                digest = fetch_manifest_digest(source)
-                if digest is None:
-                    errors.append(f"{item['name']}: registry did not provide Docker-Content-Digest")
-                elif digest.lower() != item["digest_or_sha"].lower():
-                    errors.append(f"{item['name']}: container manifest digest moved")
-                payload, _ = cached_json(DOTNET_RELEASES)
-                release = dotnet_container_release(item, payload)
-                if release is None:
-                    errors.append(f"{item['name']}: .NET metadata does not contain the container version")
+                if urlsplit(source).netloc == "hub.docker.com":
+                    tag, _ = cached_json(source)
+                    if tag.get("name") != item["version"]:
+                        errors.append(f"{item['name']}: Docker Hub tag differs from inventory")
+                    if tag.get("tag_status") != "active":
+                        errors.append(f"{item['name']}: Docker Hub tag is not active")
+                    if str(tag.get("digest", "")).lower() != item["digest_or_sha"].lower():
+                        errors.append(f"{item['name']}: Docker Hub manifest digest moved")
+                    updated = tag.get("last_updated")
+                    if not same_timestamp(updated, item["released_at"]):
+                        errors.append(f"{item['name']}: Docker Hub release timestamp differs from inventory")
+                    elif (
+                        item["stabilization_exempt"] is False
+                        and current_time
+                        < release_time_and_stabilization_deadline(updated)[1]
+                    ):
+                        errors.append(f"{item['name']}: official container release is newer than 72 hours")
                 else:
-                    release_date = release.get("release-date")
-                    if not isinstance(release_date, str):
-                        errors.append(f"{item['name']}: official container release date is required")
+                    digest = fetch_manifest_digest(source)
+                    if digest is None:
+                        errors.append(f"{item['name']}: registry did not provide Docker-Content-Digest")
+                    elif digest.lower() != item["digest_or_sha"].lower():
+                        errors.append(f"{item['name']}: container manifest digest moved")
+                    payload, _ = cached_json(DOTNET_RELEASES)
+                    release = dotnet_container_release(item, payload)
+                    if release is None:
+                        errors.append(f"{item['name']}: .NET metadata does not contain the container version")
                     else:
-                        _, stabilization_deadline = release_time_and_stabilization_deadline(
-                            release_date
-                        )
-                        if not same_release_value(
-                            release_date, item["released_at"]
-                        ):
-                            errors.append(
-                                f"{item['name']}: official container release date differs from inventory"
+                        release_date = release.get("release-date")
+                        if not isinstance(release_date, str):
+                            errors.append(f"{item['name']}: official container release date is required")
+                        else:
+                            _, stabilization_deadline = release_time_and_stabilization_deadline(
+                                release_date
                             )
-                        if current_time < stabilization_deadline and item["stabilization_exempt"] is False:
-                            errors.append(f"{item['name']}: official container release is newer than 72 hours")
+                            if not same_release_value(
+                                release_date, item["released_at"]
+                            ):
+                                errors.append(
+                                    f"{item['name']}: official container release date differs from inventory"
+                                )
+                            if current_time < stabilization_deadline and item["stabilization_exempt"] is False:
+                                errors.append(f"{item['name']}: official container release is newer than 72 hours")
             elif item["kind"] in ("dotnet-tool", "nuget"):
                 payload, _ = cached_json(source)
                 if payload.get("listed") is not True:

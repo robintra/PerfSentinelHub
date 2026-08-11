@@ -313,6 +313,28 @@ def run_repository_file(filename, content, *items):
 
 
 class SupplyChainCheckerTests(unittest.TestCase):
+    def test_ignores_local_sdk_and_generated_analysis_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item())
+            write_required_declarations(root)
+            local_sdk = root / ".dotnet" / "sdk"
+            local_sdk.mkdir(parents=True)
+            (local_sdk / "Sdk.targets").write_text(
+                '<Project><Import Project="generated.targets" /></Project>\n',
+                encoding="utf-8",
+            )
+            artifacts = root / "artifacts" / "sonar"
+            artifacts.mkdir(parents=True)
+            (artifacts / "generated.props").write_text(
+                '<Project><Import Project="generated.targets" /></Project>\n',
+                encoding="utf-8",
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_rejects_unpinned_action(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -377,6 +399,77 @@ class SupplyChainCheckerTests(unittest.TestCase):
         )
 
         self.assertTrue(any("source" in error for error in errors))
+
+    def test_accepts_official_docker_hub_qodana_container_source(self):
+        item = inventory_item(
+            name="jetbrains/qodana-dotnet",
+            kind="container",
+            version="2026.1",
+            digest_or_sha="sha256:" + "c" * 64,
+            released_at="2026-04-21T09:02:03.110286Z",
+            source=(
+                "https://hub.docker.com/v2/namespaces/jetbrains/repositories/"
+                "qodana-dotnet/tags/2026.1"
+            ),
+        )
+
+        errors = checker.validate_inventory(
+            [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+        )
+
+        self.assertEqual([], errors)
+
+    def test_online_accepts_complete_docker_hub_qodana_tag(self):
+        item = inventory_item(
+            name="jetbrains/qodana-dotnet",
+            kind="container",
+            version="2026.1",
+            digest_or_sha="sha256:" + "c" * 64,
+            released_at="2026-04-21T09:02:03.110286Z",
+            source=(
+                "https://hub.docker.com/v2/namespaces/jetbrains/repositories/"
+                "qodana-dotnet/tags/2026.1"
+            ),
+        )
+        payload = {
+            "name": "2026.1",
+            "tag_status": "active",
+            "digest": item["digest_or_sha"],
+            "last_updated": item["released_at"],
+        }
+
+        with patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertEqual([], errors)
+
+    def test_online_rejects_docker_hub_qodana_tag_drift(self):
+        item = inventory_item(
+            name="jetbrains/qodana-dotnet",
+            kind="container",
+            version="2026.1",
+            digest_or_sha="sha256:" + "c" * 64,
+            released_at="2026-04-21T09:02:03.110286Z",
+            source=(
+                "https://hub.docker.com/v2/namespaces/jetbrains/repositories/"
+                "qodana-dotnet/tags/2026.1"
+            ),
+        )
+        payload = {
+            "name": "latest",
+            "tag_status": "inactive",
+            "digest": "sha256:" + "d" * 64,
+            "last_updated": "2026-04-21T09:02:04Z",
+        }
+
+        with patch.object(checker, "fetch_json", return_value=(payload, {})):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertTrue(any("Docker Hub" in error for error in errors), errors)
 
     def test_rejects_download_without_checksum(self):
         result = run_download_lines(

@@ -16,7 +16,7 @@ package-native:
 	@case " $(NATIVE_RIDS) " in *" $(RID) "*) ;; *) echo "RID must be one of $(NATIVE_RIDS)" >&2; exit 2;; esac
 	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }
 	@test -n "$(COMMIT_TIME)" || { echo "COMMIT_TIME is required" >&2; exit 2; }
-	dotnet restore PerfSentinelHub/PerfSentinelHub.csproj -r "$(RID)" --locked-mode
+	dotnet restore PerfSentinelHub/PerfSentinelHub.csproj --locked-mode
 	dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r "$(RID)" --self-contained true -p:PublishAot=true -p:Version="$(VERSION)" --no-restore
 	python3 scripts/package-native.py --rid "$(RID)" --version "$(VERSION)" --commit-time "$(COMMIT_TIME)" --input "PerfSentinelHub/bin/Release/net10.0/$(RID)/publish" --output "$(OUTPUT)"
 

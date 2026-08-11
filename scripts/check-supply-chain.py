@@ -30,7 +30,7 @@ REQUIRED_FIELDS = {
     "stabilization_exempt",
     "reason",
 }
-ALLOWED_FIELDS = REQUIRED_FIELDS | {"artifact_url", "expiry", "lock_content_hash"}
+ALLOWED_FIELDS = REQUIRED_FIELDS | {"artifact_url", "expiry", "lock_content_hash", "nuget_role"}
 KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "download", "github-action", "github-release", "nuget"})
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -58,18 +58,6 @@ DOTNET_SHA512 = re.compile(r"^sha512:[0-9a-f]{128}$")
 NUGET_SHA512 = re.compile(r"^sha512-base64:[A-Za-z0-9+/]+={0,2}$")
 DOTNET_RELEASES = "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json"
 NUGET_INDEX = "https://api.nuget.org/v3/index.json"
-SDK_IMPLICIT_PACKAGES = {
-    "microsoft.dotnet.ilcompiler": (
-        "Microsoft.DotNet.ILCompiler",
-        "10.0.10",
-        "tnG8ntt/Bk6odvHREnGLMo3PEiihy5iSlIFVp0JbIo00GKtNRt2k73eKZbPqR5yaJNIa3z8R86YLwbxfqpb17g==",
-    ),
-    "microsoft.net.illink.tasks": (
-        "Microsoft.NET.ILLink.Tasks",
-        "10.0.10",
-        "f5VCIE7AJpd5YvzNTeMGVzQIgyE9tX+AreTYwQF+REbu+DZo/2Ae+jNSwhPEYrVz6RRkd7y8ubXjk6Nn6Ka+Cg==",
-    ),
-}
 
 
 def parse_timestamp(value: str) -> datetime:
@@ -211,10 +199,20 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
         if kind != "container" and SEMVER_PRERELEASE.fullmatch(str(item["version"])):
             errors.append(f"{name}: prerelease versions are not permitted")
         try:
-            released_at = parse_timestamp(item["released_at"])
-            age = now - released_at
+            release_value = item["released_at"]
+            date_only = bool(
+                isinstance(release_value, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_value)
+            )
+            if date_only and kind != "container" and kind != "dotnet-sdk":
+                raise ValueError("this source requires a precise timestamp")
+            _, stabilization_deadline = release_time_and_stabilization_deadline(
+                release_value
+            )
         except (TypeError, ValueError):
-            errors.append(f"{name}: released_at must be an ISO-8601 UTC timestamp")
+            errors.append(
+                f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
+            )
             continue
         exempt = item["stabilization_exempt"]
         if type(exempt) is not bool:
@@ -227,12 +225,7 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
                     raise ValueError("expiry is outside the permitted window")
             except (TypeError, ValueError):
                 errors.append(f"{name}: stabilization expiry must be a future UTC timestamp within 90 days")
-        elif (kind == "container" or kind == "dotnet-sdk") and now < (
-            released_at.replace(hour=0, minute=0, second=0, microsecond=0)
-            + timedelta(days=4)
-        ):
-            errors.append(f"{name}: ordinary releases must be at least 72 hours old")
-        elif kind != "container" and kind != "dotnet-sdk" and age < timedelta(hours=72):
+        elif now < stabilization_deadline:
             errors.append(f"{name}: ordinary releases must be at least 72 hours old")
         if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: GitHub releases require a raw release commit SHA")
@@ -246,8 +239,16 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
         if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
             errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
+        if (
+            kind == "nuget"
+            and "nuget_role" in item
+            and item["nuget_role"] not in {"sdk-aot-base", "sdk-aot-base-rid"}
+        ):
+            errors.append(f"{name}: unknown NuGet role")
         if kind != "nuget" and "lock_content_hash" in item:
             errors.append(f"{name}: lock_content_hash is only valid for NuGet packages")
+        if kind != "nuget" and "nuget_role" in item:
+            errors.append(f"{name}: nuget_role is only valid for NuGet packages")
         if kind == "dotnet-sdk":
             artifact = urlsplit(str(item.get("artifact_url", "")))
             if not (
@@ -373,6 +374,22 @@ def validate_nuget_config(root: Path, files: list[Path]) -> list[str]:
     return []
 
 
+def msbuild_name(value: object) -> str:
+    return value.rsplit("}", 1)[-1].casefold() if isinstance(value, str) else ""
+
+
+def msbuild_attributes(element: ElementTree.Element) -> dict[str, str]:
+    attributes = {}
+    for raw_name, value in element.attrib.items():
+        if "}" in raw_name:
+            raise ValueError("namespaced MSBuild attribute")
+        name = msbuild_name(raw_name)
+        if name in attributes:
+            raise ValueError("case-insensitive duplicate MSBuild attribute")
+        attributes[name] = value
+    return attributes
+
+
 def validate_package_declarations(
     root: Path, files: list[Path], inventory: list[dict]
 ) -> tuple[list[str], dict[Path, tuple[dict[str, dict], bool, tuple[str, ...]]]]:
@@ -382,6 +399,7 @@ def validate_package_declarations(
         for item in inventory
         if isinstance(item, dict)
         and item.get("kind") == "nuget"
+        and "nuget_role" not in item
         and isinstance(item.get("name"), str)
     }
     central_path = root / "Directory.Packages.props"
@@ -391,53 +409,61 @@ def validate_package_declarations(
     else:
         try:
             package_root = ElementTree.parse(central_path).getroot()
-            if package_root.tag != "Project":
+            if "}" in package_root.tag or msbuild_name(package_root.tag) != "project":
                 raise ValueError("Project root is not canonical")
             parents = {
                 child: parent for parent in package_root.iter() for child in parent
             }
             properties: dict[str, list[str | None]] = {
-                "ManagePackageVersionsCentrally": [],
-                "CentralPackageVersionOverrideEnabled": [],
+                "managepackageversionscentrally": [],
+                "centralpackageversionoverrideenabled": [],
             }
             for element in package_root.iter():
                 if not isinstance(element.tag, str):
                     continue
-                local_tag = element.tag.rsplit("}", 1)[-1]
+                local_tag = msbuild_name(element.tag)
                 if any(
-                    attribute.rsplit("}", 1)[-1] == "Condition"
+                    msbuild_name(attribute) == "condition"
                     for attribute in element.attrib
                 ):
                     errors.append(
                         "Directory.Packages.props: conditional declarations are not permitted"
                     )
-                if local_tag in {"Choose", "When", "Otherwise", "Import"}:
+                if local_tag in {"choose", "when", "otherwise", "import"}:
                     errors.append(
                         f"Directory.Packages.props: {local_tag} declarations are not permitted"
                     )
                 if local_tag in properties:
                     parent = parents.get(element)
-                    if element.tag != local_tag or parent is None or parent.tag != "PropertyGroup" or element.attrib:
+                    if (
+                        "}" in element.tag
+                        or parent is None
+                        or "}" in parent.tag
+                        or msbuild_name(parent.tag) != "propertygroup"
+                        or element.attrib
+                    ):
                         errors.append(
                             f"Directory.Packages.props: {local_tag} must be an unconditioned PropertyGroup value"
                         )
                     properties[local_tag].append(element.text)
-                if local_tag != "PackageVersion":
+                if local_tag != "packageversion":
                     continue
                 parent = parents.get(element)
+                attributes = msbuild_attributes(element)
                 if (
-                    element.tag != "PackageVersion"
+                    "}" in element.tag
                     or parent is None
-                    or parent.tag != "ItemGroup"
-                    or set(element.attrib) != {"Include", "Version"}
+                    or "}" in parent.tag
+                    or msbuild_name(parent.tag) != "itemgroup"
+                    or set(attributes) != {"include", "version"}
                     or list(element)
                 ):
                     errors.append(
                         "Directory.Packages.props: PackageVersion must be a canonical unnamespaced ItemGroup child"
                     )
                     continue
-                name = element.attrib["Include"]
-                version = element.attrib["Version"]
+                name = attributes["include"]
+                version = attributes["version"]
                 key = name.casefold()
                 if key in central:
                     errors.append(
@@ -454,11 +480,11 @@ def validate_package_declarations(
                     errors.append(
                         f"Directory.Packages.props: {name} differs from the inventory"
                     )
-            if properties["ManagePackageVersionsCentrally"] != ["true"]:
+            if properties["managepackageversionscentrally"] != ["true"]:
                 errors.append(
                     "Directory.Packages.props: ManagePackageVersionsCentrally must be exactly true"
                 )
-            if properties["CentralPackageVersionOverrideEnabled"] != ["false"]:
+            if properties["centralpackageversionoverrideenabled"] != ["false"]:
                 errors.append(
                     "Directory.Packages.props: CentralPackageVersionOverrideEnabled must be exactly false"
                 )
@@ -491,7 +517,7 @@ def validate_package_declarations(
         relative = path.relative_to(root)
         try:
             project_root = ElementTree.parse(path).getroot()
-            if project_root.tag != "Project":
+            if "}" in project_root.tag or msbuild_name(project_root.tag) != "project":
                 raise ValueError("Project root is not canonical")
             parents = {
                 child: parent for parent in project_root.iter() for child in parent
@@ -502,23 +528,24 @@ def validate_package_declarations(
             for element in project_root.iter():
                 if not isinstance(element.tag, str):
                     continue
-                local_tag = element.tag.rsplit("}", 1)[-1]
-                folded_tag = local_tag.casefold()
+                folded_tag = msbuild_name(element.tag)
                 if folded_tag in forbidden_msbuild_properties:
                     errors.append(
                         f"{relative}: central package and restore policy overrides are not permitted"
                     )
-                if local_tag == "PackageVersion":
+                if folded_tag == "import":
+                    errors.append(f"{relative}: explicit Import declarations are not permitted")
+                if folded_tag == "packageversion":
                     errors.append(
                         f"{relative}: PackageVersion is only permitted in Directory.Packages.props"
                     )
-                if local_tag in {"PackageDownload", "GlobalPackageReference"}:
-                    errors.append(f"{relative}: {local_tag} is not permitted")
-                if local_tag == "PublishAot":
+                if folded_tag in {"packagedownload", "globalpackagereference"}:
+                    errors.append(f"{relative}: {folded_tag} is not permitted")
+                if folded_tag == "publishaot":
                     publish_aot.append(element.text)
-                if local_tag == "RuntimeIdentifiers":
+                if folded_tag == "runtimeidentifiers":
                     runtime_identifiers.append(element.text)
-                if local_tag != "PackageReference":
+                if folded_tag != "packagereference":
                     continue
                 if path.suffix.casefold() != ".csproj":
                     errors.append(
@@ -526,12 +553,10 @@ def validate_package_declarations(
                     )
                     continue
                 parent = parents.get(element)
-                attribute_names = {
-                    attribute.rsplit("}", 1)[-1].casefold()
-                    for attribute in element.attrib
-                }
+                attributes = msbuild_attributes(element)
+                attribute_names = set(attributes)
                 child_names = {
-                    child.tag.rsplit("}", 1)[-1].casefold()
+                    msbuild_name(child.tag)
                     for child in element
                     if isinstance(child.tag, str)
                 }
@@ -539,16 +564,17 @@ def validate_package_declarations(
                 conditional = False
                 while ancestor is not None:
                     if any(
-                        attribute.rsplit("}", 1)[-1].casefold() == "condition"
+                        msbuild_name(attribute) == "condition"
                         for attribute in ancestor.attrib
                     ):
                         conditional = True
                     ancestor = parents.get(ancestor)
-                name = element.attrib.get("Include")
+                name = attributes.get("include")
                 if (
-                    element.tag != "PackageReference"
+                    "}" in element.tag
                     or parent is None
-                    or parent.tag != "ItemGroup"
+                    or "}" in parent.tag
+                    or msbuild_name(parent.tag) != "itemgroup"
                     or conditional
                     or not isinstance(name, str)
                     or re.fullmatch(SAFE_NAME, name) is None
@@ -619,8 +645,23 @@ def validate_package_locks(
     root: Path,
     files: list[Path],
     projects: dict[Path, tuple[dict[str, dict], bool, tuple[str, ...]]],
+    inventory: list[dict],
 ) -> list[str]:
     errors = []
+    sdk_pins = {
+        item["name"].casefold(): item
+        for item in inventory
+        if isinstance(item, dict)
+        and item.get("kind") == "nuget"
+        and item.get("nuget_role") in {"sdk-aot-base", "sdk-aot-base-rid"}
+        and isinstance(item.get("name"), str)
+    }
+    rid_sdk_pins = {
+        key: item
+        for key, item in sdk_pins.items()
+        if item["nuget_role"] == "sdk-aot-base-rid"
+    }
+    consumed_sdk_pins = set()
     expected_locks = {path.parent / "packages.lock.json" for path in projects}
     actual_locks = {path for path in files if path.name == "packages.lock.json"}
     for path in sorted(expected_locks - actual_locks):
@@ -694,29 +735,34 @@ def validate_package_locks(
                             )
                         )
 
-                implicit = set()
+                implicit = {}
                 if aot and is_base:
-                    implicit = set(SDK_IMPLICIT_PACKAGES)
+                    implicit = sdk_pins
                 elif aot and group_name in expected_rid_groups:
-                    implicit = {"microsoft.dotnet.ilcompiler"}
-                for key in implicit:
-                    name, version, content_hash = SDK_IMPLICIT_PACKAGES[key]
+                    implicit = rid_sdk_pins
+                consumed_sdk_pins.update(implicit)
+                for key, item in implicit.items():
                     locked = folded_entries.get(key)
                     if locked is None:
-                        errors.append(f"{relative}: {name} is missing from {group_name}")
+                        errors.append(f"{relative}: {item['name']} is missing from {group_name}")
                     else:
                         errors.extend(
                             validate_lock_entry(
-                                relative, name, locked[1], (version, content_hash)
+                                relative,
+                                item["name"],
+                                locked[1],
+                                (item["version"], item["lock_content_hash"]),
                             )
                         )
 
-                permitted_direct = set(expected_direct) | implicit
+                permitted_direct = set(expected_direct) | set(implicit)
                 for key, (name, record) in folded_entries.items():
                     if isinstance(record, dict) and record.get("type") == "Direct" and key not in permitted_direct:
                         errors.append(f"{relative}: unexpected direct dependency {name}")
         except (OSError, KeyError, TypeError, ValueError, ElementTree.ParseError):
             errors.append(f"{relative}: unable to parse canonical packages.lock.json")
+    for key in set(sdk_pins) - consumed_sdk_pins:
+        errors.append(f"{sdk_pins[key]['name']}: SDK NuGet role is unused by any AOT lock")
     return errors
 
 
@@ -830,7 +876,7 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
     errors.extend(validate_nuget_config(root, files))
     package_errors, projects = validate_package_declarations(root, files, inventory)
     errors.extend(package_errors)
-    errors.extend(validate_package_locks(root, files, projects))
+    errors.extend(validate_package_locks(root, files, projects, inventory))
     return errors
 
 
@@ -881,9 +927,20 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
         if not isinstance(left, str) or not isinstance(right, str):
             return False
         try:
-            return parse_timestamp(left).replace(microsecond=0) == parse_timestamp(right).replace(microsecond=0)
+            return parse_timestamp(left) == parse_timestamp(right)
         except ValueError:
             return False
+
+    def same_release_value(left: object, right: object) -> bool:
+        left_is_date = bool(
+            isinstance(left, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", left)
+        )
+        right_is_date = bool(
+            isinstance(right, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", right)
+        )
+        if left_is_date or right_is_date:
+            return left_is_date and right_is_date and left == right
+        return same_timestamp(left, right)
 
     def dotnet_container_release(item: dict, payload: dict) -> dict | None:
         base_version = item["version"].split("-", 1)[0]
@@ -933,7 +990,7 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     errors.append(f"{item['name']}: official release published_at is required")
                 else:
                     published = parse_timestamp(published_at)
-                    if published.replace(microsecond=0) != parse_timestamp(item["released_at"]).replace(microsecond=0):
+                    if not same_timestamp(published_at, item["released_at"]):
                         errors.append(f"{item['name']}: official release timestamp differs from inventory")
                     if published > now - timedelta(hours=72) and item["stabilization_exempt"] is False:
                         errors.append(f"{item['name']}: official release is newer than 72 hours")
@@ -971,17 +1028,11 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     if not isinstance(release_date, str):
                         errors.append(f"{item['name']}: official container release date is required")
                     else:
-                        official_time, stabilization_deadline = release_time_and_stabilization_deadline(
+                        _, stabilization_deadline = release_time_and_stabilization_deadline(
                             release_date
                         )
-                        inventoried_time = parse_timestamp(item["released_at"])
-                        if (
-                            re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_date)
-                            and official_time.date() != inventoried_time.date()
-                        ) or (
-                            not re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_date)
-                            and official_time.replace(microsecond=0)
-                            != inventoried_time.replace(microsecond=0)
+                        if not same_release_value(
+                            release_date, item["released_at"]
                         ):
                             errors.append(
                                 f"{item['name']}: official container release date differs from inventory"
@@ -1032,7 +1083,9 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                 if release is None:
                     errors.append(f"{item['name']}: .NET metadata does not contain the pinned SDK")
                     continue
-                if release.get("release-date") != parse_timestamp(item["released_at"]).date().isoformat():
+                if not same_release_value(
+                    release.get("release-date"), item["released_at"]
+                ):
                     errors.append(f"{item['name']}: .NET metadata release timestamp differs from inventory")
                 elif (
                     item["stabilization_exempt"] is False

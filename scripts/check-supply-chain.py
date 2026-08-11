@@ -13,7 +13,8 @@ import re
 import ssl
 import sys
 import xml.etree.ElementTree as ElementTree
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlsplit
@@ -58,23 +59,62 @@ DOTNET_SHA512 = re.compile(r"^sha512:[0-9a-f]{128}$")
 NUGET_SHA512 = re.compile(r"^sha512-base64:[A-Za-z0-9+/]+={0,2}$")
 DOTNET_RELEASES = "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json"
 NUGET_INDEX = "https://api.nuget.org/v3/index.json"
+DATE_ONLY = re.compile(
+    r"^(?P<year>[0-9]{4})-(?P<month>0[1-9]|1[0-2])-(?P<day>0[1-9]|[12][0-9]|3[01])$"
+)
+RFC3339_TIMESTAMP = re.compile(
+    r"^(?P<year>[0-9]{4})-(?P<month>0[1-9]|1[0-2])-(?P<day>0[1-9]|[12][0-9]|3[01])"
+    r"T(?P<hour>[01][0-9]|2[0-3]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9])"
+    r"(?:\.(?P<fraction>[0-9]{1,9}))?"
+    r"(?P<zone>Z|(?P<offset_sign>[+-])(?P<offset_hour>[01][0-9]|2[0-3]):(?P<offset_minute>[0-5][0-9]))$"
+)
+NUGET_ROLES = frozenset({"sdk-aot-base", "sdk-aot-base-rid"})
+UTC_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
-def parse_timestamp(value: str) -> datetime:
-    if not isinstance(value, str):
-        raise ValueError("timestamp is not a string")
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
-        raise ValueError("timestamp is not UTC")
-    return parsed.astimezone(timezone.utc)
+def timestamp_from_datetime(value: datetime) -> Decimal:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamp is not timezone-aware")
+    normalized = value.astimezone(timezone.utc)
+    delta = normalized.replace(microsecond=0) - UTC_EPOCH
+    return Decimal(delta.days * 86400 + delta.seconds) + Decimal(normalized.microsecond).scaleb(-6)
 
 
-def release_time_and_stabilization_deadline(value: str) -> tuple[datetime, datetime]:
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        release_time = datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
-        return release_time, release_time + timedelta(days=1, hours=72)
+def parse_timestamp(value: object) -> Decimal:
+    match = RFC3339_TIMESTAMP.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        raise ValueError("timestamp is not canonical RFC3339")
+    try:
+        release_time = timestamp_from_datetime(
+            datetime(
+                *(int(match.group(name)) for name in ("year", "month", "day", "hour", "minute", "second")),
+                tzinfo=timezone.utc,
+            )
+        )
+    except ValueError as error:
+        raise ValueError("timestamp is not canonical RFC3339") from error
+    if match.group("offset_sign"):
+        offset = int(match.group("offset_hour")) * 3600 + int(match.group("offset_minute")) * 60
+        release_time += offset if match.group("offset_sign") == "-" else -offset
+    fraction = match.group("fraction")
+    return release_time + (Decimal(f"0.{fraction}") if fraction else 0)
+
+
+def release_time_and_stabilization_deadline(value: object) -> tuple[Decimal, Decimal]:
+    match = DATE_ONLY.fullmatch(value) if isinstance(value, str) else None
+    if match:
+        try:
+            release_time = timestamp_from_datetime(
+                datetime(
+                    *(int(match.group(name)) for name in ("year", "month", "day")),
+                    tzinfo=timezone.utc,
+                )
+            )
+        except ValueError as error:
+            raise ValueError("date is not canonical") from error
+        return release_time, release_time + 96 * 3600
     release_time = parse_timestamp(value)
-    return release_time, release_time + timedelta(hours=72)
+    return release_time, release_time + 72 * 3600
 
 
 def unique_object(pairs: list[tuple[str, object]]) -> dict:
@@ -169,6 +209,7 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     name_keys = set()
     artifact_keys = set()
+    current_time = timestamp_from_datetime(now)
     for item in inventory:
         name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
         if not isinstance(item, dict):
@@ -202,7 +243,7 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             release_value = item["released_at"]
             date_only = bool(
                 isinstance(release_value, str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_value)
+                and DATE_ONLY.fullmatch(release_value)
             )
             if date_only and kind != "container" and kind != "dotnet-sdk":
                 raise ValueError("this source requires a precise timestamp")
@@ -221,11 +262,11 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
         if exempt:
             try:
                 expiry = parse_timestamp(item.get("expiry"))
-                if expiry <= now or expiry > now + timedelta(days=90):
+                if expiry <= current_time or expiry > current_time + 90 * 86400:
                     raise ValueError("expiry is outside the permitted window")
             except (TypeError, ValueError):
                 errors.append(f"{name}: stabilization expiry must be a future UTC timestamp within 90 days")
-        elif now < stabilization_deadline:
+        elif current_time < stabilization_deadline:
             errors.append(f"{name}: ordinary releases must be at least 72 hours old")
         if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: GitHub releases require a raw release commit SHA")
@@ -239,10 +280,9 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
         if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
             errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
-        if (
-            kind == "nuget"
-            and "nuget_role" in item
-            and item["nuget_role"] not in {"sdk-aot-base", "sdk-aot-base-rid"}
+        role = item.get("nuget_role")
+        if kind == "nuget" and "nuget_role" in item and (
+            not isinstance(role, str) or role not in NUGET_ROLES
         ):
             errors.append(f"{name}: unknown NuGet role")
         if kind != "nuget" and "lock_content_hash" in item:
@@ -653,7 +693,8 @@ def validate_package_locks(
         for item in inventory
         if isinstance(item, dict)
         and item.get("kind") == "nuget"
-        and item.get("nuget_role") in {"sdk-aot-base", "sdk-aot-base-rid"}
+        and isinstance(item.get("nuget_role"), str)
+        and item.get("nuget_role") in NUGET_ROLES
         and isinstance(item.get("name"), str)
     }
     rid_sdk_pins = {
@@ -917,6 +958,7 @@ def fetch_manifest_digest(url: str) -> str | None:
 def validate_online(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     json_cache = {}
+    current_time = timestamp_from_datetime(now)
 
     def cached_json(url: str) -> tuple[dict, dict]:
         if url not in json_cache:
@@ -933,10 +975,10 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
 
     def same_release_value(left: object, right: object) -> bool:
         left_is_date = bool(
-            isinstance(left, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", left)
+            isinstance(left, str) and DATE_ONLY.fullmatch(left)
         )
         right_is_date = bool(
-            isinstance(right, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", right)
+            isinstance(right, str) and DATE_ONLY.fullmatch(right)
         )
         if left_is_date or right_is_date:
             return left_is_date and right_is_date and left == right
@@ -992,7 +1034,7 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     published = parse_timestamp(published_at)
                     if not same_timestamp(published_at, item["released_at"]):
                         errors.append(f"{item['name']}: official release timestamp differs from inventory")
-                    if published > now - timedelta(hours=72) and item["stabilization_exempt"] is False:
+                    if published > current_time - 72 * 3600 and item["stabilization_exempt"] is False:
                         errors.append(f"{item['name']}: official release is newer than 72 hours")
                 if item["kind"] in {"github-action", "github-release"}:
                     commit, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
@@ -1037,7 +1079,7 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                             errors.append(
                                 f"{item['name']}: official container release date differs from inventory"
                             )
-                        if now < stabilization_deadline and item["stabilization_exempt"] is False:
+                        if current_time < stabilization_deadline and item["stabilization_exempt"] is False:
                             errors.append(f"{item['name']}: official container release is newer than 72 hours")
             elif item["kind"] == "nuget":
                 payload, _ = cached_json(source)
@@ -1089,7 +1131,7 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     errors.append(f"{item['name']}: .NET metadata release timestamp differs from inventory")
                 elif (
                     item["stabilization_exempt"] is False
-                    and now
+                    and current_time
                     < release_time_and_stabilization_deadline(
                         release["release-date"]
                     )[1]

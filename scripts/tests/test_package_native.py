@@ -1,4 +1,5 @@
 import hashlib
+import importlib.util
 import os
 import stat
 import subprocess
@@ -8,15 +9,59 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 PACKAGER = REPOSITORY / "scripts" / "package-native.py"
 COMMIT_TIME = "1786406400"
 VERSION = "0.1.0"
+SPEC = importlib.util.spec_from_file_location("package_native", PACKAGER)
+packager = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(packager)
 
 
 class NativePackageTests(unittest.TestCase):
+    def test_rejects_same_inode_same_size_mutation_before_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publish = self.publish_tree(root)
+            mutable = publish / "mutable.bin"
+            mutable.write_bytes(b"AAAA")
+            output = root / "dist"
+            output.mkdir()
+            old_outputs = {
+                output / f"perf-sentinel-hub-{VERSION}-osx-arm64.tar.gz": b"old-runtime",
+                output / f"perf-sentinel-hub-{VERSION}-osx-arm64-symbols.tar.gz": b"old-symbols",
+                output / "SHA256SUMS": b"old-checksums",
+            }
+            for path, content in old_outputs.items():
+                path.write_bytes(content)
+
+            scan_staging = packager.scan_staging
+
+            def scan_then_mutate(staging):
+                entries = scan_staging(staging)
+                before = mutable.stat()
+                with mutable.open("r+b") as stream:
+                    stream.write(b"BBBB")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.utime(
+                    mutable,
+                    ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+                )
+                after = mutable.stat()
+                self.assertEqual((before.st_dev, before.st_ino, before.st_size), (after.st_dev, after.st_ino, after.st_size))
+                return entries
+
+            with patch.object(packager, "scan_staging", side_effect=scan_then_mutate):
+                with self.assertRaisesRegex(ValueError, "changed during packaging"):
+                    packager.package("osx-arm64", VERSION, int(COMMIT_TIME), publish, output)
+
+            for path, content in old_outputs.items():
+                self.assertEqual(content, path.read_bytes())
+
     def test_ignores_publish_file_mtimes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -3,7 +3,7 @@ using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Collection;
 
-public sealed class PollWorker(
+public sealed partial class PollWorker(
     SourcePoller poller,
     IOptions<HubOptions> options,
     TimeProvider timeProvider,
@@ -15,6 +15,8 @@ public sealed class PollWorker(
     {
         using var concurrency = new SemaphoreSlim(_options.MaxConcurrentPolls);
         var tasks = new List<Task>(_options.Sources.Count);
+        // A query would capture the disposable semaphore and obscure its lifetime.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var source in _options.Sources)
             tasks.Add(RunSourceAsync(source, concurrency, stoppingToken));
         await Task.WhenAll(tasks);
@@ -52,7 +54,7 @@ public sealed class PollWorker(
                 // A poll must never take the host down: SourcePoller writes to storage outside its
                 // own guarded region, so anything can surface here, not only SourcePollException.
                 if (exception is not SourcePollException)
-                    logger.LogError(exception, "Source {SourceId} poll failed unexpectedly.", source.Id);
+                    LogUnexpectedPollFailure(logger, exception, source.Id);
                 failures++;
                 delay = Backoff.Delay(failures, Random.Shared.NextDouble());
             }
@@ -60,4 +62,10 @@ public sealed class PollWorker(
             await Task.Delay(delay, timeProvider, cancellationToken);
         }
     }
+
+    [LoggerMessage(1001, LogLevel.Error, "Source {SourceId} poll failed unexpectedly.")]
+    private static partial void LogUnexpectedPollFailure(
+        ILogger logger,
+        Exception exception,
+        string sourceId);
 }

@@ -156,10 +156,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                   unreachable_since_ms = NULL,
                   producer_version = excluded.producer_version,
                   last_error_code = NULL;
-                """ : """
-                UPDATE source_state SET producer_version = $producer_version
-                WHERE source_id = $source_id;
-                """;
+                """ : "UPDATE source_state SET producer_version = $producer_version WHERE source_id = $source_id;";
             state.Parameters.AddWithValue("$source_id", source.SourceId);
             state.Parameters.AddWithValue("$observed_at", observedAtMs);
             state.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
@@ -293,10 +290,10 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $$"""
+        command.CommandText = $"""
             WITH selected AS (
               SELECT * FROM findings
-              {{where}}
+              {where}
               ORDER BY last_seen_ms DESC, signature ASC
               LIMIT $limit
             )

@@ -28,11 +28,9 @@ public sealed record SourceOptions
     // trailing newline must hash to the same bytes on both halves of the contract.
     public string? ImportApiKey
     {
-        get => _importApiKey;
-        set => _importApiKey = value?.Trim();
+        get;
+        set => field = value?.Trim();
     }
-
-    private string? _importApiKey;
 }
 
 public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
@@ -53,7 +51,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:MaxConcurrentPolls must be between 1 and 32.");
         if (options.MaxReadLimit is < 1 or > 10_000)
             errors.Add("Hub:MaxReadLimit must be between 1 and 10000.");
-        if (options.DefaultReadLimit is < 1 || options.DefaultReadLimit > options.MaxReadLimit)
+        if (options.DefaultReadLimit < 1 || options.DefaultReadLimit > options.MaxReadLimit)
             errors.Add("Hub:DefaultReadLimit must be between 1 and MaxReadLimit.");
         if (options.Sources.Count == 0)
             errors.Add("Hub:Sources must contain at least one source.");
@@ -63,13 +61,16 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         {
             if (string.IsNullOrWhiteSpace(source.Id) ||
                 source.Id.Length > 64 ||
-                source.Id.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '.' and not '_' and not '-') ||
+                source.Id.Any(character =>
+                    !char.IsAsciiLetterOrDigit(character) && character != '.' && character != '_' && character != '-') ||
                 !ids.Add(source.Id))
                 errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
             if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
                 errors.Add($"Source '{source.Id}' requires a name and environment.");
-            if (source.BaseUrl is not { IsAbsoluteUri: true } baseUrl ||
-                (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps) ||
+            var baseUrl = source.BaseUrl;
+            if (baseUrl is null ||
+                !baseUrl.IsAbsoluteUri ||
+                baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps ||
                 !string.IsNullOrEmpty(baseUrl.UserInfo) ||
                 !string.IsNullOrEmpty(baseUrl.Query) ||
                 !string.IsNullOrEmpty(baseUrl.Fragment))
@@ -78,9 +79,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
                     "without credentials, query, or fragment.");
 
             ValidateAuthHeader(source, errors);
-            if (source.ImportApiKey is { } importApiKey &&
-                (importApiKey.Length < 32 || string.IsNullOrWhiteSpace(importApiKey) ||
-                 importApiKey.Any(char.IsControl)))
+            if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
                 errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
         }
 
@@ -91,7 +90,9 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static void ValidateAuthHeader(SourceOptions source, List<string> errors)
     {
-        if ((source.AuthHeaderName is null) != (source.AuthHeaderValue is null))
+        var hasAuthHeaderName = source.AuthHeaderName is not null;
+        var hasAuthHeaderValue = source.AuthHeaderValue is not null;
+        if (hasAuthHeaderName != hasAuthHeaderValue)
         {
             errors.Add($"Source '{source.Id}' must provide both auth header name and value.");
             return;
@@ -120,4 +121,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add($"Source '{source.Id}' auth header is invalid.");
         }
     }
+
+    private static bool IsInvalidImportApiKey(string value) =>
+        value.Length < 32 || string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl);
 }

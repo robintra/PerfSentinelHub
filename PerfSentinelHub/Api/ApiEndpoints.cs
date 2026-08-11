@@ -8,7 +8,7 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
 
-public static class ApiEndpoints
+public static partial class ApiEndpoints
 {
     public static void MapHubApi(this WebApplication app)
     {
@@ -18,7 +18,7 @@ public static class ApiEndpoints
         app.MapGet("/api/findings", GetFindingsAsync);
         app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync);
-        app.MapGet("/health/live", () => TypedResults.Ok());
+        app.MapGet("/health/live", TypedResults.Ok);
         app.MapGet("/health/ready", (HubDatabase database) =>
             database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
     }
@@ -84,8 +84,8 @@ public static class ApiEndpoints
             }
 
             if (import.Batch.RejectedCount > 0)
-                loggerFactory.CreateLogger("ImportApi").LogWarning(
-                    "Source {SourceId} rejected {RejectedCount} imported findings.",
+                LogRejectedImportedFindings(
+                    loggerFactory.CreateLogger("ImportApi"),
                     source.Id,
                     import.Batch.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Batch.Findings.Count, import.Batch.RejectedCount));
@@ -141,7 +141,7 @@ public static class ApiEndpoints
         var limit = options.DefaultReadLimit;
         if (request.Query.TryGetValue("limit", out var rawLimit) &&
             (!int.TryParse(rawLimit[0], NumberStyles.None, CultureInfo.InvariantCulture, out limit) ||
-             limit is < 1 || limit > options.MaxReadLimit))
+             limit < 1 || limit > options.MaxReadLimit))
             return false;
 
         var includeAcked = true;
@@ -223,6 +223,12 @@ public static class ApiEndpoints
             await body.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
         }
     }
+
+    [LoggerMessage(1301, LogLevel.Warning, "Source {SourceId} rejected {RejectedCount} imported findings.")]
+    private static partial void LogRejectedImportedFindings(
+        ILogger logger,
+        string sourceId,
+        int rejectedCount);
 }
 
 // Bounds how many import bodies may be buffered at once (MaxImports * 2 MiB). It is not a write

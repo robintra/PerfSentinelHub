@@ -12,13 +12,15 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests;
 
+// Created by xUnit through IClassFixture<T>.
+// ReSharper disable once ClassNeverInstantiated.Global
 public sealed class HubApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-api-{Guid.NewGuid():N}.db");
 
-    public FakeTimeProvider Clock { get; } = new(DateTimeOffset.FromUnixTimeMilliseconds(10_000));
+    private FakeTimeProvider Clock { get; } = new(DateTimeOffset.FromUnixTimeMilliseconds(10_000));
 
     public HubDatabase Database => Services.GetRequiredService<HubDatabase>();
 

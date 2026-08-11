@@ -3,11 +3,9 @@ using System.Text.Json;
 
 namespace PerfSentinelHub.Tests;
 
-public sealed class StatusTests : IClassFixture<HubApplicationFactory>
+public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
-    private readonly HttpClient _client;
-
-    public StatusTests(HubApplicationFactory factory) => _client = factory.CreateClient();
+    private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
     public async Task Status_is_stable_and_health_endpoints_are_distinct()

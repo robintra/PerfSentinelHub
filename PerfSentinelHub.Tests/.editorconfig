@@ -1,0 +1,3 @@
+[*.cs]
+# xUnit test names are readable sentences; underscores are intentional separators.
+dotnet_diagnostic.CA1707.severity = none

@@ -119,7 +119,7 @@ public sealed class ConfigurationTests
                 }];
             })));
 
-        Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+        Assert.Throws<OptionsValidationException>(factory.CreateClient);
     }
 
     private static HubOptions ValidOptions() => new()

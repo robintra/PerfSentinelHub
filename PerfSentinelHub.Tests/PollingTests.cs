@@ -134,15 +134,14 @@ public sealed class PollingTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
-            if (mode == "http")
+            switch (mode)
             {
-                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-                return;
-            }
-            if (mode == "timeout")
-            {
-                await Task.Delay(Timeout.InfiniteTimeSpan, context.RequestAborted);
-                return;
+                case "http":
+                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                    return;
+                case "timeout":
+                    await Task.Delay(Timeout.InfiniteTimeSpan, context.RequestAborted);
+                    return;
             }
             if (context.Request.Path == "/api/status")
             {

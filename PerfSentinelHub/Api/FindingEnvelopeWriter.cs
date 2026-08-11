@@ -19,10 +19,14 @@ public static class FindingEnvelopeWriter
         {
             using var document = JsonDocument.Parse(row.EnvelopeJson);
             writer.WriteStartObject();
+            // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var property in document.RootElement.EnumerateObject())
             {
-                if (property.Name is not ("first_seen" or "last_seen" or "max_confidence" or "sources"))
-                    property.WriteTo(writer);
+                if (property.Name is "first_seen" or "last_seen" or "max_confidence" or "sources")
+                    continue;
+
+                property.WriteTo(writer);
             }
 
             writer.WriteNumber("first_seen", row.FirstSeenMs);
@@ -44,11 +48,11 @@ public static class FindingEnvelopeWriter
             writer.WriteEndObject();
 
             // Flush as we go: a full 10 000-envelope page would otherwise sit in memory at once.
-            if (writer.BytesPending >= 64 * 1024)
-            {
-                await writer.FlushAsync(cancellationToken);
-                await response.BodyWriter.FlushAsync(cancellationToken);
-            }
+            if (writer.BytesPending < 64 * 1024)
+                continue;
+
+            await writer.FlushAsync(cancellationToken);
+            await response.BodyWriter.FlushAsync(cancellationToken);
         }
 
         writer.WriteEndArray();

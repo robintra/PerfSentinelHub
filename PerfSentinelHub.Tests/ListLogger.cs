@@ -8,7 +8,7 @@ internal sealed class ListLogger<T> : ILogger<T>
 
     public IReadOnlyList<string> Messages
     {
-        get { lock (_messages) return _messages.ToArray(); }
+        get { lock (_messages) return [.. _messages]; }
     }
 
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;

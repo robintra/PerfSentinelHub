@@ -5,16 +5,9 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests;
 
-public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
+public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
-    private readonly HubApplicationFactory _factory;
-    private readonly HttpClient _client;
-
-    public FindingsApiTests(HubApplicationFactory factory)
-    {
-        _factory = factory;
-        _client = factory.CreateClient();
-    }
+    private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
     public async Task Findings_filters_and_preserves_opaque_fields_with_additive_metadata()
@@ -73,7 +66,7 @@ public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
                 "\"acknowledged_by\": \"robin\"",
                 StringComparison.Ordinal)
         };
-        await _factory.Database.UpsertBatchAsync(
+        await factory.Database.UpsertBatchAsync(
             new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
             new ParsedBatch([acked], 0),
             4000,
@@ -115,12 +108,12 @@ public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
         var cancellationToken = TestContext.Current.CancellationToken;
         var payload = await File.ReadAllBytesAsync(FixturePath, cancellationToken);
         var batch = FindingParser.Parse(payload);
-        await _factory.Database.UpsertBatchAsync(
+        await factory.Database.UpsertBatchAsync(
             new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
             batch,
             1000,
             cancellationToken);
-        await _factory.Database.UpsertBatchAsync(
+        await factory.Database.UpsertBatchAsync(
             new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
             batch,
             2000,
@@ -139,7 +132,7 @@ public sealed class FindingsApiTests : IClassFixture<HubApplicationFactory>
                 .Replace("\"type\": \"blocking_wait\"", "\"type\": \"slow_sql\"", StringComparison.Ordinal)
                 .Replace("\"service\": \"rider-smoke\"", "\"service\": \"other\"", StringComparison.Ordinal)
         };
-        await _factory.Database.UpsertBatchAsync(
+        await factory.Database.UpsertBatchAsync(
             new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
             new ParsedBatch([other], 0),
             3000,

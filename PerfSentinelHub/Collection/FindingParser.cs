@@ -22,6 +22,9 @@ public sealed record ParsedFinding(
     string Confidence,
     int ConfidenceRank);
 
+// Explicit validation branches keep malformed-input handling auditable.
+// ReSharper disable ConvertIfStatementToSwitchStatement
+// ReSharper disable ConvertIfStatementToReturnStatement
 public static class FindingParser
 {
     public static ParsedBatch Parse(ReadOnlyMemory<byte> payload)
@@ -109,9 +112,10 @@ public static class FindingParser
             !TryString(pattern, "template", out var template))
             return false;
 
-        string? traceId = null;
-        if (body.TryGetProperty("trace_id", out var trace) && trace.ValueKind == JsonValueKind.String)
-            traceId = trace.GetString();
+        var traceId = body.TryGetProperty("trace_id", out var trace) &&
+                      trace.ValueKind == JsonValueKind.String
+            ? trace.GetString()
+            : null;
 
         finding = new ParsedFinding(
             signature,
@@ -129,12 +133,10 @@ public static class FindingParser
 
     private static bool TryString(JsonElement element, string propertyName, out string value)
     {
-        value = "";
-        if (!element.TryGetProperty(propertyName, out var property) ||
-            property.ValueKind != JsonValueKind.String)
-            return false;
-
-        value = property.GetString() ?? "";
+        value = element.TryGetProperty(propertyName, out var property) &&
+                property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? ""
+            : "";
         return value.Length > 0;
     }
 
@@ -147,3 +149,5 @@ public static class FindingParser
         _ => 0
     };
 }
+// ReSharper restore ConvertIfStatementToReturnStatement
+// ReSharper restore ConvertIfStatementToSwitchStatement

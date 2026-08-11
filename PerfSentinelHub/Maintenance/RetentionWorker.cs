@@ -4,7 +4,7 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Maintenance;
 
-public sealed class RetentionWorker(
+public sealed partial class RetentionWorker(
     HubDatabase database,
     IOptions<HubOptions> options,
     TimeProvider timeProvider,
@@ -26,10 +26,13 @@ public sealed class RetentionWorker(
             catch (Exception exception)
             {
                 // A failed purge must skip one pass, not stop the host and lose the read endpoint.
-                logger.LogError(exception, "Retention purge failed; retrying at the next pass.");
+                LogPurgeFailure(logger, exception);
             }
 
             await Task.Delay(TimeSpan.FromDays(1), timeProvider, stoppingToken);
         }
     }
+
+    [LoggerMessage(1201, LogLevel.Error, "Retention purge failed; retrying at the next pass.")]
+    private static partial void LogPurgeFailure(ILogger logger, Exception exception);
 }

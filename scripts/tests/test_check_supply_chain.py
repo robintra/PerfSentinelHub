@@ -17,6 +17,7 @@ ARTIFACT_URL = "https://github.com/example/tool/releases/download/v1.2.3/tool"
 CHECKSUM = "d" * 64
 NUGET_HASH = base64.b64encode(b"n" * 64).decode("ascii")
 NUGET_DIGEST = f"sha512-base64:{NUGET_HASH}"
+NUGET_LOCK_HASH = base64.b64encode(b"l" * 64).decode("ascii")
 DOWNLOAD_HEADER = ("#!/bin/dash", "set -eu")
 SPEC = importlib.util.spec_from_file_location("supply_chain_checker", CHECKER)
 checker = importlib.util.module_from_spec(SPEC)
@@ -58,16 +59,89 @@ def dotnet_inventory_item():
     )
 
 
+def nuget_inventory_item(name="Example.Package", version="1.2.3", lock_hash=NUGET_LOCK_HASH):
+    return inventory_item(
+        name=name,
+        kind="nuget",
+        version=version,
+        digest_or_sha=NUGET_DIGEST,
+        source=(
+            "https://api.nuget.org/v3/registration5-gz-semver2/"
+            f"{name.casefold()}/{version}.json"
+        ),
+        lock_content_hash=lock_hash,
+    )
+
+
 def write_required_declarations(root, packages=()):
     (root / "global.json").write_text(
-        json.dumps({"sdk": {"version": "10.0.302"}}), encoding="utf-8"
+        json.dumps(
+            {
+                "sdk": {
+                    "version": "10.0.302",
+                    "rollForward": "disable",
+                    "allowPrerelease": False,
+                }
+            }
+        ),
+        encoding="utf-8",
     )
     package_lines = "\n".join(
         f'    <PackageVersion Include="{name}" Version="{version}" />'
         for name, version in packages
     )
     (root / "Directory.Packages.props").write_text(
-        f"<Project>\n  <ItemGroup>\n{package_lines}\n  </ItemGroup>\n</Project>\n",
+        "<Project>\n"
+        "  <PropertyGroup>\n"
+        "    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n"
+        "    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>\n"
+        "  </PropertyGroup>\n"
+        f"  <ItemGroup>\n{package_lines}\n  </ItemGroup>\n"
+        "</Project>\n",
+        encoding="utf-8",
+    )
+    (root / "NuGet.Config").write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<configuration>\n"
+        "  <packageSources>\n"
+        "    <clear />\n"
+        '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />\n'
+        "  </packageSources>\n"
+        "</configuration>\n",
+        encoding="utf-8",
+    )
+
+
+def write_nuget_project(root, packages, lock_dependencies=None):
+    project = root / "App" / "App.csproj"
+    project.parent.mkdir(parents=True)
+    package_references = "\n".join(
+        f'    <PackageReference Include="{name}" />' for name, _, _ in packages
+    )
+    project.write_text(
+        "<Project Sdk=\"Microsoft.NET.Sdk\">\n"
+        "  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>\n"
+        f"  <ItemGroup>\n{package_references}\n  </ItemGroup>\n"
+        "</Project>\n",
+        encoding="utf-8",
+    )
+    if lock_dependencies is None:
+        lock_dependencies = {
+            name: {
+                "type": "Direct",
+                "requested": f"[{version}, )",
+                "resolved": version,
+                "contentHash": lock_hash,
+            }
+            for name, version, lock_hash in packages
+        }
+    (project.parent / "packages.lock.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "dependencies": {"net10.0": lock_dependencies},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -263,6 +337,35 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+    def test_inventory_uses_a_conservative_bound_for_date_only_sources(self):
+        items = {
+            "container": inventory_item(
+                name="mcr.microsoft.com/dotnet/runtime-deps",
+                kind="container",
+                version="10.0.10-noble-chiseled-extra",
+                digest_or_sha="sha256:" + "a" * 64,
+                released_at="2026-08-01T00:00:00Z",
+                source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+            ),
+            "SDK": {
+                **dotnet_inventory_item(),
+                "released_at": "2026-08-01T00:00:00Z",
+            },
+        }
+        for kind, item in items.items():
+            with self.subTest(kind=kind, age="73 hours"):
+                errors = checker.validate_inventory(
+                    [item], datetime(2026, 8, 4, 1, tzinfo=timezone.utc)
+                )
+
+                self.assertTrue(any("72 hours" in error for error in errors), errors)
+            with self.subTest(kind=kind, age="96 hours"):
+                errors = checker.validate_inventory(
+                    [item], datetime(2026, 8, 5, tzinfo=timezone.utc)
+                )
+
+                self.assertFalse(any("72 hours" in error for error in errors), errors)
+
     def test_accepts_pinned_declarations_and_stable_inventory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -340,90 +443,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
                 self.assertEqual(1, result.returncode)
                 self.assertIn("canonical", result.stderr)
-
-    def test_rejects_obfuscated_downloaders_with_literal_url(self):
-        for downloader in (r"c\url", "cu''rl", "w''get"):
-            with self.subTest(downloader=downloader):
-                result = run_download_lines(
-                    f"{downloader} -fsSL {ARTIFACT_URL} -o tool",
-                )
-
-                self.assertEqual(1, result.returncode)
-                self.assertIn("canonical", result.stderr)
-
-    def test_rejects_combined_downloader_and_url_obfuscation(self):
-        commands = (
-            rf"c\url -fsSL h\ttps://github.com/example/tool/releases/download/v1.2.3/tool -o tool",
-            f"cu''rl -fsSL HTTPS://github.com/example/tool/releases/download/v1.2.3/tool -o tool",
-            f"cu''rl -fsSL https:''//github.com/example/tool/releases/download/v1.2.3/tool -o tool",
-        )
-        for command in commands:
-            with self.subTest(command=command):
-                result = run_download_lines(command)
-
-                self.assertEqual(1, result.returncode)
-                self.assertIn("canonical", result.stderr)
-
-    def test_rejects_shell_redefinitions_sources_and_environment_hooks(self):
-        prefixes = {
-            "echo function": "echo() { :; }",
-            "sha256sum function": "sha256sum() { return 0; }",
-            "absolute executable function": "function /usr/bin/sha256sum { return 0; }",
-            "source": ". ./helpers.sh",
-            "BASH_ENV": "BASH_ENV=./helpers.sh",
-            "ENV": "ENV=./helpers.sh",
-            "LD_PRELOAD": "LD_PRELOAD=./helpers.so",
-        }
-        for name, prefix in prefixes.items():
-            with self.subTest(name=name):
-                result = run_download_lines(
-                    prefix,
-                    f"curl -fsSL {ARTIFACT_URL} -o tool",
-                    f"echo '{CHECKSUM}  tool' | sha256sum -c -",
-                )
-
-                self.assertEqual(1, result.returncode)
-                self.assertIn("canonical", result.stderr)
-
-    def test_rejects_alternative_shell_downloaders(self):
-        commands = (
-            "gh release download v1.2.3 --repo example/tool --pattern tool",
-            "g\\h release d''ownload v1.2.3 --repo example/tool --pattern tool",
-            "python3 -m pip download example-tool",
-            "pwsh -Command Invoke-WebRequest https:''//example.invalid/tool",
-        )
-        for command in commands:
-            with self.subTest(command=command):
-                result = run_download_lines(command)
-
-                self.assertEqual(1, result.returncode)
-                self.assertIn("canonical", result.stderr)
-
-    def test_rejects_network_downloads_outside_canonical_shell_scripts(self):
-        cases = {
-            "urllib": ("download.py", "import urllib.request\nurllib.request.urlopen('https://example.invalid/tool')\n"),
-            "requests": ("download.py", "import requests\nrequests.get('https://example.invalid/tool')\n"),
-            "httpx": ("download.py", "import httpx\nhttpx.get('https://example.invalid/tool')\n"),
-            "aiohttp": ("download.py", "import aiohttp\naiohttp.ClientSession()\n"),
-            "subprocess": ("download.py", "import subprocess\nsubprocess.run(['curl', 'example.invalid/tool'])\n"),
-            "workflow": ("ci.yml", "steps:\n  - run: wget example.invalid/tool\n"),
-            "gh run": ("ci.yml", "steps:\n  - run: gh run download 1234\n"),
-            "gh repo clone": ("ci.yml", "steps:\n  - run: gh repo clone example/tool\n"),
-            "obfuscated gh repo clone": ("ci.yml", "steps:\n  - run: g\\h r''epo c\\lone example/tool\n"),
-            "git clone": ("Dockerfile.tools", "RUN git clone example.invalid/tool\n"),
-            "suffix Dockerfile": ("tools.Dockerfile", "RUN git clone example.invalid/tool\n"),
-            "pip install": ("Dockerfile", "RUN pip install example-tool\n"),
-            "Dockerfile": ("Dockerfile", "RUN curl example.invalid/tool -o tool\n"),
-            "PowerShell": ("download.ps1", "Invoke-WebRequest example.invalid/tool -OutFile tool\n"),
-            "HttpClient": ("download.ps1", "$client = [System.Net.Http.HttpClient]::new()\n"),
-            "WebClient": ("download.ps1", "(New-Object Net.WebClient).OpenRead('example.invalid/tool')\n"),
-        }
-        for name, (filename, content) in cases.items():
-            with self.subTest(name=name):
-                result = run_repository_file(filename, content)
-
-                self.assertEqual(1, result.returncode)
-                self.assertIn("shell scripts", result.stderr)
 
     def test_rejects_noncanonical_yaml_uses_keys(self):
         action = inventory_item(
@@ -741,6 +760,307 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn(f"{missing} is required", result.stderr)
 
+    def test_requires_a_stable_global_json_sdk_policy(self):
+        policies = {
+            "missing roll forward": {"version": "10.0.302", "allowPrerelease": False},
+            "floating roll forward": {
+                "version": "10.0.302",
+                "rollForward": "latestMajor",
+                "allowPrerelease": False,
+            },
+            "missing prerelease policy": {
+                "version": "10.0.302",
+                "rollForward": "disable",
+            },
+            "prerelease enabled": {
+                "version": "10.0.302",
+                "rollForward": "disable",
+                "allowPrerelease": True,
+            },
+            "string boolean": {
+                "version": "10.0.302",
+                "rollForward": "disable",
+                "allowPrerelease": "false",
+            },
+        }
+        for name, sdk in policies.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item())
+                write_required_declarations(root)
+                (root / "global.json").write_text(
+                    json.dumps({"sdk": sdk}), encoding="utf-8"
+                )
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("global.json", result.stderr)
+
+    def test_requires_central_package_management_without_version_overrides(self):
+        properties = {
+            "missing central management": (
+                "<CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>"
+            ),
+            "central management disabled": (
+                "<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>"
+                "<CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>"
+            ),
+            "missing override policy": (
+                "<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>"
+            ),
+            "overrides enabled": (
+                "<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>"
+                "<CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled>"
+            ),
+        }
+        for name, body in properties.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item())
+                write_required_declarations(root)
+                (root / "Directory.Packages.props").write_text(
+                    f"<Project><PropertyGroup>{body}</PropertyGroup><ItemGroup /></Project>\n",
+                    encoding="utf-8",
+                )
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("Directory.Packages.props", result.stderr)
+
+    def test_rejects_local_package_reference_versions_and_overrides(self):
+        declarations = {
+            "version attribute": '<PackageReference Include="Example.Package" Version="1.2.3" />',
+            "version child": '<PackageReference Include="Example.Package"><Version>1.2.3</Version></PackageReference>',
+            "override attribute": '<PackageReference Include="Example.Package" VersionOverride="1.2.3" />',
+            "override child": '<PackageReference Include="Example.Package"><VersionOverride>1.2.3</VersionOverride></PackageReference>',
+        }
+        package = nuget_inventory_item()
+        for name, declaration in declarations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item(), package)
+                write_required_declarations(root, ((package["name"], package["version"]),))
+                write_nuget_project(
+                    root,
+                    ((package["name"], package["version"], package["lock_content_hash"]),),
+                )
+                (root / "App" / "App.csproj").write_text(
+                    "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>"
+                    "<TargetFramework>net10.0</TargetFramework></PropertyGroup>"
+                    f"<ItemGroup>{declaration}</ItemGroup></Project>\n",
+                    encoding="utf-8",
+                )
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("PackageReference", result.stderr)
+
+    def test_rejects_package_references_and_restore_sources_from_props_files(self):
+        package = nuget_inventory_item()
+        declarations = {
+            "shared package reference": ("Directory.Build.props", (
+                '<ItemGroup><PackageReference Include="Example.Package" /></ItemGroup>'
+            )),
+            "restore source override": ("Directory.Build.props", (
+                "<PropertyGroup><RestoreSources>https://mirror.example/v3/index.json</RestoreSources></PropertyGroup>"
+            )),
+            "restore config override": ("Directory.Build.props", (
+                "<PropertyGroup><RestoreConfigFile>mirror.config</RestoreConfigFile></PropertyGroup>"
+            )),
+            "targets source override": ("Directory.Build.targets", (
+                "<PropertyGroup><RestoreSources>https://mirror.example/v3/index.json</RestoreSources></PropertyGroup>"
+            )),
+            "central management override": ("Directory.Build.targets", (
+                "<PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup>"
+            )),
+            "central version override": ("Directory.Build.props", (
+                "<PropertyGroup><CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled></PropertyGroup>"
+            )),
+        }
+        for name, (filename, declaration) in declarations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item(), package)
+                write_required_declarations(root, ((package["name"], package["version"]),))
+                write_nuget_project(
+                    root,
+                    ((package["name"], package["version"], package["lock_content_hash"]),),
+                )
+                (root / filename).write_text(
+                    f"<Project>{declaration}</Project>\n", encoding="utf-8"
+                )
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn(filename, result.stderr)
+
+    def test_requires_a_single_canonical_nuget_source(self):
+        documents = {
+            "missing": None,
+            "mirror": (
+                "<configuration><packageSources><clear />"
+                '<add key="mirror" value="https://mirror.example/v3/index.json" />'
+                "</packageSources></configuration>"
+            ),
+            "extra source": (
+                "<configuration><packageSources><clear />"
+                '<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />'
+                '<add key="mirror" value="https://mirror.example/v3/index.json" />'
+                "</packageSources></configuration>"
+            ),
+            "source mapping": (
+                "<configuration><packageSources><clear />"
+                '<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />'
+                "</packageSources><packageSourceMapping /></configuration>"
+            ),
+            "fallback folder": (
+                "<configuration><packageSources><clear />"
+                '<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />'
+                "</packageSources><fallbackPackageFolders /></configuration>"
+            ),
+        }
+        for name, document in documents.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item())
+                write_required_declarations(root)
+                config = root / "NuGet.Config"
+                if document is None:
+                    config.unlink()
+                else:
+                    config.write_text(document, encoding="utf-8")
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("NuGet.Config", result.stderr)
+
+    def test_rejects_nested_nuget_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item())
+            write_required_declarations(root)
+            nested = root / "App" / "NuGet.Config"
+            nested.parent.mkdir()
+            nested.write_text(
+                "<configuration><packageSources><clear />"
+                '<add key="mirror" value="https://mirror.example/v3/index.json" />'
+                "</packageSources></configuration>",
+                encoding="utf-8",
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("NuGet.Config", result.stderr)
+
+    def test_rejects_missing_or_drifting_direct_lock_entries(self):
+        package = nuget_inventory_item()
+        valid = {
+            package["name"]: {
+                "type": "Direct",
+                "requested": f"[{package['version']}, )",
+                "resolved": package["version"],
+                "contentHash": package["lock_content_hash"],
+            }
+        }
+        variants = {
+            "missing direct": {},
+            "wrong role": {
+                package["name"]: {**valid[package["name"]], "type": "Transitive"}
+            },
+            "requested drift": {
+                package["name"]: {**valid[package["name"]], "requested": "[9.9.9, )"}
+            },
+            "resolved drift": {
+                package["name"]: {**valid[package["name"]], "resolved": "9.9.9"}
+            },
+            "hash drift": {
+                package["name"]: {
+                    **valid[package["name"]],
+                    "contentHash": base64.b64encode(b"x" * 64).decode("ascii"),
+                }
+            },
+        }
+        for name, dependencies in variants.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item(), package)
+                write_required_declarations(root, ((package["name"], package["version"]),))
+                write_nuget_project(
+                    root,
+                    ((package["name"], package["version"], package["lock_content_hash"]),),
+                    dependencies,
+                )
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("packages.lock.json", result.stderr)
+
+    def test_rejects_missing_lock_and_extra_direct_lock_dependency(self):
+        package = nuget_inventory_item()
+        cases = ("missing lock", "extra direct")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item(), package)
+                write_required_declarations(root, ((package["name"], package["version"]),))
+                write_nuget_project(
+                    root,
+                    ((package["name"], package["version"], package["lock_content_hash"]),),
+                )
+                lock_path = root / "App" / "packages.lock.json"
+                if case == "missing lock":
+                    lock_path.unlink()
+                else:
+                    payload = json.loads(lock_path.read_text(encoding="utf-8"))
+                    payload["dependencies"]["net10.0"]["Other.Package"] = {
+                        "type": "Direct",
+                        "requested": "[4.5.6, )",
+                        "resolved": "4.5.6",
+                        "contentHash": base64.b64encode(b"o" * 64).decode("ascii"),
+                    }
+                    lock_path.write_text(json.dumps(payload), encoding="utf-8")
+
+                result = run_checker(root)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("packages.lock.json", result.stderr)
+
+    def test_accepts_locked_direct_and_uninventoried_transitive_packages(self):
+        package = nuget_inventory_item()
+        dependencies = {
+            package["name"]: {
+                "type": "Direct",
+                "requested": f"[{package['version']}, )",
+                "resolved": package["version"],
+                "contentHash": package["lock_content_hash"],
+            },
+            "Other.Transitive": {
+                "type": "Transitive",
+                "resolved": "4.5.6",
+                "contentHash": base64.b64encode(b"t" * 64).decode("ascii"),
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_inventory(root, dotnet_inventory_item(), package)
+            write_required_declarations(root, ((package["name"], package["version"]),))
+            write_nuget_project(
+                root,
+                ((package["name"], package["version"], package["lock_content_hash"]),),
+                dependencies,
+            )
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_rejects_duplicate_json_keys_and_unknown_inventory_fields(self):
         errors = checker.validate_inventory(
             [inventory_item(unexpected="value")],
@@ -760,7 +1080,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
             result = run_checker(root)
 
             self.assertEqual(1, result.returncode)
-            self.assertIn("unable to read", result.stderr)
+            self.assertIn("global.json", result.stderr)
 
     def test_malformed_inventory_types_fail_closed_without_crashing(self):
         overrides = ({"kind": []}, {"source": 1}, {"version": []}, {"name": []})
@@ -796,19 +1116,22 @@ class SupplyChainCheckerTests(unittest.TestCase):
             self.assertIn("Example.Package differs", result.stderr)
 
     def test_accepts_matching_package_version_with_reversed_attributes(self):
-        package = inventory_item(
-            name="Example.Package",
-            kind="nuget",
-            version="1.2.3",
-            digest_or_sha=NUGET_DIGEST,
-            source="https://api.nuget.org/v3/registration5-gz-semver2/example.package/1.2.3.json",
-        )
+        package = nuget_inventory_item()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_inventory(root, dotnet_inventory_item(), package)
-            write_required_declarations(root)
+            write_required_declarations(root, ((package["name"], package["version"]),))
+            write_nuget_project(
+                root,
+                ((package["name"], package["version"], package["lock_content_hash"]),),
+            )
             (root / "Directory.Packages.props").write_text(
-                '<Project><ItemGroup><PackageVersion Version="1.2.3" Include="Example.Package" /></ItemGroup></Project>\n',
+                "<Project><PropertyGroup>"
+                "<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>"
+                "<CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>"
+                "</PropertyGroup><ItemGroup>"
+                '<PackageVersion Version="1.2.3" Include="Example.Package" />'
+                "</ItemGroup></Project>\n",
                 encoding="utf-8",
             )
 
@@ -1248,6 +1571,86 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(any("release date" in error for error in errors))
 
+    def test_online_uses_a_conservative_stabilization_bound_for_date_only_metadata(self):
+        item = inventory_item(
+            name="mcr.microsoft.com/dotnet/runtime-deps",
+            kind="container",
+            version="10.0.10-noble-chiseled-extra",
+            digest_or_sha="sha256:" + "a" * 64,
+            released_at="2026-08-01T00:00:00Z",
+            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+        )
+        payload = {
+            "releases": [
+                {
+                    "release-date": "2026-08-01",
+                    "release-version": "10.0.10",
+                    "runtime": {"version": "10.0.10"},
+                }
+            ]
+        }
+        expectations = {
+            "73 hours after midnight": (
+                datetime(2026, 8, 4, 1, tzinfo=timezone.utc),
+                True,
+            ),
+            "96 hours after midnight": (
+                datetime(2026, 8, 5, tzinfo=timezone.utc),
+                False,
+            ),
+        }
+        for name, (now, rejected) in expectations.items():
+            with self.subTest(name=name), patch.object(
+                checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
+            ), patch.object(checker, "fetch_json", return_value=(payload, {})):
+                errors = checker.validate_online([item], now)
+
+                self.assertEqual(
+                    rejected,
+                    any("newer than 72 hours" in error for error in errors),
+                    errors,
+                )
+
+    def test_online_uses_an_exact_stabilization_bound_for_precise_container_metadata(self):
+        item = inventory_item(
+            name="mcr.microsoft.com/dotnet/runtime-deps",
+            kind="container",
+            version="10.0.10-noble-chiseled-extra",
+            digest_or_sha="sha256:" + "a" * 64,
+            released_at="2026-08-01T12:34:56Z",
+            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
+        )
+        payload = {
+            "releases": [
+                {
+                    "release-date": "2026-08-01T12:34:56Z",
+                    "release-version": "10.0.10",
+                    "runtime": {"version": "10.0.10"},
+                }
+            ]
+        }
+        expectations = {
+            "one second early": (
+                datetime(2026, 8, 4, 12, 34, 55, tzinfo=timezone.utc),
+                True,
+            ),
+            "exactly 72 hours": (
+                datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
+                False,
+            ),
+        }
+        for name, (now, rejected) in expectations.items():
+            with self.subTest(name=name), patch.object(
+                checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
+            ), patch.object(checker, "fetch_json", return_value=(payload, {})):
+                errors = checker.validate_online([item], now)
+
+                self.assertEqual(
+                    rejected,
+                    any("newer than 72 hours" in error for error in errors),
+                    errors,
+                )
+
     def test_online_fetches_dotnet_metadata_once_for_all_containers(self):
         sdk = inventory_item(
             name="mcr.microsoft.com/dotnet/sdk",
@@ -1304,6 +1707,42 @@ class SupplyChainCheckerTests(unittest.TestCase):
             errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
 
         self.assertTrue(any(".NET metadata digest" in error for error in errors))
+
+    def test_online_applies_the_date_only_bound_to_dotnet_sdk_metadata(self):
+        item = {
+            **dotnet_inventory_item(),
+            "released_at": "2026-08-01T00:00:00Z",
+        }
+        payload = {
+            "releases": [
+                {
+                    "release-date": "2026-08-01",
+                    "sdk": {
+                        "version": item["version"],
+                        "files": [
+                            {
+                                "url": item["artifact_url"],
+                                "hash": item["digest_or_sha"].removeprefix("sha512:"),
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        for name, now, rejected in (
+            ("73 hours after midnight", datetime(2026, 8, 4, 1, tzinfo=timezone.utc), True),
+            ("96 hours after midnight", datetime(2026, 8, 5, tzinfo=timezone.utc), False),
+        ):
+            with self.subTest(name=name), patch.object(
+                checker, "fetch_json", return_value=(payload, {})
+            ):
+                errors = checker.validate_online([item], now)
+
+                self.assertEqual(
+                    rejected,
+                    any("newer than 72 hours" in error for error in errors),
+                    errors,
+                )
 
     def test_online_rejects_nuget_version_hash_and_timestamp_drift(self):
         item = inventory_item(

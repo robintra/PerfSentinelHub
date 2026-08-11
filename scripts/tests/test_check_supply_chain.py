@@ -498,6 +498,73 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 if not rejected:
                     self.assertEqual([], errors)
 
+    def test_rfc3339_offsets_identify_the_same_exact_instant(self):
+        expected = checker.parse_timestamp("2026-01-01T00:00:00.1234561Z")
+
+        for value in (
+            "2025-12-31T19:00:00.123456100-05:00",
+            "2026-01-01T01:00:00.1234561+01:00",
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(expected, checker.parse_timestamp(value))
+
+    def test_rfc3339_fraction_beyond_microseconds_detects_drift(self):
+        self.assertNotEqual(
+            checker.parse_timestamp("2026-01-01T00:00:00.1234561Z"),
+            checker.parse_timestamp("2026-01-01T00:00:00.1234569Z"),
+        )
+
+    def test_rejects_values_outside_the_official_rfc3339_subset(self):
+        values = (
+            None,
+            True,
+            1,
+            [],
+            {},
+            "2026-01-01 00:00:00Z",
+            "2026-01-01T00:00:00z",
+            "2026-01-01T00:00:00+0100",
+            "2026-01-01T00:00:00.1234567890Z",
+        )
+        for value in values:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                checker.parse_timestamp(value)
+
+    def test_inventory_preserves_submicrosecond_stabilization_boundaries(self):
+        cases = (
+            (
+                "one tenth of a microsecond early",
+                "2026-08-01T12:00:00.1234561Z",
+                datetime(2026, 8, 4, 12, 0, 0, 123456, tzinfo=timezone.utc),
+                True,
+            ),
+            (
+                "exact boundary through an equivalent offset",
+                "2026-08-01T13:00:00.1234560+01:00",
+                datetime(2026, 8, 4, 12, 0, 0, 123456, tzinfo=timezone.utc),
+                False,
+            ),
+            (
+                "one tenth of a microsecond after",
+                "2026-08-01T12:00:00.1234569Z",
+                datetime(2026, 8, 4, 12, 0, 0, 123457, tzinfo=timezone.utc),
+                False,
+            ),
+        )
+        for name, released_at, now, rejected in cases:
+            with self.subTest(name=name):
+                errors = checker.validate_inventory(
+                    [inventory_item(released_at=released_at)], now
+                )
+
+                self.assertEqual(
+                    rejected,
+                    any("72 hours" in error for error in errors),
+                    errors,
+                )
+                if not rejected:
+                    self.assertEqual([], errors)
+
     def test_accepts_pinned_declarations_and_stable_inventory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1336,17 +1403,20 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("packages.lock.json", result.stderr)
 
-    def test_rejects_noncanonical_nuget_roles(self):
-        for role in (None, "central", "sdk-aot"):
-            with self.subTest(role=role):
+    def test_malformed_nuget_roles_fail_closed_without_crashing(self):
+        for role in ([], {}, 1, True, None, "SDK-AOT-BASE"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
                 item = sdk_aot_inventory_items()[0]
                 item["nuget_role"] = role
+                root = Path(directory)
+                write_inventory(root, dotnet_inventory_item(), item)
+                write_required_declarations(root)
 
-                errors = checker.validate_inventory(
-                    [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-                )
+                result = run_checker(root)
 
-                self.assertTrue(any("NuGet role" in error for error in errors), errors)
+                self.assertEqual(1, result.returncode)
+                self.assertIn("unknown NuGet role", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_rejects_duplicate_json_keys_and_unknown_inventory_fields(self):
         errors = checker.validate_inventory(
@@ -1788,6 +1858,50 @@ class SupplyChainCheckerTests(unittest.TestCase):
             )
 
         self.assertTrue(any("release timestamp" in error for error in errors), errors)
+
+    def test_online_rejects_github_timestamp_drift_beyond_microseconds(self):
+        item = inventory_item(
+            kind="github-release", released_at="2026-01-01T00:00:00.1234561Z"
+        )
+        release = {
+            "tag_name": "v1.2.3",
+            "published_at": "2026-01-01T00:00:00.1234569Z",
+            "draft": False,
+            "prerelease": False,
+        }
+
+        with patch.object(
+            checker,
+            "fetch_json",
+            side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
+        ):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertTrue(any("release timestamp" in error for error in errors), errors)
+
+    def test_online_accepts_equivalent_rfc3339_offset_beyond_microseconds(self):
+        item = inventory_item(
+            kind="github-release", released_at="2026-01-01T00:00:00.1234561Z"
+        )
+        release = {
+            "tag_name": "v1.2.3",
+            "published_at": "2025-12-31T19:00:00.123456100-05:00",
+            "draft": False,
+            "prerelease": False,
+        }
+
+        with patch.object(
+            checker,
+            "fetch_json",
+            side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
+        ):
+            errors = checker.validate_online(
+                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
+            )
+
+        self.assertEqual([], errors)
 
     def test_online_requires_complete_nuget_identity_status_hash_and_timestamp(self):
         item = inventory_item(

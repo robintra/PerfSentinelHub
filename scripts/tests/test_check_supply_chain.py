@@ -198,6 +198,14 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(any("unsupported official source" in error for error in errors))
 
+    def test_rejects_unknown_kind_with_an_official_github_release_url(self):
+        errors = checker.validate_inventory(
+            [inventory_item(kind="unknown-kind")],
+            datetime(2026, 8, 11, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(any("unknown inventory kind" in error for error in errors))
+
     def test_rejects_invalid_helm_commit_identifier(self):
         errors = checker.validate_inventory(
             [inventory_item(name="helm", kind="github-release", digest_or_sha="sha256:" + "a" * 40)],
@@ -239,6 +247,53 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
             self.assertEqual(1, result.returncode)
             self.assertIn("does not bind", result.stderr)
+
+    def test_rejects_download_checksum_command_without_check_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool'; sha256sum tool\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
+    def test_rejects_commented_checksum_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' # sha256sum -c -\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
+    def test_accepts_active_checksum_file_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' > tool.sha256\nsha256sum -c tool.sha256\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
 
     def test_online_rejects_dotnet_metadata_digest_drift(self):
         item = inventory_item(

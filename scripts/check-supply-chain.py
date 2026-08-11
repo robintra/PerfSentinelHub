@@ -26,6 +26,7 @@ REQUIRED_FIELDS = {
     "stabilization_exempt",
     "reason",
 }
+KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "download", "github-action", "github-release", "nuget"})
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
 SEMVER_PRERELEASE = re.compile(r"^v?\d+(?:\.\d+){1,3}-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$")
@@ -69,6 +70,36 @@ def is_supported_source(item: dict) -> bool:
     return bool(GITHUB_RELEASE.fullmatch(source))
 
 
+def active_shell_content(line: str) -> str:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return ""
+    return re.split(r"\s+#", stripped, maxsplit=1)[0]
+
+
+def is_checksum_bound(lines: list[str], start: int, checksum: str, output: str) -> bool:
+    binding = re.compile(rf"{re.escape(checksum)}\s+\*?{re.escape(output)}(?:[\s'\"]|$)")
+    check_command = re.compile(r"\bsha256sum\s+-c\s+(\S+)")
+    redirect = re.compile(r">\s*(\S+)")
+    for index in range(start, len(lines)):
+        content = active_shell_content(lines[index])
+        if index > start and re.search(r"\b(?:curl|wget)\b", content):
+            return False
+        if not content:
+            continue
+        for match in check_command.finditer(content):
+            checksum_file = match.group(1).strip("'\"")
+            if checksum_file == "-" and binding.search(content):
+                return True
+            for producer in lines[start:index]:
+                producer_content = active_shell_content(producer)
+                if not producer_content or not binding.search(producer_content):
+                    continue
+                if any(redirection_match.group(1).strip("'\"") == checksum_file for redirection_match in redirect.finditer(producer_content)):
+                    return True
+    return False
+
+
 def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     for item in inventory:
@@ -80,6 +111,8 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
         if missing:
             errors.append(f"{name}: missing required fields: {', '.join(sorted(missing))}")
             continue
+        if item["kind"] not in KNOWN_KINDS:
+            errors.append(f"{name}: unknown inventory kind {item['kind']}")
         if not isinstance(item["source"], str) or not is_supported_source(item):
             errors.append(f"{name}: unsupported official source")
         if not isinstance(item["reason"], str) or not item["reason"].strip():
@@ -154,9 +187,7 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
                     errors.append(f"{path.relative_to(root)}:{number}: download URL is absent from the inventory")
                     continue
                 checksum = expected["digest_or_sha"].removeprefix("sha256:")
-                binding = re.compile(rf"{re.escape(checksum)}\s+\*?{re.escape(output)}(?:[\s'\"]|$)")
-                nearby = lines[number - 1:number + 2]
-                if not any("sha256sum" in candidate and binding.search(candidate) for candidate in nearby):
+                if not is_checksum_bound(lines, number - 1, checksum, output):
                     errors.append(f"{path.relative_to(root)}:{number}: download does not bind {output} to its inventory checksum")
 
     global_json = root / "global.json"

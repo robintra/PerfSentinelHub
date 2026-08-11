@@ -28,16 +28,25 @@ REQUIRED_FIELDS = {
 }
 KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "download", "github-action", "github-release", "nuget"})
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
-SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
+SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 SEMVER_PRERELEASE = re.compile(r"^v?\d+(?:\.\d+){1,3}-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$")
 USES_LINE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)")
 FROM_LINE = re.compile(r"^\s*FROM\s+(?:--platform=\S+\s+)?([^\s]+)", re.IGNORECASE)
 PACKAGE_VERSION = re.compile(r'<PackageVersion\s+Include="([^"]+)"\s+Version="([^"]+)"')
-GITHUB_RELEASE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/releases/tag/([^/]+)$", re.IGNORECASE)
-GITHUB_ARTIFACT = re.compile(r"^https://github\.com/[^/]+/[^/]+/releases/download/[^/]+/[^/]+$", re.IGNORECASE)
+SAFE_NAME = r"[A-Za-z0-9][A-Za-z0-9._-]*"
+SAFE_RELATIVE_PATH = rf"{SAFE_NAME}(?:/{SAFE_NAME})*"
+GITHUB_RELEASE_URL = rf"https://github\.com/({SAFE_NAME})/({SAFE_NAME})/releases/tag/({SAFE_NAME})"
+GITHUB_ARTIFACT_URL = rf"https://github\.com/{SAFE_NAME}/{SAFE_NAME}/releases/download/{SAFE_NAME}/{SAFE_NAME}"
+GITHUB_RELEASE = re.compile(rf"^{GITHUB_RELEASE_URL}$")
+GITHUB_ARTIFACT = re.compile(
+    rf"^https://github\.com/({SAFE_NAME})/({SAFE_NAME})/releases/download/({SAFE_NAME})/({SAFE_NAME})$"
+)
+CANONICAL_DOWNLOAD = re.compile(
+    rf"curl -fsSL (?P<url>{GITHUB_ARTIFACT_URL}) -o (?P<output>{SAFE_RELATIVE_PATH})"
+)
+NETWORK_MARKERS = ("curl", "wget", "https", "githubcom", "releasesdownload")
 NUGET_REGISTRATION = re.compile(r"^https://api\.nuget\.org/v3/registration5-gz-semver2/[^/]+/[^/]+\.json$", re.IGNORECASE)
 DOTNET_RELEASES = "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json"
-DOWNLOAD_URL = re.compile(r"https://[^\s'\"\\]+")
 
 
 def parse_timestamp(value: str) -> datetime:
@@ -58,6 +67,11 @@ def inventory_by_name(inventory: list[dict]) -> dict[str, dict]:
     return {item["name"]: item for item in inventory if isinstance(item, dict) and "name" in item}
 
 
+def has_network_marker(line: str) -> bool:
+    compact = re.sub(r"[^0-9A-Za-z]", "", line).lower()
+    return any(marker in compact for marker in NETWORK_MARKERS)
+
+
 def is_supported_source(item: dict) -> bool:
     source = item["source"]
     kind = item["kind"]
@@ -70,36 +84,10 @@ def is_supported_source(item: dict) -> bool:
     return bool(GITHUB_RELEASE.fullmatch(source))
 
 
-def active_shell_content(line: str) -> str:
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return ""
-    return re.split(r"\s+#", stripped, maxsplit=1)[0]
-
-
-def is_checksum_bound(lines: list[str], start: int, checksum: str, output: str) -> bool:
-    canonical_producer = f"echo '{checksum}  {output}'"
-    pipeline = f"{canonical_producer} | sha256sum -c -"
-    for index in range(start, len(lines)):
-        content = active_shell_content(lines[index])
-        if index > start and re.search(r"\b(?:curl|wget)\b", content):
-            return False
-        if not content:
-            continue
-        if content == pipeline:
-            return True
-        checksum_file = re.fullmatch(r"sha256sum -c (\S+)", content)
-        if checksum_file:
-            filename = checksum_file.group(1)
-            for candidate in lines[start:index]:
-                producer_content = active_shell_content(candidate)
-                if producer_content == f"{canonical_producer} > {filename}":
-                    return True
-    return False
-
-
 def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
+    name_keys = set()
+    artifact_keys = set()
     for item in inventory:
         name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
         if not isinstance(item, dict):
@@ -109,6 +97,10 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
         if missing:
             errors.append(f"{name}: missing required fields: {', '.join(sorted(missing))}")
             continue
+        name_key = str(name).casefold()
+        if name_key in name_keys:
+            errors.append(f"{name}: ambiguous duplicate inventory name")
+        name_keys.add(name_key)
         if item["kind"] not in KNOWN_KINDS:
             errors.append(f"{name}: unknown inventory kind {item['kind']}")
         if not isinstance(item["source"], str) or not is_supported_source(item):
@@ -130,8 +122,28 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             errors.append(f"{name}: GitHub Actions require a full commit SHA")
         if item["kind"] in {"container", "download"} and not SHA256.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
-        if item["kind"] == "download" and not GITHUB_ARTIFACT.fullmatch(str(item.get("artifact_url", ""))):
-            errors.append(f"{name}: downloaded tools require an official artifact_url")
+        if item["kind"] == "download":
+            artifact_url = str(item.get("artifact_url", ""))
+            artifact_match = GITHUB_ARTIFACT.fullmatch(artifact_url)
+            if artifact_match is None:
+                errors.append(f"{name}: downloaded tools require an official artifact_url")
+            else:
+                artifact_key = (
+                    artifact_match.group(1).casefold(),
+                    artifact_match.group(2).casefold(),
+                    artifact_match.group(3),
+                    artifact_match.group(4),
+                )
+                if artifact_key in artifact_keys:
+                    errors.append(f"{name}: ambiguous download artifact_url")
+                artifact_keys.add(artifact_key)
+                source_match = GITHUB_RELEASE.fullmatch(str(item["source"]))
+                if source_match and (
+                    artifact_key[:2]
+                    != (source_match.group(1).casefold(), source_match.group(2).casefold())
+                    or artifact_key[2] != source_match.group(3)
+                ):
+                    errors.append(f"{name}: artifact_url must belong to its source release")
         match = GITHUB_RELEASE.fullmatch(str(item["source"]))
         if item["kind"] == "github-action" and match and item["name"].lower() != f"{match.group(1)}/{match.group(2)}".lower():
             errors.append(f"{name}: action name must match its owner/repository source")
@@ -142,10 +154,11 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
     errors = []
     pins = inventory_by_name(inventory)
     for path in text_files(root):
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        with path.open(encoding="utf-8", errors="replace", newline="") as source_file:
+            lines = source_file.read().split("\n")
         is_workflow = path.suffix in {".yml", ".yaml"}
         is_dockerfile = path.name == "Dockerfile"
-        can_download_tools = is_workflow or is_dockerfile or path.suffix == ".sh"
+        checks_downloads = is_workflow or is_dockerfile or path.suffix == ".sh"
         for number, line in enumerate(lines, start=1):
             action = USES_LINE.match(line) if is_workflow else None
             if action:
@@ -172,20 +185,35 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
                         errors.append(f"{path.relative_to(root)}:{number}: container {image_name} is absent from the inventory")
                     elif expected["digest_or_sha"].lower() != digest.lower():
                         errors.append(f"{path.relative_to(root)}:{number}: container {image_name} differs from the inventory")
-            if can_download_tools and re.search(r"\b(?:curl|wget)\b", line):
-                url_match = DOWNLOAD_URL.search(line)
-                output_match = re.search(r"(?:^|\s)-o\s+(\S+)", line)
-                if not url_match or not output_match:
-                    errors.append(f"{path.relative_to(root)}:{number}: downloaded tools require a URL and -o output")
+            content = line.lstrip(" ")
+            if checks_downloads and not content.startswith("#") and has_network_marker(content):
+                if path.suffix != ".sh":
+                    errors.append(
+                        f"{path.relative_to(root)}:{number}: download declarations are only permitted in .sh shell scripts"
+                    )
                     continue
-                artifact_url = url_match.group(0)
-                output = output_match.group(1).strip("'\"")
-                expected = next((item for item in inventory if item.get("kind") == "download" and item.get("artifact_url") == artifact_url), None)
-                if expected is None:
+                declaration = CANONICAL_DOWNLOAD.fullmatch(content)
+                if declaration is None:
+                    errors.append(f"{path.relative_to(root)}:{number}: download command is not canonical")
+                    continue
+                artifact_url = declaration.group("url")
+                output = declaration.group("output")
+                matches = [
+                    item
+                    for item in inventory
+                    if item.get("kind") == "download" and item.get("artifact_url") == artifact_url
+                ]
+                if not matches:
                     errors.append(f"{path.relative_to(root)}:{number}: download URL is absent from the inventory")
                     continue
+                if len(matches) != 1:
+                    errors.append(f"{path.relative_to(root)}:{number}: download URL is ambiguous in the inventory")
+                    continue
+                expected = matches[0]
                 checksum = expected["digest_or_sha"].removeprefix("sha256:")
-                if not is_checksum_bound(lines, number - 1, checksum, output):
+                verification = f"echo '{checksum}  {output}' | sha256sum -c -"
+                next_line = lines[number].lstrip(" ") if number < len(lines) else ""
+                if next_line != verification:
                     errors.append(f"{path.relative_to(root)}:{number}: download does not bind {output} to its inventory checksum")
 
     global_json = root / "global.json"

@@ -106,24 +106,93 @@ def scan_staging(root: Path):
     return entries
 
 
-def open_entry(entry):
-    path, relative, expected, _ = entry
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
-    actual = os.fstat(descriptor)
-    if not stat.S_ISREG(actual.st_mode) or (actual.st_dev, actual.st_ino, actual.st_size) != (
-        expected.st_dev,
-        expected.st_ino,
-        expected.st_size,
-    ):
-        os.close(descriptor)
-        raise ValueError(f"file changed during packaging: {relative}")
-    return os.fdopen(descriptor, "rb")
+def metadata_signature(metadata):
+    return (
+        stat.S_IFMT(metadata.st_mode),
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def snapshot_entries(entries, directory: Path):
+    snapshots = []
+    for index, (path, relative, expected, symbol) in enumerate(entries):
+        snapshot = directory / f"{index:08x}"
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        try:
+            before = os.fstat(descriptor)
+            if metadata_signature(before) != metadata_signature(expected):
+                raise ValueError(f"file changed during packaging: {relative}")
+            source = os.fdopen(descriptor, "rb")
+            descriptor = -1
+            digest = hashlib.sha256()
+            copied = 0
+            with source, snapshot.open("xb") as target:
+                while chunk := source.read(BUFFER_SIZE):
+                    target.write(chunk)
+                    digest.update(chunk)
+                    copied += len(chunk)
+                after = os.fstat(source.fileno())
+            if copied != before.st_size or metadata_signature(after) != metadata_signature(before):
+                raise ValueError(f"file changed during packaging: {relative}")
+            snapshot.chmod(0o400)
+            snapshots.append((snapshot, relative, expected, symbol, digest.digest()))
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+    return snapshots
+
+
+class SnapshotReader:
+    def __init__(self, entry):
+        path, relative, expected, _, expected_digest = entry
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_size != expected.st_size:
+            os.close(descriptor)
+            raise ValueError(f"snapshot changed during packaging: {relative}")
+        try:
+            self.stream = os.fdopen(descriptor, "rb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self.relative = relative
+        self.expected_size = expected.st_size
+        self.expected_digest = expected_digest
+        self.opened = metadata_signature(opened)
+        self.digest = hashlib.sha256()
+        self.size = 0
+
+    def read(self, size=-1):
+        chunk = self.stream.read(size)
+        self.digest.update(chunk)
+        self.size += len(chunk)
+        return chunk
+
+    def verify(self):
+        closed = metadata_signature(os.fstat(self.stream.fileno()))
+        if (
+            closed != self.opened
+            or self.size != self.expected_size
+            or self.digest.digest() != self.expected_digest
+        ):
+            raise ValueError(f"snapshot changed during packaging: {self.relative}")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exception):
+        self.stream.close()
 
 
 def normalized_mode(entry) -> int:
-    path, _, metadata, symbol = entry
-    return 0o755 if not symbol and (metadata.st_mode & 0o111 or path.suffix.casefold() == ".exe") else 0o644
+    _, relative, metadata, symbol, _ = entry
+    return 0o755 if not symbol and (metadata.st_mode & 0o111 or Path(relative).suffix.casefold() == ".exe") else 0o644
 
 
 def write_tar(path: Path, entries, commit_time: int) -> None:
@@ -131,30 +200,32 @@ def write_tar(path: Path, entries, commit_time: int) -> None:
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=commit_time) as compressed:
             with tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive:
                 for entry in entries:
-                    _, relative, metadata, _ = entry
+                    _, relative, metadata, _, _ = entry
                     info = tarfile.TarInfo(relative)
                     info.size = metadata.st_size
                     info.mode = normalized_mode(entry)
                     info.mtime = commit_time
                     info.uid = info.gid = 0
                     info.uname = info.gname = ""
-                    with open_entry(entry) as source:
+                    with SnapshotReader(entry) as source:
                         archive.addfile(info, source)
+                        source.verify()
 
 
 def write_zip(path: Path, entries, commit_time: int) -> None:
     timestamp = datetime.datetime.fromtimestamp(commit_time, datetime.timezone.utc).timetuple()[:6]
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for entry in entries:
-            _, relative, metadata, _ = entry
+            _, relative, metadata, _, _ = entry
             info = zipfile.ZipInfo(relative, timestamp)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 3
             info.external_attr = (stat.S_IFREG | normalized_mode(entry)) << 16
-            with open_entry(entry) as source, archive.open(
+            with SnapshotReader(entry) as source, archive.open(
                 info, "w", force_zip64=metadata.st_size >= 2 * 1024**3
             ) as target:
                 shutil.copyfileobj(source, target, BUFFER_SIZE)
+                source.verify()
 
 
 def sha256(path: Path) -> str:
@@ -176,37 +247,39 @@ def package(rid: str, version: str, commit_time: int, staging: Path, output: Pat
     if inside(output.resolve(strict=False), root):
         raise ValueError("output directory must be outside the staging directory")
     entries = scan_staging(root)
-    runtime = [entry for entry in entries if not entry[3]]
-    symbols = [entry for entry in entries if entry[3]]
     extension = ".zip" if rid == "win-x64" else ".tar.gz"
     base = f"perf-sentinel-hub-{version}-{rid}"
     names = (f"{base}{extension}", f"{base}-symbols{extension}")
     writer = write_zip if rid == "win-x64" else write_tar
 
-    output.mkdir(parents=True, exist_ok=True)
-    temporary = []
-    try:
-        for name, selected in zip(names, (runtime, symbols), strict=True):
-            descriptor, temporary_name = tempfile.mkstemp(dir=output, prefix=".package-")
-            os.close(descriptor)
-            temporary_path = Path(temporary_name)
-            temporary.append(temporary_path)
-            writer(temporary_path, selected, commit_time)
-        sums = "".join(
-            f"{sha256(path)}  {name}\n"
-            for name, path in sorted(zip(names, temporary, strict=True))
-        )
-        descriptor, sums_name = tempfile.mkstemp(dir=output, prefix=".package-")
-        with os.fdopen(descriptor, "w", encoding="ascii", newline="\n") as stream:
-            stream.write(sums)
-        temporary_sums = Path(sums_name)
-        temporary.append(temporary_sums)
-        for source, name in zip(temporary[:2], names, strict=True):
-            os.replace(source, output / name)
-        os.replace(temporary_sums, output / "SHA256SUMS")
-    finally:
-        for path in temporary:
-            path.unlink(missing_ok=True)
+    with tempfile.TemporaryDirectory(prefix="perf-sentinel-hub-") as snapshot_directory:
+        snapshots = snapshot_entries(entries, Path(snapshot_directory))
+        runtime = [entry for entry in snapshots if not entry[3]]
+        symbols = [entry for entry in snapshots if entry[3]]
+        output.mkdir(parents=True, exist_ok=True)
+        temporary = []
+        try:
+            for name, selected in zip(names, (runtime, symbols), strict=True):
+                descriptor, temporary_name = tempfile.mkstemp(dir=output, prefix=".package-")
+                os.close(descriptor)
+                temporary_path = Path(temporary_name)
+                temporary.append(temporary_path)
+                writer(temporary_path, selected, commit_time)
+            sums = "".join(
+                f"{sha256(path)}  {name}\n"
+                for name, path in sorted(zip(names, temporary, strict=True))
+            )
+            descriptor, sums_name = tempfile.mkstemp(dir=output, prefix=".package-")
+            with os.fdopen(descriptor, "w", encoding="ascii", newline="\n") as stream:
+                stream.write(sums)
+            temporary_sums = Path(sums_name)
+            temporary.append(temporary_sums)
+            for source, name in zip(temporary[:2], names, strict=True):
+                os.replace(source, output / name)
+            os.replace(temporary_sums, output / "SHA256SUMS")
+        finally:
+            for path in temporary:
+                path.unlink(missing_ok=True)
 
 
 def main() -> None:

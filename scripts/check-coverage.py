@@ -20,6 +20,12 @@ MAX_LINE_RECORDS = 2_000_000
 NEW_CODE_PERCENT = 80
 POSITIVE_INTEGER = re.compile(r"^[1-9][0-9]{0,9}$")
 NONNEGATIVE_INTEGER = re.compile(r"^(?:0|[1-9][0-9]{0,9})$")
+XML_DECLARATION = re.compile(
+    r'^<\?xml\s+version="1\.0"\s+encoding="utf-8"\s*\?>'
+)
+FORBIDDEN_XML_DECLARATION = re.compile(
+    r"<!\s*(?:DOCTYPE|ENTITY)\b", re.IGNORECASE
+)
 
 
 class CoverageError(ValueError):
@@ -39,36 +45,54 @@ def normalized_filename(value: object) -> str:
     return normalized
 
 
-def reject_unsafe_xml(path: Path) -> None:
-    try:
-        size = path.stat().st_size
-        if size <= 0 or size > MAX_REPORT_BYTES:
-            raise CoverageError(
-                f"{path}: report size must be between 1 and {MAX_REPORT_BYTES} bytes"
-            )
-        tail = b""
-        with path.open("rb") as report:
-            while chunk := report.read(64 * 1024):
-                candidate = (tail + chunk).upper()
-                if b"<!DOCTYPE" in candidate or b"<!ENTITY" in candidate:
-                    raise CoverageError(f"{path}: DTD and entity declarations are forbidden")
-                tail = candidate[-16:]
-    except OSError as error:
-        raise CoverageError(f"{path}: unable to read coverage report") from error
+def direct_children(element: ElementTree.Element, name: str) -> list[ElementTree.Element]:
+    return [child for child in element if local_name(child.tag) == name]
 
 
 def read_report(path: Path) -> dict[tuple[str, int], bool]:
-    reject_unsafe_xml(path)
+    try:
+        with path.open("rb") as report:
+            payload = report.read(MAX_REPORT_BYTES + 1)
+        if not payload or len(payload) > MAX_REPORT_BYTES:
+            raise CoverageError(
+                f"{path}: report size must be between 1 and {MAX_REPORT_BYTES} bytes"
+            )
+    except OSError as error:
+        raise CoverageError(f"{path}: unable to read coverage report") from error
+    if payload.startswith(b"\xef\xbb\xbf"):
+        raise CoverageError(f"{path}: coverage report must be strict UTF-8 without BOM")
+    try:
+        text = payload.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise CoverageError(
+            f"{path}: coverage report must be strict UTF-8 without BOM"
+        ) from error
+    if FORBIDDEN_XML_DECLARATION.search(text):
+        raise CoverageError(f"{path}: DTD and entity declarations are forbidden")
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError as error:
+        raise CoverageError(f"{path}: unable to parse Cobertura XML") from error
+    if XML_DECLARATION.match(text) is None:
+        raise CoverageError(f"{path}: coverage report must declare strict UTF-8 without BOM")
+    if local_name(root.tag) != "coverage":
+        raise CoverageError(f"{path}: Cobertura root must be coverage")
+
+    packages = direct_children(root, "packages")
+    if len(packages) != 1:
+        raise CoverageError(f"{path}: Cobertura packages structure is required")
     lines: dict[tuple[str, int], bool] = {}
     records = 0
-    try:
-        for _, element in ElementTree.iterparse(path, events=("end",)):
-            if local_name(element.tag) != "class":
-                continue
+    for package in direct_children(packages[0], "package"):
+        classes_nodes = direct_children(package, "classes")
+        if len(classes_nodes) != 1:
+            raise CoverageError(f"{path}: Cobertura classes structure is required")
+        for element in direct_children(classes_nodes[0], "class"):
+            class_lines = direct_children(element, "lines")
+            if len(class_lines) != 1:
+                raise CoverageError(f"{path}: Cobertura class lines structure is required")
             filename = normalized_filename(element.get("filename"))
-            for line in element.iter():
-                if local_name(line.tag) != "line":
-                    continue
+            for line in direct_children(class_lines[0], "line"):
                 number_text = line.get("number")
                 hits_text = line.get("hits")
                 if not isinstance(number_text, str) or not POSITIVE_INTEGER.fullmatch(
@@ -86,13 +110,20 @@ def read_report(path: Path) -> dict[tuple[str, int], bool]:
                     )
                 key = (filename, int(number_text))
                 lines[key] = lines.get(key, False) or int(hits_text) > 0
-            element.clear()
-    except ElementTree.ParseError as error:
-        raise CoverageError(f"{path}: unable to parse Cobertura XML") from error
-    except OSError as error:
-        raise CoverageError(f"{path}: unable to read coverage report") from error
     if not lines:
         raise CoverageError(f"{path}: report contains no line records")
+
+    valid_text = root.get("lines-valid")
+    covered_text = root.get("lines-covered")
+    if (
+        not isinstance(valid_text, str)
+        or not NONNEGATIVE_INTEGER.fullmatch(valid_text)
+        or not isinstance(covered_text, str)
+        or not NONNEGATIVE_INTEGER.fullmatch(covered_text)
+    ):
+        raise CoverageError(f"{path}: Cobertura root line counts are missing or invalid")
+    if int(valid_text) != len(lines) or int(covered_text) != sum(lines.values()):
+        raise CoverageError(f"{path}: Cobertura root line counts differ from line records")
     return lines
 
 
@@ -108,12 +139,21 @@ def load_numeric_baseline(path: Path) -> Decimal:
     def reject_constant(value: str):
         raise ValueError(f"non-finite number {value}")
 
+    def unique_object(pairs: list[tuple[str, object]]) -> dict:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
     try:
         payload = json.loads(
             path.read_text(encoding="utf-8"),
             parse_float=Decimal,
             parse_int=Decimal,
             parse_constant=reject_constant,
+            object_pairs_hook=unique_object,
         )
         if not isinstance(payload, dict) or set(payload) != {"total_line_coverage"}:
             raise ValueError("baseline root is not canonical")
@@ -122,7 +162,9 @@ def load_numeric_baseline(path: Path) -> Decimal:
             raise ValueError("baseline value is not a percentage")
         return value
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
-        raise CoverageError(f"{path}: unable to parse numeric coverage baseline") from error
+        raise CoverageError(
+            f"{path}: unable to parse numeric coverage baseline: {error}"
+        ) from error
 
 
 def establish_baseline(report_path: Path, baseline_path: Path) -> None:

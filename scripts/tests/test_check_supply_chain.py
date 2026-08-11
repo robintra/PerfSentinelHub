@@ -376,6 +376,70 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("does not bind", result.stderr)
 
+    def test_rejects_extra_pipe_before_checksum_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' | true | sha256sum -c -\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
+    def test_rejects_extra_pipe_before_checksum_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' | true > tool.sha256\nsha256sum -c tool.sha256\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
+    def test_rejects_escaped_pipe_before_checksum_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' \\| true | sha256sum -c -\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
+    def test_rejects_checksum_file_check_with_control_suffix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checksum = "d" * 64
+            artifact_url = "https://github.com/example/tool/releases/download/v1.2.3/tool"
+            (root / "install-tools.sh").write_text(
+                f"curl -fsSL {artifact_url} -o tool\necho '{checksum}  tool' > tool.sha256\nsha256sum -c tool.sha256 && true\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, inventory_item(kind="download", digest_or_sha=f"sha256:{checksum}", artifact_url=artifact_url))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("does not bind", result.stderr)
+
     def test_online_rejects_dotnet_metadata_digest_drift(self):
         item = inventory_item(
             name="dotnet-sdk",

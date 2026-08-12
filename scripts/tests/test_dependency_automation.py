@@ -357,6 +357,29 @@ class DependencyAutomationTests(unittest.TestCase):
 
                 self.check_invalid(add_direct_merge, "auto-merge")
 
+    def test_rejects_absolute_gh_paths_for_dependabot_merges(self):
+        cases = (
+            ("/usr/bin/gh", "github.actor"),
+            ("/usr/local/bin/gh", "github.event.pull_request.user.login"),
+            ("/opt/actions/tools/current/gh", "github . actor"),
+        )
+        for command, identity in cases:
+            with self.subTest(command=command, identity=identity):
+                def add_direct_merge(_config, root, command=command, identity=identity):
+                    workflow = root / ".github" / "workflows" / "merge.yml"
+                    workflow.parent.mkdir(parents=True, exist_ok=True)
+                    workflow.write_text(
+                        "name: Dependency updates\n"
+                        "jobs:\n"
+                        "  merge:\n"
+                        f"    if: ${{{{ {identity} == 'dependabot[bot]' }}}}\n"
+                        "    steps:\n"
+                        f"      - run: {command} pr merge \"$PR_URL\" --squash\n",
+                        encoding="utf-8",
+                    )
+
+                self.check_invalid(add_direct_merge, "auto-merge")
+
 
 if __name__ == "__main__":
     unittest.main()

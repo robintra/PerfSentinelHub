@@ -1,0 +1,25 @@
+name: Security reporting help
+description: Get the private reporting link without disclosing a vulnerability publicly.
+title: "[Security reporting help]: "
+labels:
+  - security
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not describe a vulnerability in this public form. Submit the report through [GitHub private vulnerability reporting](https://github.com/robintra/PerfSentinelHub/security/advisories/new) and follow SECURITY.md. If the private form is unavailable, this public issue may contain only a request for reporting instructions.
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Public disclosure warning
+      options:
+        - label: I have not included vulnerability details, exploit steps, credentials, private findings, or sensitive logs.
+          required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: Request for private reporting instructions
+      description: Do not include any technical or sensitive detail here.
+      placeholder: The private vulnerability reporting form is unavailable to me. Please provide private reporting instructions.
+    validations:
+      required: true

@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible non-security defect in PerfSentinelHub.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve PerfSentinelHub. Do not include credentials, private findings, or vulnerability details. Report security vulnerabilities privately as described in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Hub version
+      description: Use the release version or exact commit.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation
+      options:
+        - Native binary
+        - OCI image
+        - Helm chart
+        - Source checkout
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest sequence that reproduces the defect with secrets removed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste only the relevant log lines after removing keys, tokens, URLs with credentials, and private finding data.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed secrets and private data from this public report.
+          required: true
+        - label: This report does not describe a security vulnerability.
+          required: true

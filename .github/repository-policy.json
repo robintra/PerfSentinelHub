@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "repository": "robintra/PerfSentinelHub",
+  "visibility": "public",
+  "default_branch": "main",
+  "security_features": [
+    "secret_scanning",
+    "secret_scanning_push_protection"
+  ],
+  "branch_ruleset": {
+    "ref_include": "~DEFAULT_BRANCH",
+    "required_approving_review_count": 0,
+    "required_review_thread_resolution": true,
+    "allowed_merge_methods": [
+      "rebase",
+      "squash"
+    ],
+    "required_status_checks": [
+      {
+        "context": "CI / Gate",
+        "app_slug": "perf-sentinel-ci-gate"
+      },
+      {
+        "context": "CI / Dependency review",
+        "app_slug": null
+      },
+      {
+        "context": "CI / Trusted Qodana",
+        "app_slug": null
+      },
+      {
+        "context": "CI / Trusted SonarCloud",
+        "app_slug": null
+      },
+      {
+        "context": "CodeQL / CodeQL C#",
+        "app_slug": null
+      }
+    ],
+    "require_linear_history": true,
+    "require_signed_commits": true,
+    "allow_force_pushes": false,
+    "allow_deletions": false,
+    "bypass_actors": [],
+    "emergency_bypass_record": null
+  },
+  "tag_ruleset": {
+    "ref_include": "refs/tags/v*",
+    "allow_force_updates": false,
+    "allow_deletions": false,
+    "bypass_actors": []
+  },
+  "release_environment": {
+    "name": "hub-release",
+    "minimum_required_reviewers": 1,
+    "prevent_self_review": false
+  },
+  "workflow_secrets": [
+    "CI_GATE_APP_ID",
+    "CI_GATE_APP_PRIVATE_KEY",
+    "QODANA_TOKEN",
+    "SONAR_TOKEN"
+  ]
+}

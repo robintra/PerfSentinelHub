@@ -519,6 +519,13 @@ class ReleaseTagCheckerTests(unittest.TestCase):
         self.run_command("git", "init", "-q", "-b", "main", str(self.repository), cwd=self.root)
         self.git("config", "user.name", "Release test")
         self.git("config", "user.email", "release@example.invalid")
+        self.signing_key = self.root / "signing-key"
+        self.other_key = self.root / "other-key"
+        for key in (self.signing_key, self.other_key):
+            self.run_command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key), cwd=self.root)
+        (self.repository / "config").mkdir()
+        self.config = self.repository / "config/signing-identities.json"
+        self.write_config()
         (self.repository / "file").write_text("one\n", encoding="ascii")
         self.git("add", "file")
         self.git("commit", "-q", "-m", "one")
@@ -533,18 +540,12 @@ class ReleaseTagCheckerTests(unittest.TestCase):
         self.assertIn("signature", result.stderr)
 
     def test_accepts_signed_tag_and_rejects_a_different_expected_commit(self):
-        signing_key = self.root / "signing-key"
-        allowed_signers = self.root / "allowed-signers"
-        self.run_command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(signing_key), cwd=self.root)
-        public_key = signing_key.with_suffix(".pub").read_text(encoding="ascii").strip()
-        allowed_signers.write_text(f"release@example.invalid {public_key}\n", encoding="ascii")
-        self.git("config", "gpg.format", "ssh")
-        self.git("config", "user.signingkey", str(signing_key))
-        self.git("config", "gpg.ssh.allowedSignersFile", str(allowed_signers))
-        self.git("tag", "-s", "v0.1.0", "-m", "signed")
+        self.sign_tag()
         tagged_commit = self.git_output("rev-parse", "HEAD")
         accepted = self.check("v0.1.0", tagged_commit)
         self.assertEqual(0, accepted.returncode, accepted.stderr)
+        self.assertNotEqual(0, self.git_result("config", "--local", "--get", "gpg.format").returncode)
+        self.assertNotEqual(0, self.git_result("config", "--local", "--get", "gpg.ssh.allowedSignersFile").returncode)
 
         (self.repository / "file").write_text("two\n", encoding="ascii")
         self.git("add", "file")
@@ -553,11 +554,99 @@ class ReleaseTagCheckerTests(unittest.TestCase):
         self.assertNotEqual(0, rejected.returncode)
         self.assertIn("target", rejected.stderr)
 
+    def test_rejects_a_signature_from_an_unapproved_key_or_principal(self):
+        self.sign_tag()
+        tagged_commit = self.git_output("rev-parse", "HEAD")
+
+        self.write_config(key=self.other_key)
+        wrong_key = self.check("v0.1.0", tagged_commit)
+        self.assertNotEqual(0, wrong_key.returncode)
+        self.assertIn("approved SSH identity", wrong_key.stderr)
+
+        self.write_config(principal="other@example.invalid")
+        wrong_principal = self.check("v0.1.0", tagged_commit)
+        self.assertNotEqual(0, wrong_principal.returncode)
+        self.assertIn("tag principal", wrong_principal.stderr)
+
+    def test_rejects_malformed_or_open_signing_identity_configuration(self):
+        self.sign_tag()
+        tagged_commit = self.git_output("rev-parse", "HEAD")
+        valid = json.loads(self.config.read_text(encoding="utf-8"))
+        invalid = []
+        unknown = json.loads(json.dumps(valid))
+        unknown["unexpected"] = True
+        invalid.append(json.dumps(unknown))
+        boolean_version = json.loads(json.dumps(valid))
+        boolean_version["schema_version"] = True
+        invalid.append(json.dumps(boolean_version))
+        wrong_type = json.loads(json.dumps(valid))
+        wrong_type["release_tag"]["key_type"] = "ssh-rsa"
+        invalid.append(json.dumps(wrong_type))
+        wrong_fingerprint = json.loads(json.dumps(valid))
+        wrong_fingerprint["release_tag"]["fingerprint"] = "SHA256:" + "A" * 43
+        invalid.append(json.dumps(wrong_fingerprint))
+        wrong_workflow = json.loads(json.dumps(valid))
+        wrong_workflow["github"]["workflow_identity_template"] = "https://example.invalid/{version}"
+        invalid.append(json.dumps(wrong_workflow))
+        invalid.append(self.config.read_text(encoding="utf-8").replace('"schema_version": 1', '"schema_version": 1, "schema_version": 1'))
+
+        for content in invalid:
+            with self.subTest(content=content):
+                self.config.write_text(content, encoding="utf-8")
+                result = self.check("v0.1.0", tagged_commit)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("signing identity configuration", result.stderr)
+
+    def sign_tag(self):
+        self.git(
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            f"user.signingkey={self.signing_key}",
+            "tag",
+            "-s",
+            "v0.1.0",
+            "-m",
+            "signed",
+        )
+
+    def write_config(self, *, key=None, principal="release@example.invalid"):
+        key = self.signing_key if key is None else key
+        key_type, encoded_key, *_ = key.with_suffix(".pub").read_text(encoding="ascii").split()
+        fingerprint = self.run_command("ssh-keygen", "-lf", str(key.with_suffix(".pub")), "-E", "sha256", cwd=self.root).stdout.split()[1]
+        self.config.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "release_tag": {
+                        "principal": principal,
+                        "key_type": key_type,
+                        "public_key": f"{key_type} {encoded_key}",
+                        "fingerprint": fingerprint,
+                    },
+                    "github": {
+                        "oidc_issuer": "https://token.actions.githubusercontent.com",
+                        "repository": "robintra/PerfSentinelHub",
+                        "repository_url": "https://github.com/robintra/PerfSentinelHub",
+                        "release_workflow": ".github/workflows/release.yml",
+                        "tag_ref_template": "refs/tags/v{version}",
+                        "workflow_identity_template": "https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v{version}",
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
     def check(self, tag, commit):
         return self.run_command(sys.executable, str(TAG_CHECKER), tag, commit, cwd=self.repository, check=False)
 
     def git(self, *arguments):
         return self.run_command("git", *arguments, cwd=self.repository)
+
+    def git_result(self, *arguments):
+        return self.run_command("git", *arguments, cwd=self.repository, check=False)
 
     def git_output(self, *arguments):
         return self.git(*arguments).stdout.strip()

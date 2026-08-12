@@ -21,6 +21,20 @@ VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 REPOSITORY = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+IMAGE_REPOSITORY = re.compile(
+    r"^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?/)?"
+    r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$"
+)
+IMAGE_HELPER = '''{{- define "perf-sentinel-hub.image" -}}
+{{- $repositoryPattern := "^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$" -}}
+{{- if not (regexMatch $repositoryPattern .Values.image.repository) -}}
+{{- fail "image.repository must contain neither a tag nor a digest" -}}
+{{- end -}}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest) -}}
+{{- fail "image.digest must be an immutable sha256 digest" -}}
+{{- end -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- end }}'''
 PROVENANCE_TYPE = "https://slsa.dev/provenance/v1"
 SBOM_TYPE = "https://spdx.dev/Document/v2.3"
 SIGSTORE_MEDIA_TYPE = "application/vnd.dev.sigstore.bundle.v0.3+json"
@@ -217,14 +231,26 @@ def validate_chart(path: Path, version: str, image_digest: str):
     try:
         chart = members[prefix + "Chart.yaml"].decode("utf-8")
         values = members[prefix + "values.yaml"].decode("utf-8")
+        helpers = members[prefix + "templates/_helpers.tpl"].decode("utf-8")
         deployment = members[prefix + "templates/deployment.yaml"].decode("utf-8")
     except (KeyError, UnicodeError) as error:
         raise ValueError(f"chart required files are missing or invalid: {error}") from error
     if f"version: {version}\n" not in chart or f'appVersion: "{version}"\n' not in chart:
         raise ValueError("chart version differs from release")
-    if re.search(r"(?m)^\s+tag\s*:", values) or f"  digest: {image_digest}\n" not in values:
+    repositories = re.findall(r"(?m)^  repository: ([^\s#]+)\s*$", values)
+    if len(repositories) != 1 or IMAGE_REPOSITORY.fullmatch(repositories[0]) is None:
+        raise ValueError("chart image repository must contain neither a tag nor a digest")
+    if re.search(r"(?m)^\s+tag\s*:", values) or values.count(f"  digest: {image_digest}\n") != 1:
         raise ValueError("chart must contain the immutable image digest and no tag")
-    if ".Values.image.tag" in deployment or 'image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"' not in deployment:
+    helper_definitions = sum(
+        content.count(b'define "perf-sentinel-hub.image"')
+        for name, content in members.items()
+        if name.startswith(prefix + "templates/")
+    )
+    if helper_definitions != 1 or IMAGE_HELPER not in helpers:
+        raise ValueError("chart image helper must validate and join the repository and digest")
+    rendered_image_sources = re.findall(r"(?m)^\s+(?:- )?image:\s*(.+)$", deployment)
+    if rendered_image_sources != ['{{ include "perf-sentinel-hub.image" . | quote }}']:
         raise ValueError("chart deployment must reference repository by immutable digest")
 
 

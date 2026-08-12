@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -13,9 +14,21 @@ from pathlib import Path
 REPOSITORY = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY / "scripts" / "verify-release.py"
 IMAGE_CHECKER = REPOSITORY / "scripts" / "check-image-manifest.py"
+TAG_CHECKER = REPOSITORY / "scripts" / "check-release-tag.py"
 VERSION = "0.1.0"
 COMMIT = "d61dec54c28bac1a092f97089bb2a426bbef39a6"
 RIDS = ("linux-x64", "linux-arm64", "osx-arm64", "win-x64")
+HELM_IMAGE_HELPER = b'''{{- define "perf-sentinel-hub.image" -}}
+{{- $repositoryPattern := "^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$" -}}
+{{- if not (regexMatch $repositoryPattern .Values.image.repository) -}}
+{{- fail "image.repository must contain neither a tag nor a digest" -}}
+{{- end -}}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest) -}}
+{{- fail "image.digest must be an immutable sha256 digest" -}}
+{{- end -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- end }}
+'''
 
 
 def compact_json(payload):
@@ -107,13 +120,13 @@ class ReleaseFixture:
             dsse_bundle(self.subjects, "https://slsa.dev/provenance/v1")
         )
 
-    def oci_archive(self):
+    def oci_archive(self, architectures=("amd64", "arm64")):
         manifests = []
         blobs = {}
         config = b"{}"
         config_digest = hashlib.sha256(config).hexdigest()
         blobs[config_digest] = config
-        for architecture in ("amd64", "arm64"):
+        for architecture in architectures:
             manifest = compact_json(
                 {
                     "schemaVersion": 2,
@@ -142,13 +155,14 @@ class ReleaseFixture:
                 self.add_tar_bytes(archive, f"blobs/sha256/{digest}", content)
         return output.getvalue()
 
-    def chart_archive(self, *, mutable=False):
+    def chart_archive(self, *, mutable=False, repository="ghcr.io/robintra/perf-sentinel-hub"):
         digest = "tag: mutable" if mutable else f"digest: {self.oci_digest}"
-        image = 'image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"' if mutable else 'image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"'
+        image = 'image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"' if mutable else 'image: {{ include "perf-sentinel-hub.image" . | quote }}'
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz") as archive:
             self.add_tar_bytes(archive, "perf-sentinel-hub/Chart.yaml", b"apiVersion: v2\nname: perf-sentinel-hub\nversion: 0.1.0\nappVersion: \"0.1.0\"\n")
-            self.add_tar_bytes(archive, "perf-sentinel-hub/values.yaml", f"image:\n  repository: ghcr.io/robintra/perf-sentinel-hub\n  {digest}\n".encode())
+            self.add_tar_bytes(archive, "perf-sentinel-hub/values.yaml", f"image:\n  repository: {repository}\n  {digest}\n".encode())
+            self.add_tar_bytes(archive, "perf-sentinel-hub/templates/_helpers.tpl", HELM_IMAGE_HELPER)
             self.add_tar_bytes(archive, "perf-sentinel-hub/templates/deployment.yaml", f"containers:\n  - {image}\n".encode())
         return output.getvalue()
 
@@ -259,6 +273,30 @@ class VerifyReleaseTests(unittest.TestCase):
             result = self.create(root, root.parent / f"{root.name}.json")
             self.assertNotEqual(0, result.returncode)
             self.assertIn("SBOM attestation subject", result.stderr)
+
+    def test_chart_repository_rejects_tag_or_digest_but_accepts_registry_port(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = ReleaseFixture(root)
+            (root / fixture.chart).write_bytes(
+                fixture.chart_archive(repository="localhost:5000/team/perf-sentinel-hub")
+            )
+            self.refresh_subject_evidence(root, fixture.chart)
+            result = self.create(root, root.parent / f"{root.name}.json")
+            self.assertEqual(0, result.returncode, result.stderr)
+
+        for repository in (
+            "ghcr.io/robintra/perf-sentinel-hub:latest",
+            "ghcr.io/robintra/perf-sentinel-hub@sha256:" + "a" * 64,
+        ):
+            with self.subTest(repository=repository), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                fixture = ReleaseFixture(root)
+                (root / fixture.chart).write_bytes(fixture.chart_archive(repository=repository))
+                self.refresh_subject_evidence(root, fixture.chart)
+                result = self.create(root, root.parent / f"{root.name}.json")
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("repository", result.stderr)
 
     def create(self, root, manifest, *, image_digest=None):
         if image_digest is None:
@@ -403,33 +441,169 @@ class ImageManifestTests(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertIn("blob digest", result.stderr)
 
+    def test_composes_final_index_from_exact_verified_manifest_digests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = ReleaseFixture.__new__(ReleaseFixture)
+            sources = {}
+            expected = {}
+            for architecture in ("amd64", "arm64"):
+                source = root / f"{architecture}.oci.tar"
+                source.write_bytes(fixture.oci_archive((architecture,)))
+                sources[architecture] = source
+                with tarfile.open(source, "r:") as archive:
+                    index = json.load(archive.extractfile("index.json"))
+                expected[architecture] = index["manifests"][0]["digest"]
+
+            output = root / "multi.oci.tar"
+            digest_file = root / "multi.digest"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(IMAGE_CHECKER),
+                    "--compose-output",
+                    str(output),
+                    "--source",
+                    f"linux/amd64={sources['amd64']}",
+                    "--source",
+                    f"linux/arm64={sources['arm64']}",
+                    "--source-date-epoch",
+                    "1",
+                    "--write-digest",
+                    str(digest_file),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            checked = subprocess.run(
+                [
+                    sys.executable,
+                    str(IMAGE_CHECKER),
+                    "--layout",
+                    str(output),
+                    "--expected-manifest",
+                    f"linux/amd64={expected['amd64']}",
+                    "--expected-manifest",
+                    f"linux/arm64={expected['arm64']}",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, checked.returncode, checked.stderr)
+            mismatch = subprocess.run(
+                [
+                    sys.executable,
+                    str(IMAGE_CHECKER),
+                    "--layout",
+                    str(output),
+                    "--expected-manifest",
+                    "linux/amd64=sha256:" + "f" * 64,
+                    "--expected-manifest",
+                    f"linux/arm64={expected['arm64']}",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(0, mismatch.returncode)
+            self.assertIn("manifest digest", mismatch.stderr)
+
+
+class ReleaseTagCheckerTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary_directory.name)
+        self.repository = self.root / "repository"
+        self.environment = os.environ.copy()
+        self.environment.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
+        self.run_command("git", "init", "-q", "-b", "main", str(self.repository), cwd=self.root)
+        self.git("config", "user.name", "Release test")
+        self.git("config", "user.email", "release@example.invalid")
+        (self.repository / "file").write_text("one\n", encoding="ascii")
+        self.git("add", "file")
+        self.git("commit", "-q", "-m", "one")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def test_rejects_unsigned_annotated_tag(self):
+        self.git("tag", "-a", "v0.1.0", "-m", "unsigned")
+        result = self.check("v0.1.0", self.git_output("rev-parse", "HEAD"))
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("signature", result.stderr)
+
+    def test_accepts_signed_tag_and_rejects_a_different_expected_commit(self):
+        signing_key = self.root / "signing-key"
+        allowed_signers = self.root / "allowed-signers"
+        self.run_command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(signing_key), cwd=self.root)
+        public_key = signing_key.with_suffix(".pub").read_text(encoding="ascii").strip()
+        allowed_signers.write_text(f"release@example.invalid {public_key}\n", encoding="ascii")
+        self.git("config", "gpg.format", "ssh")
+        self.git("config", "user.signingkey", str(signing_key))
+        self.git("config", "gpg.ssh.allowedSignersFile", str(allowed_signers))
+        self.git("tag", "-s", "v0.1.0", "-m", "signed")
+        tagged_commit = self.git_output("rev-parse", "HEAD")
+        accepted = self.check("v0.1.0", tagged_commit)
+        self.assertEqual(0, accepted.returncode, accepted.stderr)
+
+        (self.repository / "file").write_text("two\n", encoding="ascii")
+        self.git("add", "file")
+        self.git("commit", "-q", "-m", "two")
+        rejected = self.check("v0.1.0", self.git_output("rev-parse", "HEAD"))
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("target", rejected.stderr)
+
+    def check(self, tag, commit):
+        return self.run_command(sys.executable, str(TAG_CHECKER), tag, commit, cwd=self.repository, check=False)
+
+    def git(self, *arguments):
+        return self.run_command("git", *arguments, cwd=self.repository)
+
+    def git_output(self, *arguments):
+        return self.git(*arguments).stdout.strip()
+
+    def run_command(self, *arguments, cwd, check=True):
+        result = subprocess.run(arguments, cwd=cwd, env=self.environment, text=True, capture_output=True)
+        if check:
+            self.assertEqual(0, result.returncode, result.stderr)
+        return result
+
 
 class ReleaseWorkflowTests(unittest.TestCase):
     def test_repository_chart_renders_only_the_immutable_image_digest(self):
         digest = "sha256:" + "b" * 64
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "test",
-                str(REPOSITORY / "deploy/helm/perf-sentinel-hub"),
-                "--set",
-                f"image.digest={digest}",
-                "--set",
-                "sources[0].id=test",
-                "--set",
-                "sources[0].name=test",
-                "--set",
-                "sources[0].environment=test",
-                "--set",
-                "sources[0].baseUrl=http://perf-sentinel:4318",
-            ],
-            text=True,
-            capture_output=True,
-        )
+        command = [
+            "helm",
+            "template",
+            "test",
+            str(REPOSITORY / "deploy/helm/perf-sentinel-hub"),
+            "--set-string",
+            "image.repository=localhost:5000/team/perf-sentinel-hub",
+            "--set",
+            f"image.digest={digest}",
+            "--set",
+            "sources[0].id=test",
+            "--set",
+            "sources[0].name=test",
+            "--set",
+            "sources[0].environment=test",
+            "--set",
+            "sources[0].baseUrl=http://perf-sentinel:4318",
+        ]
+        result = subprocess.run(command, text=True, capture_output=True)
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn(f"image: \"perf-sentinel-hub@{digest}\"", result.stdout)
-        self.assertNotIn("perf-sentinel-hub:local", result.stdout)
+        self.assertIn(f'image: "localhost:5000/team/perf-sentinel-hub@{digest}"', result.stdout)
+
+        for repository in (
+            "ghcr.io/robintra/perf-sentinel-hub:latest",
+            "ghcr.io/robintra/perf-sentinel-hub@sha256:" + "a" * 64,
+        ):
+            invalid = command.copy()
+            invalid[invalid.index("image.repository=localhost:5000/team/perf-sentinel-hub")] = (
+                f"image.repository={repository}"
+            )
+            rejected = subprocess.run(invalid, text=True, capture_output=True)
+            self.assertNotEqual(0, rejected.returncode, repository)
 
     def test_workflow_has_native_duplicate_build_and_build_only_supply_chain(self):
         workflow = REPOSITORY / ".github/workflows/release.yml"
@@ -444,6 +618,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6", content)
         self.assertIn("cosign verify-blob", content)
         self.assertIn("--certificate-oidc-issuer https://token.actions.githubusercontent.com", content)
+        self.assertIn('python3 scripts/check-release-tag.py "$REQUESTED_TAG" "$GITHUB_SHA"', content)
+        self.assertIn("--compose-output", content)
+        self.assertNotIn("--platform linux/amd64,linux/arm64", content)
         self.assertNotIn("slsa-framework/slsa-github-generator/", content)
         for forbidden in ("docker push", "--push", "gh release", "packages: write", "contents: write"):
             self.assertNotIn(forbidden, content)

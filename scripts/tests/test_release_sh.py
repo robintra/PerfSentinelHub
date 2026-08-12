@@ -159,7 +159,7 @@ class ReleaseScriptTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.repository / "deploy/helm/perf-sentinel-hub/Chart.yaml").write_text(
-            'apiVersion: v2\nname: perf-sentinel-hub\nversion: 0.1.0\nappVersion: "0.1.0"\n',
+            'apiVersion: v2\nname: perf-sentinel-hub\ntype: application\nversion: 0.1.0\nappVersion: "0.1.0"\n',
             encoding="utf-8",
         )
         (self.repository / "CHANGELOG.md").write_text(

@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 import re
+import shlex
 import sys
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 
 STABLE_TAG = re.compile(r"^v0\.[0-9]+\.[0-9]+$")
+STABLE_VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
+CHART_ENTRY = re.compile(r"^(?P<key>[A-Za-z][A-Za-z0-9_-]*)[ ]*:[ ]*(?P<value>.*?)[ ]*$")
+IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
+VERSION_PROPERTIES = frozenset(("Version", "VersionPrefix", "VersionSuffix"))
 
 
 def fail(message: str) -> None:
@@ -29,20 +34,92 @@ def exactly_one(values: list[str], description: str) -> str:
     return values[0]
 
 
-def project_version(root: Path) -> str:
-    path = root / "PerfSentinelHub/PerfSentinelHub.csproj"
+def parse_project(path: Path, description: str):
     try:
-        project = ElementTree.fromstring(read(path, "project version"))
+        project = ElementTree.fromstring(read(path, description))
     except ElementTree.ParseError as error:
-        fail(f"project version XML is malformed: {error}")
-    values = [element.text.strip() for element in project.iter() if element.tag.rsplit("}", 1)[-1] == "Version" and element.text]
-    return exactly_one(values, "project version")
+        fail(f"{description} XML is malformed: {error}")
+    if project.tag != "Project" or any(not isinstance(element.tag, str) or "}" in element.tag for element in project.iter()):
+        fail(f"{description} XML structure is not canonical")
+    return project
 
 
-def chart_value(root: Path, key: str, description: str) -> str:
-    chart = read(root / "deploy/helm/perf-sentinel-hub/Chart.yaml", description)
-    pattern = re.compile(rf"^{re.escape(key)}:[ \t]*['\"]?([^'\"# \t]+)['\"]?[ \t]*(?:#.*)?$", re.MULTILINE)
-    return exactly_one(pattern.findall(chart), description)
+def project_version(root: Path) -> str:
+    project = parse_project(root / "PerfSentinelHub/PerfSentinelHub.csproj", "project version")
+    elements = list(project.iter())
+    if any(element.tag == "Import" for element in elements):
+        fail("project version cannot depend on an explicit import")
+    if any(element.tag in VERSION_PROPERTIES - {"Version"} for element in elements):
+        fail("project version cannot use VersionPrefix or VersionSuffix")
+
+    versions = [element for element in elements if element.tag == "Version"]
+    if len(versions) != 1:
+        fail("project version must have exactly one declaration")
+    version = versions[0]
+    parent_groups = [
+        group
+        for group in list(project)
+        if group.tag == "PropertyGroup" and version in list(group)
+    ]
+    if (
+        len(parent_groups) != 1
+        or parent_groups[0].attrib
+        or version.attrib
+        or list(version)
+        or version.text is None
+    ):
+        fail("project version must be one unconditional canonical property")
+
+    for name in ("Directory.Build.props", "Directory.Build.targets"):
+        path = root / name
+        if not path.exists():
+            continue
+        imported = parse_project(path, "project version import")
+        if any(element.tag == "Import" or element.tag in VERSION_PROPERTIES for element in imported.iter()):
+            fail(f"project version can be overridden by {name}")
+
+    value = version.text.strip()
+    if STABLE_VERSION.fullmatch(value) is None:
+        fail("project version must be canonical 0.MINOR.PATCH")
+    return value
+
+
+def chart_scalar(value: str) -> str:
+    if value.startswith("'"):
+        match = re.fullmatch(r"'((?:[^']|'')*)'[ ]*(?:#.*)?", value)
+        if match is None:
+            fail("chart structure contains a noncanonical single-quoted scalar")
+        return match.group(1).replace("''", "'")
+    if value.startswith('"'):
+        match = re.fullmatch(r'"([^"\\]*)"[ ]*(?:#.*)?', value)
+        if match is None:
+            fail("chart structure contains a noncanonical double-quoted scalar")
+        return match.group(1)
+    scalar = re.split(r"[ ]+#", value, maxsplit=1)[0].rstrip()
+    if not scalar or scalar[0] in "[{&*!|>@`" or "\t" in scalar:
+        fail("chart structure contains a noncanonical scalar")
+    return scalar
+
+
+def chart_values(root: Path) -> dict[str, str]:
+    chart = read(root / "deploy/helm/perf-sentinel-hub/Chart.yaml", "chart structure")
+    values = {}
+    for number, line in enumerate(chart.splitlines(), start=1):
+        if not line or line.startswith("#"):
+            continue
+        if line[0].isspace():
+            fail(f"chart structure line {number} is not a top-level mapping entry")
+        match = CHART_ENTRY.fullmatch(line)
+        if match is None:
+            fail(f"chart structure line {number} is not canonical")
+        key = match.group("key")
+        if key in values:
+            description = f"chart {key}" if key in {"version", "appVersion"} else "chart structure"
+            fail(f"{description} must have exactly one declaration")
+        values[key] = chart_scalar(match.group("value"))
+    if values.get("apiVersion") != "v2" or values.get("name") != "perf-sentinel-hub" or values.get("type") != "application":
+        fail("chart structure must identify the v2 perf-sentinel-hub application")
+    return values
 
 
 def changelog_versions(root: Path) -> list[str]:
@@ -50,13 +127,59 @@ def changelog_versions(root: Path) -> list[str]:
     return re.findall(r"^## \[([^]]+)](?: - [0-9]{4}-[0-9]{2}-[0-9]{2})?[ \t]*$", changelog, re.MULTILINE)
 
 
+def docker_instructions(text: str) -> list[str]:
+    instructions = []
+    parts = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not parts and stripped.startswith("#"):
+            directive = re.fullmatch(r"#[ ]*escape[ ]*=[ ]*(.)[ ]*", stripped, re.IGNORECASE)
+            if directive and directive.group(1) != "\\":
+                fail("image version label requires the canonical Dockerfile escape character")
+        if not parts and (not stripped or stripped.startswith("#")):
+            continue
+        end = line.rstrip()
+        backslashes = len(end) - len(end.rstrip("\\"))
+        continued = backslashes % 2 == 1
+        if continued:
+            end = end[:-1]
+        parts.append(end.strip())
+        if not continued:
+            instructions.append(" ".join(parts))
+            parts = []
+    if parts:
+        fail("image version label is inside an unterminated Dockerfile instruction")
+    return instructions
+
+
 def image_version(root: Path) -> str:
     dockerfile = read(root / "Dockerfile", "image version label")
-    values = re.findall(
-        r'^LABEL[ \t]+org\.opencontainers\.image\.version=["\']([^"\']+)["\'][ \t]*$',
-        dockerfile,
-        re.MULTILINE,
-    )
+    values = []
+    for instruction in docker_instructions(dockerfile):
+        match = re.match(r"^(?P<name>[A-Za-z]+)(?:[ \t]+(?P<body>.*))?$", instruction)
+        if match is None or match.group("name").casefold() != "label":
+            continue
+        body = match.group("body") or ""
+        if body.lstrip().startswith("["):
+            if IMAGE_VERSION_LABEL.casefold() in body.casefold():
+                fail("image version label cannot use a JSON-like LABEL form")
+            continue
+        try:
+            fields = shlex.split(body, comments=False, posix=True)
+        except ValueError:
+            if IMAGE_VERSION_LABEL.casefold() in body.casefold():
+                fail("image version label is not a canonical LABEL field")
+            continue
+        if any("=" not in field for field in fields):
+            if IMAGE_VERSION_LABEL.casefold() in body.casefold():
+                fail("image version label must use key=value LABEL syntax")
+            continue
+        for field in fields:
+            key, value = field.split("=", 1)
+            if key.casefold() == IMAGE_VERSION_LABEL.casefold():
+                if key != IMAGE_VERSION_LABEL:
+                    fail("image version label key is not canonical")
+                values.append(value)
     return exactly_one(values, "image version label")
 
 
@@ -64,10 +187,11 @@ def check(tag: str, root: Path) -> None:
     if STABLE_TAG.fullmatch(tag) is None:
         fail("tag must be a stable tag matching v0.MINOR.PATCH without a suffix")
     version = tag[1:]
+    chart = chart_values(root)
     declarations = (
         ("project version", project_version(root)),
-        ("chart version", chart_value(root, "version", "chart version")),
-        ("chart appVersion", chart_value(root, "appVersion", "chart appVersion")),
+        ("chart version", chart.get("version", "")),
+        ("chart appVersion", chart.get("appVersion", "")),
         ("image version label", image_version(root)),
     )
     for description, declared in declarations:

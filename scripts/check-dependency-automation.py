@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -143,7 +144,14 @@ def has_dependabot_gh_merge(text):
     normalized = re.sub(r"\\\s*\r?\n\s*", " ", text.casefold())
     tokens = WORKFLOW_TOKEN.findall(normalized)
     return any(
-        tokens[index : index + 3] == ["gh", "pr", "merge"]
+        (
+            tokens[index] == "gh"
+            or (
+                posixpath.isabs(tokens[index])
+                and posixpath.basename(tokens[index]) == "gh"
+            )
+        )
+        and tokens[index + 1 : index + 3] == ["pr", "merge"]
         for index in range(len(tokens) - 2)
     )
 

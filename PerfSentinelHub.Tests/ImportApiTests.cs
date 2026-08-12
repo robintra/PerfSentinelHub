@@ -9,7 +9,7 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
-    private const string ApiKey = "0123456789abcdef0123456789abcdef";
+    private const string ApiKey = "0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
     private readonly HttpClient _client = factory.CreateClient();
 
     [Theory]

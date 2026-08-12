@@ -96,7 +96,7 @@ public sealed class ConfigurationTests
     [Fact]
     public void Import_key_is_trimmed_like_the_daemon_trims_its_key_file()
     {
-        var source = ValidSource() with { ImportApiKey = "0123456789abcdef0123456789abcdef\n" };
+        var source = ValidSource() with { ImportApiKey = "0123456789abcdef0123456789abcdef\n" }; // gitleaks:allow -- synthetic test credential
         var options = ValidOptions() with { Sources = [source] };
 
         Assert.Equal("0123456789abcdef0123456789abcdef", source.ImportApiKey);

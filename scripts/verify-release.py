@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -21,6 +22,10 @@ VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 REPOSITORY = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+PUBLIC_REPOSITORY = "robintra/PerfSentinelHub"
+PUBLIC_RELEASE_URL = re.compile(
+    rf"^https://github[.]com/{re.escape(PUBLIC_REPOSITORY)}/releases/tag/(v0[.][0-9]+[.][0-9]+)$"
+)
 IMAGE_REPOSITORY = re.compile(
     r"^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?/)?"
     r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$"
@@ -423,6 +428,44 @@ def verify_manifest(root: Path, path: Path):
     validate_evidence(files, expected_subjects, image["digest"], manifest["version"])
 
 
+def public_release_input(value: str):
+    tag = value if re.fullmatch(r"v0[.][0-9]+[.][0-9]+", value) else None
+    if tag is None:
+        match = PUBLIC_RELEASE_URL.fullmatch(value)
+        tag = match.group(1) if match else None
+    if tag is None:
+        raise ValueError("public release input must be a stable tag or the exact public GitHub Release URL")
+    return {
+        "repository": PUBLIC_REPOSITORY,
+        "tag": tag,
+        "url": f"https://github.com/{PUBLIC_REPOSITORY}/releases/tag/{tag}",
+    }
+
+
+def verify_published(root: Path):
+    files = regular_files(root)
+    if "SHA256SUMS" not in files or "release-manifest.json" not in files:
+        raise ValueError("published release requires SHA256SUMS and release-manifest.json")
+    checksums = {}
+    pattern = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
+    for line in files["SHA256SUMS"].read_text(encoding="ascii").splitlines():
+        match = pattern.fullmatch(line)
+        if match is None or match.group(2) in checksums or match.group(2) == "SHA256SUMS":
+            raise ValueError("SHA256SUMS is not canonical")
+        checksums[match.group(2)] = match.group(1)
+    if set(checksums) != set(files) - {"SHA256SUMS"}:
+        raise ValueError("SHA256SUMS differs from the exact published asset set")
+    for name, digest in checksums.items():
+        if sha256(files[name]) != digest:
+            raise ValueError(f"{name}: sha256 mismatch")
+    with tempfile.TemporaryDirectory(prefix="perf-sentinel-public-release-") as directory:
+        verification_root = Path(directory)
+        for name, path in files.items():
+            if name not in {"SHA256SUMS", "release-manifest.json"}:
+                shutil.copyfile(path, verification_root / name)
+        verify_manifest(verification_root, files["release-manifest.json"])
+
+
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -436,6 +479,10 @@ def parser():
     verify = commands.add_parser("verify")
     verify.add_argument("--root", type=Path, required=True)
     verify.add_argument("--manifest", type=Path, required=True)
+    public_input = commands.add_parser("public-input")
+    public_input.add_argument("value")
+    published = commands.add_parser("verify-published")
+    published.add_argument("--root", type=Path, required=True)
     return result
 
 
@@ -451,8 +498,13 @@ def main(argv=None):
                 arguments.image_digest,
             )
             write_manifest(arguments.manifest, payload)
-        else:
+        elif arguments.command == "verify":
             verify_manifest(arguments.root, arguments.manifest)
+        elif arguments.command == "public-input":
+            json.dump(public_release_input(arguments.value), sys.stdout, sort_keys=True)
+            sys.stdout.write("\n")
+        else:
+            verify_published(arguments.root)
         return 0
     except (OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)

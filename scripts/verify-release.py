@@ -19,6 +19,7 @@ from pathlib import Path, PurePosixPath
 
 RIDS = ("linux-x64", "linux-arm64", "osx-arm64", "win-x64")
 VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
+STABLE_TAG = re.compile(r"^v0[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 REPOSITORY = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -429,10 +430,10 @@ def verify_manifest(root: Path, path: Path):
 
 
 def public_release_input(value: str):
-    tag = value if re.fullmatch(r"v0[.][0-9]+[.][0-9]+", value) else None
+    tag = value if STABLE_TAG.fullmatch(value) else None
     if tag is None:
         match = PUBLIC_RELEASE_URL.fullmatch(value)
-        tag = match.group(1) if match else None
+        tag = match.group(1) if match and STABLE_TAG.fullmatch(match.group(1)) else None
     if tag is None:
         raise ValueError("public release input must be a stable tag or the exact public GitHub Release URL")
     return {
@@ -440,6 +441,30 @@ def public_release_input(value: str):
         "tag": tag,
         "url": f"https://github.com/{PUBLIC_REPOSITORY}/releases/tag/{tag}",
     }
+
+
+def latest_stable(content: bytes) -> str:
+    pages = load_json_bytes(content, "GitHub releases response")
+    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+        raise ValueError("GitHub releases response must contain every paginated page")
+    versions = {}
+    for release in (item for page in pages for item in page):
+        if not isinstance(release, dict):
+            raise ValueError("GitHub release entry must be an object")
+        tag = release.get("tag_name")
+        draft = release.get("draft")
+        prerelease = release.get("prerelease")
+        if not isinstance(tag, str) or type(draft) is not bool or type(prerelease) is not bool:
+            raise ValueError("GitHub release entry has invalid stable-selection fields")
+        match = STABLE_TAG.fullmatch(tag)
+        if match is None or draft or prerelease:
+            continue
+        if tag in versions:
+            raise ValueError(f"ambiguous stable release tag {tag}")
+        versions[tag] = (int(match.group(1)), int(match.group(2)))
+    if not versions:
+        raise ValueError("no canonical stable v0 release exists")
+    return max(versions, key=versions.get)
 
 
 def verify_published(root: Path):
@@ -481,6 +506,7 @@ def parser():
     verify.add_argument("--manifest", type=Path, required=True)
     public_input = commands.add_parser("public-input")
     public_input.add_argument("value")
+    commands.add_parser("latest-stable")
     published = commands.add_parser("verify-published")
     published.add_argument("--root", type=Path, required=True)
     return result
@@ -503,6 +529,8 @@ def main(argv=None):
         elif arguments.command == "public-input":
             json.dump(public_release_input(arguments.value), sys.stdout, sort_keys=True)
             sys.stdout.write("\n")
+        elif arguments.command == "latest-stable":
+            print(latest_stable(sys.stdin.buffer.read()))
         else:
             verify_published(arguments.root)
         return 0

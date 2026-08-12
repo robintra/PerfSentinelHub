@@ -2,6 +2,7 @@
 """Require README badges to point at their canonical evidence."""
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 
 
 SDK_VERSION = "10.0.302"
+LICENSE_SHA256 = "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
 BADGES = {
     "CI": (
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg",
@@ -77,6 +79,10 @@ LINKED_BADGE = re.compile(
     r"\((?P<destination>[^\s)]+)\)"
 )
 IMAGE = re.compile(r"!\[(?P<label>[^\]]*)\]\((?P<image>[^\s)]+)\)")
+NONCANONICAL_IMAGE = re.compile(
+    r"!\[[^\]\r\n]*\]\[[^\]\r\n]+\]|<\s*/?\s*(?:img|picture|svg)\b",
+    re.IGNORECASE,
+)
 
 
 def validate(root: Path):
@@ -85,6 +91,9 @@ def validate(root: Path):
     badge_block = readme[heading.end():].split("\n\n", 1)[0] if heading else ""
     linked = list(LINKED_BADGE.finditer(badge_block))
     errors = []
+
+    if NONCANONICAL_IMAGE.search(badge_block):
+        errors.append("unsupported image syntax in top badge block")
 
     for label, (image, destination, evidence) in BADGES.items():
         candidates = [match for match in linked if match.group("label") == label]
@@ -115,13 +124,9 @@ def validate(root: Path):
     sdk = global_json.get("sdk") if isinstance(global_json, dict) else None
     if not isinstance(sdk, dict) or sdk.get("version") != SDK_VERSION:
         errors.append(".NET badge differs from global.json")
-    license_text = (root / "LICENSE").read_text(encoding="utf-8")
-    agpl_v3 = (
-        "GNU AFFERO GENERAL PUBLIC LICENSE" in license_text
-        and "Version 3, 19 November 2007" in license_text
-    )
-    if not agpl_v3:
-        errors.append("License badge requires GNU AGPL version 3 evidence")
+    license_digest = hashlib.sha256((root / "LICENSE").read_bytes()).hexdigest()
+    if license_digest != LICENSE_SHA256:
+        errors.append("License badge differs from canonical AGPL-3.0-only")
 
     return errors
 

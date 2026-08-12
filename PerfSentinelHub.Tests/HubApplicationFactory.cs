@@ -44,7 +44,7 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
                     Name = "Test",
                     Environment = "test",
                     BaseUrl = new Uri("http://127.0.0.1:1"),
-                    ImportApiKey = "0123456789abcdef0123456789abcdef"
+                    ImportApiKey = "0123456789abcdef0123456789abcdef" // gitleaks:allow -- synthetic test credential
                 }];
             });
             services.RemoveAll<TimeProvider>();

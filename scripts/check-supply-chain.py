@@ -916,6 +916,15 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
             text = source_file.read()
         lines = text.split("\n")
         is_workflow = suffix in {".yml", ".yaml"}
+        download_declarations = [
+            (number, content)
+            for number, line in enumerate(lines, start=1)
+            if not (content := line.lstrip(" \t")).startswith("#")
+            and (
+                DOWNLOAD_COMMAND.search(content)
+                or any(artifact_url in content for artifact_url in artifact_urls)
+            )
+        ]
         for number, line in enumerate(lines, start=1):
             content = line.lstrip(" \t")
             if is_workflow and not content.startswith("#") and (
@@ -958,18 +967,13 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
                         elif expected["digest_or_sha"].lower() != digest.lower():
                             errors.append(f"{path.relative_to(root)}:{number}: container {image_name} differs from the inventory")
 
-        if suffix == ".sh":
+        if suffix == ".sh" and download_declarations:
             errors.extend(validate_download_script(path, root, text, inventory))
-        else:
-            for number, line in enumerate(lines, start=1):
-                content = line.lstrip(" \t")
-                if not content.startswith("#") and (
-                    DOWNLOAD_COMMAND.search(content)
-                    or any(artifact_url in content for artifact_url in artifact_urls)
-                ):
-                    errors.append(
-                        f"{path.relative_to(root)}:{number}: download declarations are only permitted in canonical .sh shell scripts"
-                    )
+        elif suffix != ".sh":
+            for number, _ in download_declarations:
+                errors.append(
+                    f"{path.relative_to(root)}:{number}: download declarations are only permitted in canonical .sh shell scripts"
+                )
 
     global_json = root / "global.json"
     if not global_json.is_file():

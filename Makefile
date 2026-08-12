@@ -7,7 +7,7 @@ override QODANA_RESULTS := artifacts/qodana
 override QODANA_IMAGE := jetbrains/qodana-dotnet:2026.1@sha256:c893fb5f5dbe54cd4b9c2cb1bd11d711242add66c5a3ac65fe7fc302cdb8c0a3
 QODANA_TIMEOUT_SECONDS ?= 1800
 
-.PHONY: tool-restore restore format build coverage coverage-check analysis-config-check security-exceptions security sonar-prepare qodana python-tests test publish package-native audit image image-scan helm-lint helm-template verify-fast verify
+.PHONY: tool-restore restore format build coverage coverage-check analysis-config-check security-exceptions security sonar-prepare qodana python-tests test publish package-native audit image image-scan helm-lint helm-template release-check verify-fast verify
 
 tool-restore:
 	dotnet tool restore
@@ -92,6 +92,10 @@ helm-lint:
 
 helm-template:
 	helm template test deploy/helm/perf-sentinel-hub --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318' >/dev/null
+
+release-check:
+	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }
+	python3 scripts/check-version.py "v$(VERSION)"
 
 verify-fast: tool-restore format python-tests coverage-check analysis-config-check
 

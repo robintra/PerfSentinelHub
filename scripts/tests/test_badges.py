@@ -83,7 +83,10 @@ def write_root(
     sdk_version="10.0.302",
     license_text=CANONICAL_LICENSE,
 ):
-    (root / "README.md").write_text(readme, encoding="utf-8")
+    if isinstance(readme, bytes):
+        (root / "README.md").write_bytes(readme)
+    else:
+        (root / "README.md").write_text(readme, encoding="utf-8")
     workflows = root / ".github" / "workflows"
     workflows.mkdir(parents=True)
     for name in ("ci.yml", "codeql.yml", "release.yml"):
@@ -119,6 +122,20 @@ class BadgeTests(unittest.TestCase):
         result = run_checker(complete_readme())
 
         self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_non_lf_line_endings_in_the_canonical_prefix(self):
+        canonical = complete_readme().encode()
+        variants = {
+            "CRLF": canonical.replace(b"\n", b"\r\n"),
+            "CR": canonical.replace(b"\n", b"\r"),
+            "mixed": canonical.replace(b"\n", b"\r\n", 1),
+        }
+        for name, readme in variants.items():
+            with self.subTest(name=name):
+                result = run_checker(readme)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical top badge block", result.stderr)
 
     def test_rejects_collapsed_shortcut_and_title_variants(self):
         first, second = (

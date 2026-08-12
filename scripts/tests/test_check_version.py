@@ -125,6 +125,40 @@ class VersionContractTests(unittest.TestCase):
             self.assertNotEqual(0, implicit.returncode)
             self.assertIn("project version", implicit.stderr)
 
+    def test_rejects_case_insensitive_project_version_overrides_on_the_search_path(self):
+        cases = (
+            (
+                "PerfSentinelHub/PerfSentinelHub.csproj",
+                "<Project><PropertyGroup><Version>0.1.0</Version><versionprefix>0.1.1</versionprefix></PropertyGroup></Project>\n",
+            ),
+            (
+                "Directory.Build.props",
+                "<Project><PropertyGroup><version>0.1.1</version></PropertyGroup></Project>\n",
+            ),
+            (
+                "Directory.Build.targets",
+                "<Project><PropertyGroup><versionprefix>0.1.1</versionprefix></PropertyGroup></Project>\n",
+            ),
+            (
+                "PerfSentinelHub/Directory.Build.props",
+                "<Project><PropertyGroup><versionsuffix>rc.1</versionsuffix></PropertyGroup></Project>\n",
+            ),
+            (
+                "PerfSentinelHub/Directory.Build.targets",
+                "<Project><PropertyGroup><version>0.1.1</version></PropertyGroup></Project>\n",
+            ),
+        )
+        for relative, content in cases:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory(dir=self.root) as directory:
+                fixture = Path(directory)
+                self.write_contract(fixture)
+                (fixture / relative).write_text(content, encoding="utf-8")
+
+                result = self.run_checker("v0.1.0", fixture)
+
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("project version", result.stderr)
+
     def test_accepts_minimal_valid_chart_scalar_forms(self):
         variants = (
             ("version : '0.1.0'", "appVersion: 0.1.0"),
@@ -183,6 +217,57 @@ class VersionContractTests(unittest.TestCase):
                 result = self.run_checker("v0.1.0", fixture)
 
                 self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_accepts_the_version_label_in_the_effective_final_docker_stage(self):
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            fixture = Path(directory)
+            self.write_contract(fixture)
+            (fixture / "Dockerfile").write_text(
+                "FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build\n"
+                "WORKDIR /src\n"
+                "FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final\n"
+                "LABEL org.opencontainers.image.title=perf-sentinel-hub \\\n"
+                "      org.opencontainers.image.version=\"0.1.0\"\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("v0.1.0", fixture)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_missing_or_ambiguous_final_docker_stage_version_labels(self):
+        dockerfiles = (
+            (
+                "label only in build stage",
+                "FROM scratch AS build\n"
+                "LABEL org.opencontainers.image.version=0.1.0\n"
+                "FROM scratch AS final\n",
+            ),
+            (
+                "labels in build and final stages",
+                "FROM scratch AS build\n"
+                "LABEL org.opencontainers.image.version=0.1.0\n"
+                "FROM scratch AS final\n"
+                "LABEL org.opencontainers.image.version=0.1.0\n",
+            ),
+            (
+                "duplicate labels in final stage",
+                "FROM scratch AS build\n"
+                "FROM scratch AS final\n"
+                "LABEL org.opencontainers.image.version=0.1.0\n"
+                "LABEL org.opencontainers.image.version=0.1.0\n",
+            ),
+        )
+        for name, dockerfile in dockerfiles:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(dir=self.root) as directory:
+                fixture = Path(directory)
+                self.write_contract(fixture)
+                (fixture / "Dockerfile").write_text(dockerfile, encoding="utf-8")
+
+                result = self.run_checker("v0.1.0", fixture)
+
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("image version label", result.stderr)
 
     def test_rejects_every_duplicate_or_noncanonical_docker_version_label(self):
         additions = (

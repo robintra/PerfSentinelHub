@@ -14,7 +14,7 @@ STABLE_TAG = re.compile(r"^v0\.[0-9]+\.[0-9]+$")
 STABLE_VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
 CHART_ENTRY = re.compile(r"^(?P<key>[A-Za-z][A-Za-z0-9_-]*)[ ]*:[ ]*(?P<value>.*?)[ ]*$")
 IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
-VERSION_PROPERTIES = frozenset(("Version", "VersionPrefix", "VersionSuffix"))
+VERSION_PROPERTIES = frozenset(("version", "versionprefix", "versionsuffix"))
 
 
 def fail(message: str) -> None:
@@ -28,12 +28,6 @@ def read(path: Path, description: str) -> str:
         fail(f"{description} cannot be read: {error}")
 
 
-def exactly_one(values: list[str], description: str) -> str:
-    if len(values) != 1:
-        fail(f"{description} must have exactly one declaration")
-    return values[0]
-
-
 def parse_project(path: Path, description: str):
     try:
         project = ElementTree.fromstring(read(path, description))
@@ -45,14 +39,15 @@ def parse_project(path: Path, description: str):
 
 
 def project_version(root: Path) -> str:
-    project = parse_project(root / "PerfSentinelHub/PerfSentinelHub.csproj", "project version")
+    project_path = root / "PerfSentinelHub/PerfSentinelHub.csproj"
+    project = parse_project(project_path, "project version")
     elements = list(project.iter())
-    if any(element.tag == "Import" for element in elements):
+    if any(element.tag.casefold() == "import" for element in elements):
         fail("project version cannot depend on an explicit import")
-    if any(element.tag in VERSION_PROPERTIES - {"Version"} for element in elements):
+    if any(element.tag.casefold() in VERSION_PROPERTIES - {"version"} for element in elements):
         fail("project version cannot use VersionPrefix or VersionSuffix")
 
-    versions = [element for element in elements if element.tag == "Version"]
+    versions = [element for element in elements if element.tag.casefold() == "version"]
     if len(versions) != 1:
         fail("project version must have exactly one declaration")
     version = versions[0]
@@ -63,6 +58,7 @@ def project_version(root: Path) -> str:
     ]
     if (
         len(parent_groups) != 1
+        or version.tag != "Version"
         or parent_groups[0].attrib
         or version.attrib
         or list(version)
@@ -70,13 +66,17 @@ def project_version(root: Path) -> str:
     ):
         fail("project version must be one unconditional canonical property")
 
-    for name in ("Directory.Build.props", "Directory.Build.targets"):
-        path = root / name
-        if not path.exists():
-            continue
-        imported = parse_project(path, "project version import")
-        if any(element.tag == "Import" or element.tag in VERSION_PROPERTIES for element in imported.iter()):
-            fail(f"project version can be overridden by {name}")
+    for directory in (project_path.parent, root):
+        for name in ("Directory.Build.props", "Directory.Build.targets"):
+            path = directory / name
+            if not path.exists():
+                continue
+            imported = parse_project(path, "project version import")
+            if any(
+                element.tag.casefold() == "import" or element.tag.casefold() in VERSION_PROPERTIES
+                for element in imported.iter()
+            ):
+                fail(f"project version can be overridden by {path.relative_to(root)}")
 
     value = version.text.strip()
     if STABLE_VERSION.fullmatch(value) is None:
@@ -154,10 +154,17 @@ def docker_instructions(text: str) -> list[str]:
 
 def image_version(root: Path) -> str:
     dockerfile = read(root / "Dockerfile", "image version label")
+    stage = -1
     values = []
     for instruction in docker_instructions(dockerfile):
         match = re.match(r"^(?P<name>[A-Za-z]+)(?:[ \t]+(?P<body>.*))?$", instruction)
-        if match is None or match.group("name").casefold() != "label":
+        if match is None:
+            continue
+        name = match.group("name").casefold()
+        if name == "from":
+            stage += 1
+            continue
+        if name != "label":
             continue
         body = match.group("body") or ""
         if body.lstrip().startswith("["):
@@ -179,8 +186,10 @@ def image_version(root: Path) -> str:
             if key.casefold() == IMAGE_VERSION_LABEL.casefold():
                 if key != IMAGE_VERSION_LABEL:
                     fail("image version label key is not canonical")
-                values.append(value)
-    return exactly_one(values, "image version label")
+                values.append((stage, value))
+    if stage < 0 or len(values) != 1 or values[0][0] != stage:
+        fail("image version label must have exactly one declaration in the final Docker stage")
+    return values[0][1]
 
 
 def check(tag: str, root: Path) -> None:

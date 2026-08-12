@@ -5,68 +5,315 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Stable release tag; empty selects the latest stable release
+      release:
+        description: Stable tag or exact GitHub Release URL; empty selects latest stable
         required: false
         type: string
+  schedule:
+    - cron: '17 5 * * *'
 
 permissions: {}
 
 concurrency:
-  group: release-verification-${{ inputs.tag || github.event.release.tag_name || 'latest' }}
+  group: release-verification-${{ inputs.release || github.event.release.tag_name || 'latest-stable' }}
   cancel-in-progress: false
 
 jobs:
-  checksums:
-    name: Verify public release checksums
+  public-release:
+    name: Download latest-stable public assets
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      source_commit: ${{ steps.release.outputs.source_commit }}
+      image_digest: ${{ steps.release.outputs.image_digest }}
     steps:
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
-      - name: Download the selected public stable release
+      - id: release
+        name: Resolve tag or URL, download assets, and verify SHA256SUMS
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUESTED_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          REQUESTED_RELEASE: ${{ inputs.release || github.event.release.tag_name }}
         run: |
-          tag="$REQUESTED_TAG"
+          set -euo pipefail
+          tag="$REQUESTED_RELEASE"
+          case "$tag" in
+            https://github.com/robintra/PerfSentinelHub/releases/tag/v0.*.*) tag="${tag##*/}" ;;
+            http*) exit 1 ;;
+          esac
           if [ -z "$tag" ]; then
-            tag="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v0[.][0-9]+[.][0-9]+$")))] | first | .tag_name')"
+            tag="$(gh api --paginate repos/robintra/PerfSentinelHub/releases --jq '[.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v0[.][0-9]+[.][0-9]+$"))] | first')"
           fi
-          printf '%s' "$tag" | grep -Eq '^v0[.][0-9]+[.][0-9]+$'
-          release_state="$(gh release view "$tag" --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')"
-          test "$release_state" = "false	false	$tag"
-          mkdir -p "$RUNNER_TEMP/release-verification"
-          gh release download "$tag" --dir "$RUNNER_TEMP/release-verification"
-      - name: Verify SHA256SUMS and the exact asset set
-        run: |
-          cd "$RUNNER_TEMP/release-verification"
-          python3 - <<'PY'
-          import hashlib
-          import re
-          from pathlib import Path
+          python3 -c 'import re,sys; raise SystemExit(0 if re.fullmatch(r"v0[.][0-9]+[.][0-9]+",sys.argv[1]) else 1)' "$tag"
+          state="$(gh release view "$tag" --repo robintra/PerfSentinelHub --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')"
+          test "$state" = "false	false	$tag"
+          mkdir public-release
+          gh release download "$tag" --repo robintra/PerfSentinelHub --dir public-release
+          source_commit="$(jq -r .source.commit public-release/release-manifest.json)"
+          printf '%s' "$source_commit" | grep -Eq '^[0-9a-f]{40}$'
+          mkdir scripts
+          gh api -H 'Accept: application/vnd.github.raw+json' "repos/robintra/PerfSentinelHub/contents/scripts/verify-release.py?ref=$source_commit" > scripts/verify-release.py
+          gh api -H 'Accept: application/vnd.github.raw+json' "repos/robintra/PerfSentinelHub/contents/scripts/check-image-manifest.py?ref=$source_commit" > scripts/check-image-manifest.py
+          python3 scripts/verify-release.py verify-published --root public-release
+          {
+            python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); print("source_commit="+m["source"]["commit"]); print("image_digest="+m["image"]["digest"])' public-release/release-manifest.json
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: public-release
+          path: public-release
+          if-no-files-found: error
+          retention-days: 1
 
-          root = Path('.')
-          files = sorted(path.name for path in root.iterdir() if path.is_file())
-          if 'SHA256SUMS' not in files or len(files) < 2:
-              raise SystemExit('release must contain SHA256SUMS and at least one artifact')
-          checksums = {}
-          pattern = re.compile(r'^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$')
-          for line in Path('SHA256SUMS').read_text(encoding='utf-8').splitlines():
-              match = pattern.fullmatch(line)
-              if match is None or match.group(2) == 'SHA256SUMS' or match.group(2) in checksums:
-                  raise SystemExit('SHA256SUMS is malformed or contains a duplicate')
-              checksums[match.group(2)] = match.group(1)
-          if set(checksums) != set(files) - {'SHA256SUMS'}:
-              raise SystemExit('SHA256SUMS does not describe the exact release asset set')
-          for name, expected in checksums.items():
-              digest = hashlib.sha256()
-              with Path(name).open('rb') as artifact:
-                  for chunk in iter(lambda: artifact.read(1024 * 1024), b''):
-                      digest.update(chunk)
-              if digest.hexdigest() != expected:
-                  raise SystemExit(f'{name}: sha256 mismatch')
+  cryptography:
+    name: Verify public attestations and Cosign bundles
+    needs: public-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: public-release
+          path: public-release
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Verify every exact subject with strict public identities
+        env:
+          TAG: ${{ needs.public-release.outputs.tag }}
+          SOURCE_COMMIT: ${{ needs.public-release.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          identity="https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/$TAG"
+          issuer=https://token.actions.githubusercontent.com
+          python3 - <<'PY' > subjects
+          import json
+          for subject in json.load(open('public-release/release-manifest.json', encoding='utf-8'))['subjects']:
+              print(subject['name'])
           PY
+          while read -r subject; do
+            cosign verify-blob --bundle "public-release/$subject.sigstore.json" --certificate-identity "$identity" --certificate-oidc-issuer "$issuer" "public-release/$subject"
+            gh attestation verify "public-release/$subject" --bundle public-release/release.provenance.sigstore.json --repo robintra/PerfSentinelHub --cert-identity "$identity" --cert-oidc-issuer "$issuer" --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
+            gh attestation verify "public-release/$subject" --bundle "public-release/$subject.sbom.sigstore.json" --repo robintra/PerfSentinelHub --predicate-type https://spdx.dev/Document/v2.3 --cert-identity "$identity" --cert-oidc-issuer "$issuer" --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
+          done < subjects
+
+  native:
+    name: Start public native binary (${{ matrix.rid }})
+    needs: public-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+            extension: tar.gz
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+            extension: tar.gz
+          - rid: osx-arm64
+            runner: macos-15
+            extension: tar.gz
+          - rid: win-x64
+            runner: windows-2025
+            extension: zip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: public-release
+          path: public-release
+      - name: Extract the exact public runtime
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.public-release.outputs.version }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, tarfile, zipfile
+          from pathlib import Path, PurePosixPath
+          archive = Path('public-release') / f"perf-sentinel-hub-{os.environ['VERSION']}-{os.environ['RID']}.{os.environ['EXTENSION']}"
+          Path('smoke').mkdir()
+          if archive.suffix == '.zip':
+              with zipfile.ZipFile(archive) as package:
+                  for item in package.infolist():
+                      path = PurePosixPath(item.filename)
+                      if path.is_absolute() or '..' in path.parts:
+                          raise SystemExit('unsafe ZIP path')
+                  package.extractall('smoke')
+          else:
+              with tarfile.open(archive, 'r:gz') as package:
+                  package.extractall('smoke', filter='data')
+          PY
+      - name: Start Unix binary and check readiness
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Sources__0__Id: verify
+          Hub__Sources__0__Name: Verify
+          Hub__Sources__0__Environment: release
+          Hub__Sources__0__BaseUrl: http://127.0.0.1:9
+        run: |
+          set -euo pipefail
+          smoke/PerfSentinelHub --urls http://127.0.0.1:5082 > "$RUNNER_TEMP/native.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import time
+          import urllib.request
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:5082/health/ready', timeout=1) as response:
+                      if response.status == 200:
+                          raise SystemExit(0)
+              except OSError:
+                  time.sleep(.5)
+          raise SystemExit('native health smoke timed out')
+          PY
+      - name: Start Windows binary and check readiness
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Sources__0__Id: verify
+          Hub__Sources__0__Name: Verify
+          Hub__Sources__0__Environment: release
+          Hub__Sources__0__BaseUrl: http://127.0.0.1:9
+        run: |
+          $process = Start-Process (Resolve-Path smoke/PerfSentinelHub.exe) -ArgumentList '--urls','http://127.0.0.1:5082' -PassThru
+          try {
+            foreach ($attempt in 1..40) {
+              try { if ((Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 http://127.0.0.1:5082/health/ready).StatusCode -eq 200) { exit 0 } } catch { Start-Sleep -Milliseconds 500 }
+            }
+            throw 'native health smoke timed out'
+          } finally { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+
+  image:
+    name: Start public image by digest
+    needs: public-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - name: Pull and start only the immutable public digest
+        env:
+          IMAGE_DIGEST: ${{ needs.public-release.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST"
+          docker pull "$image"
+          id="$(docker run -d --rm -p 127.0.0.1:5082:8080 -e Hub__DatabasePath=/tmp/hub.db -e Hub__Sources__0__Id=verify -e Hub__Sources__0__Name=Verify -e Hub__Sources__0__Environment=release -e Hub__Sources__0__BaseUrl=http://127.0.0.1:9 "$image")"
+          trap 'docker stop "$id" >/dev/null 2>&1 || true' EXIT
+          python3 - <<'PY'
+          import time
+          import urllib.request
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:5082/health/ready', timeout=1) as response:
+                      if response.status == 200:
+                          raise SystemExit(0)
+              except OSError:
+                  time.sleep(.5)
+          raise SystemExit('image health smoke timed out')
+          PY
+
+  chart:
+    name: Verify public chart digest and bound image digest
+    needs: public-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: public-release
+          path: public-release
+      - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+        with:
+          version: 1.3.3
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+      - name: Pull chart by digest, compare bytes, and render the same image digest
+        env:
+          VERSION: ${{ needs.public-release.outputs.version }}
+          IMAGE_DIGEST: ${{ needs.public-release.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          chart=ghcr.io/robintra/charts/perf-sentinel-hub
+          chart_digest="$(oras resolve "$chart:$VERSION")"
+          printf '%s' "$chart_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          helm pull "oci://$chart@$chart_digest" --destination chart
+          cmp "public-release/perf-sentinel-hub-$VERSION.tgz" "chart/perf-sentinel-hub-$VERSION.tgz"
+          helm template verify "chart/perf-sentinel-hub-$VERSION.tgz" --set 'sources[0].id=verify' --set 'sources[0].name=Verify' --set 'sources[0].environment=release' --set 'sources[0].baseUrl=http://127.0.0.1:9' > rendered.yaml
+          test "$(grep -Fc "ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST" rendered.yaml)" -eq 1
+
+  report:
+    name: Maintain one sanitized scheduled alert
+    if: always() && github.event_name == 'schedule'
+    needs: [public-release, cryptography, native, image, chart]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FAILED: ${{ needs.public-release.result != 'success' || needs.cryptography.result != 'success' || needs.native.result != 'success' || needs.image.result != 'success' || needs.chart.result != 'success' }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const label = 'release-verification-alert';
+            const title = 'Daily public release verification failed';
+            const body = `Verification failed. Inspect the workflow run: https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            try {
+              await github.rest.issues.getLabel({owner, repo, name: label});
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.issues.createLabel({owner, repo, name: label, color: 'b60205', description: 'Public release verification needs attention'});
+            }
+            const {data: issues} = await github.rest.issues.listForRepo({owner, repo, state: 'open', labels: label, per_page: 100});
+            if (process.env.FAILED === 'true') {
+            if (issues.length) {
+                await github.rest.issues.update({owner, repo, issue_number: issues[0].number, title, body});
+                for (const issue of issues.slice(1)) {
+                  await github.rest.issues.update({owner, repo, issue_number: issue.number, state: 'closed'});
+                }
+              } else {
+                await github.rest.issues.create({owner, repo, title, body, labels: [label]});
+              }
+            } else {
+              for (const issue of issues) {
+                await github.rest.issues.createComment({owner, repo, issue_number: issue.number, body: 'Verification succeeded; closing the alert.'});
+                await github.rest.issues.update({owner, repo, issue_number: issue.number, state: 'closed'});
+              }
+            }

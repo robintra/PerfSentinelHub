@@ -659,6 +659,72 @@ class ReleaseTagCheckerTests(unittest.TestCase):
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
+    def test_public_input_accepts_only_the_canonical_tag_or_release_url_without_a_secret(self):
+        environment = os.environ.copy()
+        for name in ("GH_TOKEN", "GITHUB_TOKEN", "COSIGN_PASSWORD"):
+            environment.pop(name, None)
+        expected = {
+            "repository": "robintra/PerfSentinelHub",
+            "tag": "v0.1.0",
+            "url": "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.1.0",
+        }
+        for value in (expected["tag"], expected["url"]):
+            with self.subTest(value=value):
+                result = subprocess.run(
+                    [sys.executable, str(VERIFIER), "public-input", value],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(expected, json.loads(result.stdout))
+
+        for value in (
+            "v0.1.0-rc.1",
+            "https://github.com/other/PerfSentinelHub/releases/tag/v0.1.0",
+            "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.1.0?download=1",
+        ):
+            with self.subTest(value=value):
+                result = subprocess.run(
+                    [sys.executable, str(VERIFIER), "public-input", value],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(0, result.returncode)
+
+    def test_protected_publish_is_a_pure_promotion_of_one_verified_artifact(self):
+        content = (REPOSITORY / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        self.assertIn("  publish:", content)
+        publish = content.split("\n  publish:\n", 1)[1]
+        self.assertIn("needs: manifest", publish)
+        self.assertIn("environment: hub-release", publish)
+        self.assertIn("artifact-ids: ${{ needs.manifest.outputs.artifact_id }}", publish)
+        self.assertIn("EXPECTED_ARTIFACT_DIGEST: ${{ needs.manifest.outputs.artifact_digest }}", publish)
+        self.assertIn("github-token: ${{ github.token }}", publish)
+        self.assertIn("python3 publish-bundle/scripts/verify-release.py verify-published", publish)
+        for forbidden in (
+            "actions/checkout@",
+            "dotnet ",
+            "docker build",
+            "buildx",
+            "helm package",
+            "package-native.py",
+            "oras resolve",
+        ):
+            self.assertNotIn(forbidden, publish)
+
+    def test_daily_latest_stable_verification_keeps_one_sanitized_issue(self):
+        content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
+        self.assertIn("schedule:", content)
+        self.assertIn("cron: '17 5 * * *'", content)
+        self.assertIn("latest-stable", content)
+        self.assertIn("release-verification-alert", content)
+        self.assertIn("Verification failed. Inspect the workflow run", content)
+        self.assertIn("Verification succeeded; closing the alert", content)
+        for forbidden in ("${{ toJSON(", "SARIF", "artifact body", "secrets."):
+            self.assertNotIn(forbidden, content)
+
     def test_repository_chart_renders_only_the_immutable_image_digest(self):
         digest = "sha256:" + "b" * 64
         command = [
@@ -711,8 +777,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("--compose-output", content)
         self.assertNotIn("--platform linux/amd64,linux/arm64", content)
         self.assertNotIn("slsa-framework/slsa-github-generator/", content)
+        verification_jobs = content.split("\n  publish:\n", 1)[0]
         for forbidden in ("docker push", "--push", "gh release", "packages: write", "contents: write"):
-            self.assertNotIn(forbidden, content)
+            self.assertNotIn(forbidden, verification_jobs)
 
 
 if __name__ == "__main__":

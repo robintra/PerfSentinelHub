@@ -35,6 +35,9 @@ POLICY_SCHEMA = {
         "ref_include": str,
         "required_approving_review_count": int,
         "required_review_thread_resolution": bool,
+        "dismiss_stale_reviews_on_push": bool,
+        "require_code_owner_review": bool,
+        "require_last_push_approval": bool,
         "strict_required_status_checks_policy": bool,
         "do_not_enforce_on_create": bool,
         "allowed_merge_methods": (LIST, str),
@@ -205,6 +208,9 @@ def validate_policy_schema(policy) -> None:
         or branch["ref_include"] != "~DEFAULT_BRANCH"
         or branch["required_approving_review_count"] != 0
         or branch["required_review_thread_resolution"] is not True
+        or branch["dismiss_stale_reviews_on_push"] is not True
+        or branch["require_code_owner_review"] is not False
+        or branch["require_last_push_approval"] is not False
         or branch["strict_required_status_checks_policy"] is not True
         or branch["do_not_enforce_on_create"] is not False
         or sorted(branch["allowed_merge_methods"]) != ["rebase", "squash"]
@@ -703,6 +709,13 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
             errors.append("pull_request approval count drift")
         if parameters.get("required_review_thread_resolution") is not branch_policy["required_review_thread_resolution"]:
             errors.append("pull_request conversations must be resolved")
+        for field in (
+            "dismiss_stale_reviews_on_push",
+            "require_code_owner_review",
+            "require_last_push_approval",
+        ):
+            if parameters[field] is not branch_policy[field]:
+                errors.append(f"pull_request {field} drift")
         if sorted(parameters.get("allowed_merge_methods", [])) != sorted(branch_policy["allowed_merge_methods"]):
             errors.append("pull_request merge methods drift")
 

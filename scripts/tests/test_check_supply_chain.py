@@ -833,7 +833,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("canonical", result.stderr)
 
-    def test_rejects_noncanonical_yaml_uses_keys(self):
+    def test_rejects_ambiguous_yaml_key_forms(self):
         action = inventory_item(
             name="actions/checkout",
             digest_or_sha="a" * 40,

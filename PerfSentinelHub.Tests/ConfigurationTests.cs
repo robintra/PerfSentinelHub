@@ -31,7 +31,7 @@ public sealed class ConfigurationTests
     [InlineData("", "http://daemon:4318")]
     [InlineData("bad/source", "http://daemon:4318")]
     [InlineData("prod", "file:///tmp/findings")]
-    [InlineData("prod", "http://user:password@daemon:4318")]
+    [InlineData("prod", "http://user@daemon:4318")]
     public void Invalid_source_is_rejected(string id, string url)
     {
         var options = ValidOptions() with

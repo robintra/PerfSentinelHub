@@ -246,6 +246,53 @@ class VersionContractTests(unittest.TestCase):
                 self.assertIn("changelog heading", result.stderr)
                 self.assertNotIn("Traceback", result.stderr)
 
+    def test_rejects_indented_changelog_release_headings_as_noncanonical_ambiguities(self):
+        heading = "## [0.1.0] - 2026-08-12"
+        for spaces in (1, 2, 3, 4):
+            with self.subTest(spaces=spaces), tempfile.TemporaryDirectory(dir=self.root) as directory:
+                fixture = Path(directory)
+                self.write_contract(fixture)
+                (fixture / "CHANGELOG.md").write_text(
+                    f"{heading}\n{' ' * spaces}{heading}\n",
+                    encoding="utf-8",
+                )
+
+                result = self.run_checker("v0.1.0", fixture)
+
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("changelog heading", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
+    def test_rejects_backtick_fence_info_that_could_mask_a_release_heading(self):
+        heading = "## [0.1.0] - 2026-08-12"
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            fixture = Path(directory)
+            self.write_contract(fixture)
+            (fixture / "CHANGELOG.md").write_text(
+                f"{heading}\n```markdown`invalid\n{heading}\n```\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("v0.1.0", fixture)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("changelog heading", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_accepts_backticks_in_tilde_fence_info(self):
+        heading = "## [0.1.0] - 2026-08-12"
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            fixture = Path(directory)
+            self.write_contract(fixture)
+            (fixture / "CHANGELOG.md").write_text(
+                f"{heading}\n~~~markdown`valid\n{heading}\n~~~\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("v0.1.0", fixture)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_accepts_minimal_valid_docker_label_forms(self):
         variants = (
             "LABEL org.opencontainers.image.version=0.1.0",

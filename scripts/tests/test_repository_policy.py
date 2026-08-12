@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,9 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY / "scripts" / "check-repository-policy.py"
+CHECKER_SPEC = importlib.util.spec_from_file_location("repository_policy_checker", CHECKER)
+CHECKER_MODULE = importlib.util.module_from_spec(CHECKER_SPEC)
+CHECKER_SPEC.loader.exec_module(CHECKER_MODULE)
 APP_ID = 4242
 CHECKS = (
     ("CI / Gate", APP_ID),
@@ -33,6 +37,11 @@ def public_api_fixture():
                 "visibility": "public",
                 "private": False,
                 "default_branch": "main",
+                "allow_squash_merge": True,
+                "allow_rebase_merge": True,
+                "allow_merge_commit": False,
+                "allow_auto_merge": False,
+                "delete_branch_on_merge": False,
                 "security_and_analysis": {
                     "secret_scanning": {"status": "enabled"},
                     "secret_scanning_push_protection": {"status": "enabled"},
@@ -41,7 +50,6 @@ def public_api_fixture():
         },
         "rulesets:1": {
             "status": 200,
-            "headers": {},
             "body": [
                 {"id": 101},
                 {"id": 102},
@@ -117,7 +125,7 @@ def public_api_fixture():
                         "reviewers": [
                             {
                                 "type": "User",
-                                "reviewer": {"id": 11, "login": "robintra"},
+                                "reviewer": {"id": 11, "name": "robintra"},
                             }
                         ],
                     }
@@ -131,7 +139,7 @@ def public_api_fixture():
     }
 
 
-def write_root(root: Path, secret="SONAR_TOKEN"):
+def write_root(root: Path, secret="SONAR_TOKEN", policy_mutator=None):
     workflows = root / ".github" / "workflows"
     workflows.mkdir(parents=True)
     references = "\n".join(
@@ -140,6 +148,14 @@ def write_root(root: Path, secret="SONAR_TOKEN"):
     if secret not in SECRETS:
         references += f"\n  EXTRA: ${{{{ secrets.{secret} }}}}"
     (workflows / "ci.yml").write_text(f"env:\n{references}\n", encoding="utf-8")
+    policy = json.loads(
+        (REPOSITORY / ".github" / "repository-policy.json").read_text(encoding="utf-8")
+    )
+    if policy_mutator is not None:
+        policy_mutator(policy)
+    (root / ".github" / "repository-policy.json").write_text(
+        json.dumps(policy), encoding="utf-8"
+    )
     config = root / "config"
     config.mkdir()
     (config / "secret-inventory.json").write_text(
@@ -162,10 +178,10 @@ def write_root(root: Path, secret="SONAR_TOKEN"):
     )
 
 
-def run_checker(api, *, secret="SONAR_TOKEN"):
+def run_checker(api, *, secret="SONAR_TOKEN", policy_mutator=None):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        write_root(root, secret)
+        write_root(root, secret, policy_mutator)
         fixture = root / "api.json"
         fixture.write_text(json.dumps(api), encoding="utf-8")
         return subprocess.run(
@@ -187,6 +203,15 @@ def run_checker(api, *, secret="SONAR_TOKEN"):
 
 
 class RepositoryPolicyTests(unittest.TestCase):
+    def test_normalizes_private_api_security_omission_as_activation_drift(self):
+        repository = public_api_fixture()["repository"]["body"]
+        repository.update(visibility="private", private=True)
+        del repository["security_and_analysis"]
+
+        normalized = CHECKER_MODULE.normalize_repository(repository)
+
+        self.assertIsNone(normalized["security_and_analysis"])
+
     def test_accepts_public_repository_fixture(self):
         result = run_checker(public_api_fixture())
 
@@ -200,6 +225,91 @@ class RepositoryPolicyTests(unittest.TestCase):
 
         self.assertEqual(1, result.returncode)
         self.assertIn("visibility", result.stderr)
+
+    def test_policy_schema_is_recursively_closed_and_strictly_typed(self):
+        mutations = {
+            "top-level unknown": lambda policy: policy.update(unexpected=True),
+            "branch unknown": lambda policy: policy["branch_ruleset"].update(unexpected=True),
+            "check unknown": lambda policy: policy["branch_ruleset"]["required_status_checks"][0].update(unexpected=True),
+            "tag missing": lambda policy: policy["tag_ruleset"].pop("allow_deletions"),
+            "environment bool integer": lambda policy: policy["release_environment"].update(minimum_required_reviewers=True),
+            "secret non-string": lambda policy: policy["workflow_secrets"].append(None),
+            "feature non-list": lambda policy: policy.update(security_features={}),
+        }
+        for name, mutation in mutations.items():
+            with self.subTest(name=name):
+                result = run_checker(public_api_fixture(), policy_mutator=mutation)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("policy schema", result.stderr)
+
+    def test_normalized_api_schema_rejects_unknown_missing_and_wrong_types(self):
+        def mutate(api, name):
+            if name == "wrapper unknown":
+                api["repository"]["headers"] = {}
+            elif name == "repository unknown":
+                api["repository"]["body"]["unexpected"] = True
+            elif name == "repository bool as integer":
+                api["repository"]["body"]["allow_squash_merge"] = 1
+            elif name == "security missing":
+                del api["repository"]["body"]["security_and_analysis"]["secret_scanning"]
+            elif name == "summary unknown":
+                api["rulesets:1"]["body"][0]["name"] = "unexpected"
+            elif name == "ruleset bool id":
+                api["ruleset:101"]["body"]["id"] = True
+            elif name == "condition unknown":
+                api["ruleset:101"]["body"]["conditions"]["unexpected"] = []
+            elif name == "simple rule unknown":
+                api["ruleset:101"]["body"]["rules"][0]["parameters"] = {}
+            elif name == "pull parameter missing":
+                rule = next(rule for rule in api["ruleset:101"]["body"]["rules"] if rule["type"] == "pull_request")
+                del rule["parameters"]["dismiss_stale_reviews_on_push"]
+            elif name == "check context wrong type":
+                checks = next(rule["parameters"]["required_status_checks"] for rule in api["ruleset:101"]["body"]["rules"] if rule["type"] == "required_status_checks")
+                checks[0]["context"] = False
+            elif name == "environment unknown":
+                api["environment"]["body"]["unexpected"] = True
+            elif name == "protection bool id":
+                api["environment"]["body"]["protection_rules"][0]["id"] = True
+            elif name == "reviewer unknown":
+                api["environment"]["body"]["protection_rules"][0]["reviewers"][0]["reviewer"]["login"] = "unexpected"
+            elif name == "app bool id":
+                api["app"]["body"]["id"] = True
+
+        names = (
+            "wrapper unknown", "repository unknown", "repository bool as integer",
+            "security missing", "summary unknown", "ruleset bool id",
+            "condition unknown", "simple rule unknown", "pull parameter missing",
+            "check context wrong type", "environment unknown", "protection bool id",
+            "reviewer unknown", "app bool id",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                api = public_api_fixture()
+                mutate(api, name)
+
+                result = run_checker(api)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("normalized API schema", result.stderr)
+
+    def test_requires_exact_global_merge_settings(self):
+        expected = {
+            "allow_squash_merge": True,
+            "allow_rebase_merge": True,
+            "allow_merge_commit": False,
+            "allow_auto_merge": False,
+            "delete_branch_on_merge": False,
+        }
+        for field, value in expected.items():
+            with self.subTest(field=field):
+                api = public_api_fixture()
+                api["repository"]["body"][field] = not value
+
+                result = run_checker(api)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn(field, result.stderr)
 
     def test_requires_exact_checks_and_dedicated_app_source(self):
         for mutation in ("missing", "generic-source"):
@@ -220,7 +330,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("required status checks", result.stderr)
 
-    def test_accepts_omitted_source_only_for_checks_without_an_expected_app(self):
+    def test_rejects_omitted_source_even_without_an_expected_app(self):
         api = public_api_fixture()
         checks = next(
             rule["parameters"]["required_status_checks"]
@@ -232,7 +342,8 @@ class RepositoryPolicyTests(unittest.TestCase):
 
         result = run_checker(api)
 
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("normalized API schema", result.stderr)
 
     def test_rejects_force_push_and_branch_deletion(self):
         for forbidden_rule in ("non_fast_forward", "deletion"):
@@ -291,7 +402,10 @@ class RepositoryPolicyTests(unittest.TestCase):
                 result = run_checker(api)
 
                 self.assertEqual(1, result.returncode)
-                self.assertIn("manual approval", result.stderr)
+                self.assertIn(
+                    "normalized API schema" if reviewers else "manual approval",
+                    result.stderr,
+                )
 
     def test_requires_protected_v_tags_without_deletion(self):
         for mutation in ("missing-force-protection", "missing-deletion-protection"):
@@ -353,7 +467,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                         },
                     }
                 if not missing_second_page:
-                    api["rulesets:2"] = {"status": 200, "headers": {}, "body": [{"id": 101}, {"id": 102}]}
+                    api["rulesets:2"] = {"status": 200, "body": [{"id": 101}, {"id": 102}]}
 
                 result = run_checker(api)
 

@@ -3,6 +3,13 @@
   "repository": "robintra/PerfSentinelHub",
   "visibility": "public",
   "default_branch": "main",
+  "repository_settings": {
+    "allow_squash_merge": true,
+    "allow_rebase_merge": true,
+    "allow_merge_commit": false,
+    "allow_auto_merge": false,
+    "delete_branch_on_merge": false
+  },
   "security_features": [
     "secret_scanning",
     "secret_scanning_push_protection"
@@ -11,6 +18,8 @@
     "ref_include": "~DEFAULT_BRANCH",
     "required_approving_review_count": 0,
     "required_review_thread_resolution": true,
+    "strict_required_status_checks_policy": true,
+    "do_not_enforce_on_create": false,
     "allowed_merge_methods": [
       "rebase",
       "squash"

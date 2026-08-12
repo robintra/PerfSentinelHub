@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY / "scripts" / "check-badges.py"
+CANONICAL_LICENSE = (REPOSITORY / "LICENSE").read_text(encoding="utf-8")
 BADGES = {
     "CI": (
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg",
@@ -76,7 +77,7 @@ def write_root(
     *,
     include_daily_workflow=True,
     sdk_version="10.0.302",
-    license_text="GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+    license_text=CANONICAL_LICENSE,
 ):
     (root / "README.md").write_text(readme, encoding="utf-8")
     workflows = root / ".github" / "workflows"
@@ -162,6 +163,21 @@ class BadgeTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_rejects_noncanonical_image_syntax_in_the_top_badge_block(self):
+        additions = {
+            "reference image": "![Build][status]\n[status]: https://example.test/status.svg\n",
+            "reference-linked image": "[![Build][status]][evidence]\n",
+            "HTML img": '<img alt="Build" src="https://example.test/status.svg">\n',
+            "HTML picture": "<picture><source srcset=\"status.svg\"></picture>\n",
+            "HTML svg": "<svg role=\"img\"></svg>\n",
+        }
+        for name, addition in additions.items():
+            with self.subTest(name=name):
+                result = run_checker(complete_readme() + addition)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("unsupported image syntax in top badge block", result.stderr)
+
     def test_rejects_an_unknown_linked_decorative_badge(self):
         readme = complete_readme() + badge(
             "Build",
@@ -186,11 +202,20 @@ class BadgeTests(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn(".NET badge differs from global.json", result.stderr)
 
-    def test_rejects_license_badge_when_the_license_is_not_agpl_v3(self):
-        result = run_checker(complete_readme(), license_text="MIT License\n")
+    def test_rejects_license_badge_when_the_license_is_not_canonical(self):
+        invalid_licenses = {
+            "truncated AGPL": CANONICAL_LICENSE[:500],
+            "MIT with copied phrases": (
+                "MIT License\nGNU AFFERO GENERAL PUBLIC LICENSE\n"
+                "Version 3, 19 November 2007\n"
+            ),
+        }
+        for name, license_text in invalid_licenses.items():
+            with self.subTest(name=name):
+                result = run_checker(complete_readme(), license_text=license_text)
 
-        self.assertEqual(1, result.returncode)
-        self.assertIn("License badge requires GNU AGPL version 3 evidence", result.stderr)
+                self.assertEqual(1, result.returncode)
+                self.assertIn("License badge differs from canonical AGPL-3.0-only", result.stderr)
 
 
 if __name__ == "__main__":

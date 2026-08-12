@@ -209,7 +209,7 @@ class VersionContractTests(unittest.TestCase):
                 "# Changelog\n\n"
                 "<!-- ## [9.9.9] - 2000-01-01 -->\n"
                 "<!--\n## [8.8.8] - 2000-01-01\n-->\n"
-                "```markdown\n## [7.7.7] - 2000-01-01\n```\n"
+                "```markdown\n<!--\n## [7.7.7] - 2000-01-01\n-->\n```\n"
                 "~~~text\n## [6.6.6] - 2000-01-01\n~~~\n"
                 "## [0.1.0] - 2026-08-12\n",
                 encoding="utf-8",
@@ -218,6 +218,26 @@ class VersionContractTests(unittest.TestCase):
             result = self.run_checker("v0.1.0", fixture)
 
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_ambiguous_html_markers_in_code_or_escapes(self):
+        heading = "## [0.1.0] - 2026-08-12"
+        changelogs = (
+            ("inline backticks", f"{heading}\n`<!--`\n{heading}\n`-->`\n"),
+            ("four-space code block", f"{heading}\n    <!--\n    {heading}\n    -->\n"),
+            ("tab-indented code block", f"{heading}\n\t<!--\n\t{heading}\n\t-->\n"),
+            ("escaped markers", f"{heading}\n\\<!--\n{heading}\n\\-->\n"),
+        )
+        for name, changelog in changelogs:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(dir=self.root) as directory:
+                fixture = Path(directory)
+                self.write_contract(fixture)
+                (fixture / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+
+                result = self.run_checker("v0.1.0", fixture)
+
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("changelog heading", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_rejects_hidden_duplicate_unclosed_or_noncanonical_changelog_headings(self):
         heading = "## [0.1.0] - 2026-08-12"

@@ -155,6 +155,16 @@ def changelog_versions(root: Path) -> list[str]:
     fence = None
     versions = []
     for line in changelog.splitlines():
+        if "<!--" in line or "-->" in line:
+            indentation = line[: len(line) - len(line.lstrip(" \t"))]
+            if (
+                "`" in line
+                or "\t" in indentation
+                or len(indentation) >= 4
+                or "\\<!--" in line
+                or "\\-->" in line
+            ):
+                fail("changelog heading contains an ambiguous HTML comment marker")
         if fence is not None:
             marker, length = fence
             if re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line):

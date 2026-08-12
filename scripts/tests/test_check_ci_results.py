@@ -256,6 +256,18 @@ class CheckCiResultsTests(unittest.TestCase):
 
 
 class CiWorkflowTests(unittest.TestCase):
+    def test_dependency_review_falls_back_until_the_repository_is_public(self):
+        job = job_body("dependency-review")
+        self.assertIn(
+            "github.event_name == 'pull_request' && github.event.repository.private == false",
+            job,
+        )
+        self.assertIn(
+            "github.event_name != 'pull_request' || github.event.repository.private == true",
+            job,
+        )
+        self.assertIn("make audit", job)
+
     def test_security_and_workflow_tools_use_the_canonical_locked_downloaders(self):
         expected = {
             "download-secret-scanners.sh": ("gitleaks_8.30.1", "trufflehog_3.96.0"),

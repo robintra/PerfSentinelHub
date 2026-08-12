@@ -844,6 +844,8 @@ jobs:
             release
             scripts/verify-release.py
             scripts/check-image-manifest.py
+            scripts/check-release-tag.py
+            config/signing-identities.json
           if-no-files-found: error
           retention-days: 7
 
@@ -877,15 +879,27 @@ jobs:
           path: publish-bundle
           github-token: ${{ github.token }}
       - id: promotion
-        name: Reverify the closed promotion bundle
+        name: Reverify the closed bundle and freshly fetched signed tag
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           root=publish-bundle/release
           python3 publish-bundle/scripts/verify-release.py verify-published --root "$root"
           version="$(jq -r .version "$root/release-manifest.json")"
+          source_commit="$(jq -r .source.commit "$root/release-manifest.json")"
           image_digest="$(jq -r .image.digest "$root/release-manifest.json")"
           printf '%s' "$version" | grep -Eq '^0[.][0-9]+[.][0-9]+$'
+          test "$source_commit" = "$EXPECTED_SOURCE_COMMIT"
           printf '%s' "$image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          tag="v$version"
+          git init --quiet tag-check
+          git -C tag-check remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C tag-check fetch --quiet --no-tags --filter=blob:none origin "$source_commit" "refs/tags/$tag:refs/tags/$tag"
+          git -C tag-check update-ref HEAD "$source_commit"
+          mkdir tag-check/config
+          cp publish-bundle/config/signing-identities.json tag-check/config/signing-identities.json
+          (cd tag-check && python3 ../publish-bundle/scripts/check-release-tag.py "$tag" "$source_commit")
           {
             echo "version=$version"
             echo "image_digest=$image_digest"

@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -681,6 +682,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
         for value in (
             "v0.1.0-rc.1",
+            "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.01.0",
             "https://github.com/other/PerfSentinelHub/releases/tag/v0.1.0",
             "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.1.0?download=1",
         ):
@@ -714,6 +716,64 @@ class ReleaseWorkflowTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, publish)
 
+    def test_protected_publish_refetches_and_rechecks_the_signed_tag_before_registry_access(self):
+        content = (REPOSITORY / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        manifest = content.split("\n  manifest:\n", 1)[1].split("\n  publish:\n", 1)[0]
+        publish = content.split("\n  publish:\n", 1)[1]
+
+        self.assertIn("scripts/check-release-tag.py", manifest)
+        self.assertIn("config/signing-identities.json", manifest)
+        self.assertIn("EXPECTED_SOURCE_COMMIT: ${{ github.sha }}", publish)
+        self.assertIn('refs/tags/$tag:refs/tags/$tag', publish)
+        self.assertIn('check-release-tag.py "$tag" "$source_commit"', publish)
+        self.assertLess(publish.index("check-release-tag.py"), publish.index("docker/login-action@"))
+
+    def test_public_verification_runs_only_the_workflow_commit_verifier_before_attested_artifacts(self):
+        content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
+        public_release = content.split("\n  public-release:\n", 1)[1].split("\n  cryptography:\n", 1)[0]
+
+        self.assertIn("ref: ${{ github.workflow_sha }}", public_release)
+        self.assertIn("persist-credentials: false", public_release)
+        self.assertNotIn("contents/scripts/verify-release.py?ref=$source_commit", public_release)
+        authentication = public_release.split("name: Authenticate downloaded public assets", 1)[1]
+        self.assertNotIn("GH_TOKEN", authentication)
+        for job in ("native", "image", "chart"):
+            match = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [a-z-]+:|\Z)", content)
+            self.assertIsNotNone(match)
+            body = match.group(1)
+            self.assertIn("cryptography", body)
+
+    def test_latest_stable_selects_one_global_canonical_semver_from_all_pages(self):
+        pages = [
+            [
+                {"tag_name": "v0.9.9", "draft": False, "prerelease": False},
+                {"tag_name": "v0.99.0", "draft": True, "prerelease": False},
+                {"tag_name": "v0.98.0", "draft": False, "prerelease": True},
+            ],
+            [
+                {"tag_name": "v0.10.0", "draft": False, "prerelease": False},
+                {"tag_name": "v0.010.1", "draft": False, "prerelease": False},
+            ],
+        ]
+        selected = subprocess.run(
+            [sys.executable, str(VERIFIER), "latest-stable"],
+            input=json.dumps(pages),
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(0, selected.returncode, selected.stderr)
+        self.assertEqual("v0.10.0", selected.stdout.strip())
+
+        pages[1].append({"tag_name": "v0.10.0", "draft": False, "prerelease": False})
+        ambiguous = subprocess.run(
+            [sys.executable, str(VERIFIER), "latest-stable"],
+            input=json.dumps(pages),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(0, ambiguous.returncode)
+        self.assertIn("ambiguous", ambiguous.stderr)
+
     def test_daily_latest_stable_verification_keeps_one_sanitized_issue(self):
         content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
         self.assertIn("schedule:", content)
@@ -724,6 +784,17 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("Verification succeeded; closing the alert", content)
         for forbidden in ("${{ toJSON(", "SARIF", "artifact body", "secrets."):
             self.assertNotIn(forbidden, content)
+
+    def test_daily_alert_reuses_one_exact_non_pull_request_issue_across_all_states(self):
+        content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
+        report = content.split("\n  report:\n", 1)[1]
+
+        self.assertIn("github.paginate(github.rest.issues.listForRepo", report)
+        self.assertIn("state: 'all'", report)
+        self.assertIn("!issue.pull_request", report)
+        self.assertIn("issue.title === title", report)
+        self.assertIn("state: 'open'", report)
+        self.assertIn("for (const duplicate of issues.slice(1))", report)
 
     def test_repository_chart_renders_only_the_immutable_image_digest(self):
         digest = "sha256:" + "b" * 64

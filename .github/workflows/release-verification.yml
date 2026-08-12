@@ -26,44 +26,75 @@ jobs:
     permissions:
       contents: read
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      version: ${{ steps.release.outputs.version }}
-      source_commit: ${{ steps.release.outputs.source_commit }}
-      image_digest: ${{ steps.release.outputs.image_digest }}
+      tag: ${{ steps.selection.outputs.tag }}
+      version: ${{ steps.authentication.outputs.version }}
+      source_commit: ${{ steps.authentication.outputs.source_commit }}
+      image_digest: ${{ steps.authentication.outputs.image_digest }}
     steps:
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
-      - id: release
-        name: Resolve tag or URL, download assets, and verify SHA256SUMS
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts/verify-release.py
+            scripts/check-image-manifest.py
+          sparse-checkout-cone-mode: false
+      - name: Download every page of public release metadata
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_RELEASE: ${{ inputs.release || github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          tag="$REQUESTED_RELEASE"
-          case "$tag" in
-            https://github.com/robintra/PerfSentinelHub/releases/tag/v0.*.*) tag="${tag##*/}" ;;
-            http*) exit 1 ;;
-          esac
-          if [ -z "$tag" ]; then
-            tag="$(gh api --paginate repos/robintra/PerfSentinelHub/releases --jq '[.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v0[.][0-9]+[.][0-9]+$"))] | first')"
+          if [ -z "$REQUESTED_RELEASE" ]; then
+            gh api --paginate --slurp 'repos/robintra/PerfSentinelHub/releases?per_page=100' > "$RUNNER_TEMP/releases.json"
+          else
+            printf '[]' > "$RUNNER_TEMP/releases.json"
           fi
-          python3 -c 'import re,sys; raise SystemExit(0 if re.fullmatch(r"v0[.][0-9]+[.][0-9]+",sys.argv[1]) else 1)' "$tag"
+      - id: selection
+        name: Select one canonical stable release without a token
+        env:
+          REQUESTED_RELEASE: ${{ inputs.release || github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [ -n "$REQUESTED_RELEASE" ]; then
+            tag="$(python3 scripts/verify-release.py public-input "$REQUESTED_RELEASE" | jq -r .tag)"
+          else
+            tag="$(python3 scripts/verify-release.py latest-stable < "$RUNNER_TEMP/releases.json")"
+          fi
+          printf '%s' "$tag" | grep -Eq '^v0[.][0-9]+[.][0-9]+$'
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Download the closed public release without executing its contents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.selection.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="$TAG"
           state="$(gh release view "$tag" --repo robintra/PerfSentinelHub --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')"
           test "$state" = "false	false	$tag"
           mkdir public-release
           gh release download "$tag" --repo robintra/PerfSentinelHub --dir public-release
-          source_commit="$(jq -r .source.commit public-release/release-manifest.json)"
-          printf '%s' "$source_commit" | grep -Eq '^[0-9a-f]{40}$'
-          mkdir scripts
-          gh api -H 'Accept: application/vnd.github.raw+json' "repos/robintra/PerfSentinelHub/contents/scripts/verify-release.py?ref=$source_commit" > scripts/verify-release.py
-          gh api -H 'Accept: application/vnd.github.raw+json' "repos/robintra/PerfSentinelHub/contents/scripts/check-image-manifest.py?ref=$source_commit" > scripts/check-image-manifest.py
+      - id: authentication
+        name: Authenticate downloaded public assets and SHA256SUMS
+        env:
+          TAG: ${{ steps.selection.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="$TAG"
           python3 scripts/verify-release.py verify-published --root public-release
+          source_commit="$(jq -r .source.commit public-release/release-manifest.json)"
+          version="$(jq -r .version public-release/release-manifest.json)"
+          image_digest="$(jq -r .image.digest public-release/release-manifest.json)"
+          printf '%s' "$source_commit" | grep -Eq '^[0-9a-f]{40}$'
+          test "$version" = "${tag#v}"
           {
-            python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); print("source_commit="+m["source"]["commit"]); print("image_digest="+m["image"]["digest"])' public-release/release-manifest.json
-            echo "tag=$tag"
-            echo "version=${tag#v}"
+            echo "source_commit=$source_commit"
+            echo "image_digest=$image_digest"
+            echo "version=$version"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -110,7 +141,7 @@ jobs:
 
   native:
     name: Start public native binary (${{ matrix.rid }})
-    needs: public-release
+    needs: [public-release, cryptography]
     strategy:
       fail-fast: false
       matrix:
@@ -208,7 +239,7 @@ jobs:
 
   image:
     name: Start public image by digest
-    needs: public-release
+    needs: [public-release, cryptography]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: {}
@@ -240,7 +271,7 @@ jobs:
 
   chart:
     name: Verify public chart digest and bound image digest
-    needs: public-release
+    needs: [public-release, cryptography]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: {}
@@ -301,19 +332,25 @@ jobs:
               if (error.status !== 404) throw error;
               await github.rest.issues.createLabel({owner, repo, name: label, color: 'b60205', description: 'Public release verification needs attention'});
             }
-            const {data: issues} = await github.rest.issues.listForRepo({owner, repo, state: 'open', labels: label, per_page: 100});
+            const candidates = await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'all', labels: label, per_page: 100});
+            const issues = candidates
+              .filter(issue => !issue.pull_request && issue.title === title && issue.labels.some(item => item.name === label))
+              .sort((left, right) => left.number - right.number);
             if (process.env.FAILED === 'true') {
-            if (issues.length) {
-                await github.rest.issues.update({owner, repo, issue_number: issues[0].number, title, body});
-                for (const issue of issues.slice(1)) {
-                  await github.rest.issues.update({owner, repo, issue_number: issue.number, state: 'closed'});
+              if (issues.length) {
+                await github.rest.issues.update({owner, repo, issue_number: issues[0].number, title, body, labels: [label], state: 'open'});
+                for (const duplicate of issues.slice(1)) {
+                  if (duplicate.state !== 'closed') await github.rest.issues.update({owner, repo, issue_number: duplicate.number, state: 'closed'});
                 }
               } else {
                 await github.rest.issues.create({owner, repo, title, body, labels: [label]});
               }
             } else {
-              for (const issue of issues) {
-                await github.rest.issues.createComment({owner, repo, issue_number: issue.number, body: 'Verification succeeded; closing the alert.'});
-                await github.rest.issues.update({owner, repo, issue_number: issue.number, state: 'closed'});
+              if (issues.length && issues[0].state !== 'closed') {
+                await github.rest.issues.createComment({owner, repo, issue_number: issues[0].number, body: 'Verification succeeded; closing the alert.'});
+                await github.rest.issues.update({owner, repo, issue_number: issues[0].number, state: 'closed'});
+              }
+              for (const duplicate of issues.slice(1)) {
+                if (duplicate.state !== 'closed') await github.rest.issues.update({owner, repo, issue_number: duplicate.number, state: 'closed'});
               }
             }

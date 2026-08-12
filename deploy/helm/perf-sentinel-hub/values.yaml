@@ -1,7 +1,7 @@
 replicaCount: 1
 image:
   repository: perf-sentinel-hub
-  tag: local
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
   pullPolicy: IfNotPresent
 hub:
   pollInterval: "01:00:00"

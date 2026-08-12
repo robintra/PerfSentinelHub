@@ -1,0 +1,837 @@
+name: Build verified release artifacts
+
+on:
+  push:
+    tags: ['v0.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing signed stable tag selected as the workflow ref
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    name: Validate release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      source_commit: ${{ steps.metadata.outputs.source_commit }}
+      commit_time: ${{ steps.metadata.outputs.commit_time }}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind the stable tag to its source commit
+        id: metadata
+        env:
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REQUESTED_TAG" | grep -Eq '^v0[.][0-9]+[.][0-9]+$'
+          test "$GITHUB_REF" = "refs/tags/$REQUESTED_TAG"
+          test "$(git cat-file -t "$REQUESTED_TAG")" = tag
+          test "$(git rev-list -n 1 "$REQUESTED_TAG")" = "$GITHUB_SHA"
+          python3 scripts/check-version.py "$REQUESTED_TAG"
+          {
+            echo "version=${REQUESTED_TAG#v}"
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "commit_time=$(git show -s --format=%ct HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  native-a:
+    name: Native build A (${{ matrix.rid }})
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+          - rid: osx-arm64
+            runner: macos-15
+          - rid: win-x64
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.metadata.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.302
+      - name: Build and package candidate A
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          COMMIT_TIME: ${{ needs.metadata.outputs.commit_time }}
+        run: |
+          set -euo pipefail
+          dotnet restore PerfSentinelHub/PerfSentinelHub.csproj --locked-mode
+          dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r "$RID" --self-contained true -p:PublishAot=true -p:Version="$VERSION" --no-restore
+          python3 scripts/package-native.py --rid "$RID" --version "$VERSION" --commit-time "$COMMIT_TIME" --input "PerfSentinelHub/bin/Release/net10.0/$RID/publish" --output dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-a-${{ matrix.rid }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 2
+
+  native-b:
+    name: Native build B (${{ matrix.rid }})
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+          - rid: osx-arm64
+            runner: macos-15
+          - rid: win-x64
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.metadata.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.302
+      - name: Build and package candidate B
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          COMMIT_TIME: ${{ needs.metadata.outputs.commit_time }}
+        run: |
+          set -euo pipefail
+          dotnet restore PerfSentinelHub/PerfSentinelHub.csproj --locked-mode
+          dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r "$RID" --self-contained true -p:PublishAot=true -p:Version="$VERSION" --no-restore
+          python3 scripts/package-native.py --rid "$RID" --version "$VERSION" --commit-time "$COMMIT_TIME" --input "PerfSentinelHub/bin/Release/net10.0/$RID/publish" --output dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-b-${{ matrix.rid }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 2
+
+  native-verify:
+    name: Reproduce and smoke native (${{ matrix.rid }})
+    needs: [metadata, native-a, native-b]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+            extension: tar.gz
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+            extension: tar.gz
+          - rid: osx-arm64
+            runner: macos-15
+            extension: tar.gz
+          - rid: win-x64
+            runner: windows-2025
+            extension: zip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.metadata.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-a-${{ matrix.rid }}
+          path: candidate-a
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-b-${{ matrix.rid }}
+          path: candidate-b
+      - name: Compare candidates byte for byte
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import shutil
+          from pathlib import Path
+
+          rid = os.environ['RID']
+          version = os.environ['VERSION']
+          extension = os.environ['EXTENSION']
+          expected = {
+              f'perf-sentinel-hub-{version}-{rid}.{extension}',
+              f'perf-sentinel-hub-{version}-{rid}-symbols.{extension}',
+              'SHA256SUMS',
+          }
+          left = {path.name for path in Path('candidate-a').iterdir() if path.is_file()}
+          right = {path.name for path in Path('candidate-b').iterdir() if path.is_file()}
+          if left != expected or right != expected:
+              raise SystemExit('candidate file set differs from the exact native contract')
+          for name in sorted(expected):
+              if hashlib.sha256((Path('candidate-a') / name).read_bytes()).digest() != hashlib.sha256((Path('candidate-b') / name).read_bytes()).digest():
+                  raise SystemExit(f'{name}: duplicate build differs')
+          Path('verified').mkdir()
+          for name in sorted(expected - {'SHA256SUMS'}):
+              shutil.copyfile(Path('candidate-a') / name, Path('verified') / name)
+          PY
+      - name: Extract verified runtime archive
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import tarfile
+          import zipfile
+          from pathlib import Path
+
+          archive = Path('verified') / f"perf-sentinel-hub-{os.environ['VERSION']}-{os.environ['RID']}.{os.environ['EXTENSION']}"
+          Path('smoke').mkdir()
+          if archive.suffix == '.zip':
+              with zipfile.ZipFile(archive) as package:
+                  package.extractall('smoke')
+          else:
+              with tarfile.open(archive, 'r:gz') as package:
+                  package.extractall('smoke', filter='data')
+          PY
+      - name: Verify Unix format and smoke health
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Sources__0__Id: smoke
+          Hub__Sources__0__Name: Smoke
+          Hub__Sources__0__Environment: release
+          Hub__Sources__0__BaseUrl: http://127.0.0.1:9
+        run: |
+          set -euo pipefail
+          binary=smoke/PerfSentinelHub
+          case "$RID" in
+            linux-x64) file "$binary" | grep -Eq 'ELF 64-bit.*x86-64' ;;
+            linux-arm64) file "$binary" | grep -Eq 'ELF 64-bit.*(ARM aarch64|AArch64)' ;;
+            osx-arm64) file "$binary" | grep -Eq 'Mach-O 64-bit executable arm64' ;;
+            *) exit 2 ;;
+          esac
+          "$binary" --urls http://127.0.0.1:5082 > "$RUNNER_TEMP/native-smoke.log" 2>&1 &
+          native_pid=$!
+          trap 'kill "$native_pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import time
+          import urllib.request
+
+          for _ in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:5082/health/ready', timeout=1) as response:
+                      if response.status == 200:
+                          raise SystemExit(0)
+              except OSError:
+                  time.sleep(0.5)
+          raise SystemExit('native health smoke timed out')
+          PY
+      - name: Verify Windows x64 PE and smoke health
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Sources__0__Id: smoke
+          Hub__Sources__0__Name: Smoke
+          Hub__Sources__0__Environment: release
+          Hub__Sources__0__BaseUrl: http://127.0.0.1:9
+        run: |
+          $binary = (Resolve-Path 'smoke/PerfSentinelHub.exe').Path
+          $bytes = [IO.File]::ReadAllBytes($binary)
+          if ($bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'missing MZ header' }
+          $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([Text.Encoding]::ASCII.GetString($bytes, $pe, 4) -ne "PE`0`0") { throw 'missing PE header' }
+          if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'PE is not AMD64' }
+          $process = Start-Process -FilePath $binary -ArgumentList '--urls','http://127.0.0.1:5082' -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP/native-smoke.log" -RedirectStandardError "$env:RUNNER_TEMP/native-smoke-error.log"
+          try {
+            foreach ($attempt in 1..40) {
+              try {
+                $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 http://127.0.0.1:5082/health/ready
+                if ($response.StatusCode -eq 200) { exit 0 }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            throw 'native health smoke timed out'
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-verified-${{ matrix.rid }}
+          path: verified
+          if-no-files-found: error
+          retention-days: 2
+
+  native-sbom:
+    name: Native SPDX (${{ matrix.key }})
+    needs: [metadata, native-verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: linux-x64-runtime
+            rid: linux-x64
+            suffix: linux-x64.tar.gz
+          - key: linux-x64-symbols
+            rid: linux-x64
+            suffix: linux-x64-symbols.tar.gz
+          - key: linux-arm64-runtime
+            rid: linux-arm64
+            suffix: linux-arm64.tar.gz
+          - key: linux-arm64-symbols
+            rid: linux-arm64
+            suffix: linux-arm64-symbols.tar.gz
+          - key: osx-arm64-runtime
+            rid: osx-arm64
+            suffix: osx-arm64.tar.gz
+          - key: osx-arm64-symbols
+            rid: osx-arm64
+            suffix: osx-arm64-symbols.tar.gz
+          - key: win-x64-runtime
+            rid: win-x64
+            suffix: win-x64.zip
+          - key: win-x64-symbols
+            rid: win-x64
+            suffix: win-x64-symbols.zip
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-verified-${{ matrix.rid }}
+          path: native
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: native/perf-sentinel-hub-${{ needs.metadata.outputs.version }}-${{ matrix.suffix }}
+          format: spdx-json
+          output-file: sbom/perf-sentinel-hub-${{ needs.metadata.outputs.version }}-${{ matrix.suffix }}.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Normalize SPDX document identity
+        env:
+          SUBJECT: perf-sentinel-hub-${{ needs.metadata.outputs.version }}-${{ matrix.suffix }}
+        run: |
+          set -euo pipefail
+          jq --arg name "$SUBJECT" '.name = $name' "sbom/$SUBJECT.spdx.json" > "sbom/$SUBJECT.spdx.json.tmp"
+          mv "sbom/$SUBJECT.spdx.json.tmp" "sbom/$SUBJECT.spdx.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-sbom-${{ matrix.key }}
+          path: sbom
+          if-no-files-found: error
+          retention-days: 2
+
+  oci:
+    name: Reproducible multi-architecture OCI image
+    needs: metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.metadata.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Compare platform layouts and create final OCI index
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.metadata.outputs.source_commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.metadata.outputs.commit_time }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          for architecture in amd64 arm64; do
+            for attempt in a b; do
+              docker buildx build . --platform "linux/$architecture" --provenance=false --sbom=false --build-arg "VERSION=$VERSION" --build-arg "SOURCE_COMMIT=$SOURCE_COMMIT" --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" --output "type=oci,dest=$RUNNER_TEMP/$architecture-$attempt.oci.tar"
+              python3 scripts/check-image-manifest.py --layout "$RUNNER_TEMP/$architecture-$attempt.oci.tar" --platforms "linux/$architecture" --write-digest "$RUNNER_TEMP/$architecture-$attempt.digest"
+            done
+            cmp "$RUNNER_TEMP/$architecture-a.digest" "$RUNNER_TEMP/$architecture-b.digest"
+          done
+          image="release/perf-sentinel-hub-$VERSION.oci.tar"
+          docker buildx build . --platform linux/amd64,linux/arm64 --provenance=false --sbom=false --build-arg "VERSION=$VERSION" --build-arg "SOURCE_COMMIT=$SOURCE_COMMIT" --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" --output "type=oci,dest=$image"
+          python3 scripts/check-image-manifest.py --layout "$image" --write-digest "$RUNNER_TEMP/image.digest"
+      - id: image
+        name: Export immutable image digest
+        run: echo "digest=$(cat "$RUNNER_TEMP/image.digest")" >> "$GITHUB_OUTPUT"
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          input: ${{ runner.temp }}/amd64-a.oci.tar
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          cache: false
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          input: ${{ runner.temp }}/arm64-a.oci.tar
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          cache: false
+          skip-setup-trivy: true
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          input: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.tar
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          cache: false
+          skip-setup-trivy: true
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: oci-archive:release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.tar
+          format: spdx-json
+          output-file: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.tar.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Normalize image SPDX document identity
+        env:
+          SUBJECT: perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.tar
+        run: |
+          set -euo pipefail
+          jq --arg name "$SUBJECT" '.name = $name' "release/$SUBJECT.spdx.json" > "release/$SUBJECT.spdx.json.tmp"
+          mv "release/$SUBJECT.spdx.json.tmp" "release/$SUBJECT.spdx.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oci-verified
+          path: release
+          if-no-files-found: error
+          retention-days: 2
+
+  helm:
+    name: Reproducible digest-bound Helm chart
+    needs: [metadata, oci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.metadata.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+      - name: Package the digest-bound chart twice
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          IMAGE_DIGEST: ${{ needs.oci.outputs.digest }}
+          SOURCE_DATE_EPOCH: ${{ needs.metadata.outputs.commit_time }}
+        run: |
+          set -euo pipefail
+          mkdir -p chart-a chart-b dist-a dist-b release
+          cp -R deploy/helm/perf-sentinel-hub/. chart-a/
+          cp -R deploy/helm/perf-sentinel-hub/. chart-b/
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          expected = 'digest: sha256:' + '0' * 64
+          replacement = f"digest: {os.environ['IMAGE_DIGEST']}"
+          for directory in ('chart-a', 'chart-b'):
+              values = Path(directory) / 'values.yaml'
+              content = values.read_text(encoding='utf-8')
+              if content.count(expected) != 1:
+                  raise SystemExit('chart digest placeholder differs from the release contract')
+              values.write_text(content.replace(expected, replacement) + ('' if content.endswith(chr(10)) else chr(10)), encoding='utf-8')
+          PY
+          find chart-a chart-b -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
+          helm lint chart-a --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318'
+          helm package chart-a --destination dist-a
+          helm package chart-b --destination dist-b
+          cmp "dist-a/perf-sentinel-hub-$VERSION.tgz" "dist-b/perf-sentinel-hub-$VERSION.tgz"
+          cp "dist-a/perf-sentinel-hub-$VERSION.tgz" release/
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.tgz
+          format: spdx-json
+          output-file: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.tgz.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Normalize chart SPDX document identity
+        env:
+          SUBJECT: perf-sentinel-hub-${{ needs.metadata.outputs.version }}.tgz
+        run: |
+          set -euo pipefail
+          jq --arg name "$SUBJECT" '.name = $name' "release/$SUBJECT.spdx.json" > "release/$SUBJECT.spdx.json.tmp"
+          mv "release/$SUBJECT.spdx.json.tmp" "release/$SUBJECT.spdx.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: helm-verified
+          path: release
+          if-no-files-found: error
+          retention-days: 2
+
+  prepare:
+    name: Assemble unsigned verified subjects
+    needs: [metadata, native-sbom, oci, helm]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: native-verified-*
+          path: release
+          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: native-sbom-*
+          path: release
+          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: oci-verified
+          path: release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helm-verified
+          path: release
+      - name: Validate the exact unsigned subject and SBOM set
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          version = os.environ['VERSION']
+          subjects = []
+          for rid in ('linux-x64', 'linux-arm64', 'osx-arm64', 'win-x64'):
+              extension = 'zip' if rid == 'win-x64' else 'tar.gz'
+              subjects.extend((f'perf-sentinel-hub-{version}-{rid}.{extension}', f'perf-sentinel-hub-{version}-{rid}-symbols.{extension}'))
+          subjects.extend((f'perf-sentinel-hub-{version}.oci.tar', f'perf-sentinel-hub-{version}.tgz'))
+          expected = set(subjects) | {f'{name}.spdx.json' for name in subjects}
+          actual = {path.name for path in Path('release').iterdir() if path.is_file()}
+          if actual != expected:
+              raise SystemExit(f'unsigned release file set differs: missing={sorted(expected-actual)}, extra={sorted(actual-expected)}')
+          Path('subjects.sha256').write_text(''.join(f'{__import__("hashlib").sha256((Path("release") / name).read_bytes()).hexdigest()}  {name}' + chr(10) for name in subjects), encoding='ascii')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-unsigned
+          path: release
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-subjects
+          path: subjects.sha256
+          if-no-files-found: error
+          retention-days: 2
+
+  sign:
+    name: Keyless sign (${{ matrix.key }})
+    needs: [metadata, prepare]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: linux-x64-runtime
+            suffix: -linux-x64.tar.gz
+          - key: linux-x64-symbols
+            suffix: -linux-x64-symbols.tar.gz
+          - key: linux-arm64-runtime
+            suffix: -linux-arm64.tar.gz
+          - key: linux-arm64-symbols
+            suffix: -linux-arm64-symbols.tar.gz
+          - key: osx-arm64-runtime
+            suffix: -osx-arm64.tar.gz
+          - key: osx-arm64-symbols
+            suffix: -osx-arm64-symbols.tar.gz
+          - key: win-x64-runtime
+            suffix: -win-x64.zip
+          - key: win-x64-symbols
+            suffix: -win-x64-symbols.zip
+          - key: oci
+            suffix: .oci.tar
+          - key: helm
+            suffix: .tgz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # Mint the short-lived keyless Cosign certificate.
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-unsigned
+          path: release
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Sign and verify exact blob identity
+        env:
+          SUBJECT: perf-sentinel-hub-${{ needs.metadata.outputs.version }}${{ matrix.suffix }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          bundle="release/$SUBJECT.sigstore.json"
+          cosign sign-blob --yes --bundle "$bundle" "release/$SUBJECT"
+          cosign verify-blob --bundle "$bundle" --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release[.]yml@refs/tags/v${VERSION}$" --certificate-oidc-issuer https://token.actions.githubusercontent.com "release/$SUBJECT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signature-${{ matrix.key }}
+          path: release/*.sigstore.json
+          if-no-files-found: error
+          retention-days: 2
+
+  attest-provenance:
+    name: GitHub build provenance for exact subjects
+    needs: [metadata, prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # Sign provenance with the exact tag workflow identity.
+      attestations: write # Store the generated provenance in GitHub's attestation API.
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-unsigned
+          path: release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-subjects
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        id: attest
+        with:
+          subject-checksums: subjects.sha256
+          show-summary: false
+      - name: Verify provenance identity and subjects
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.metadata.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          while read -r digest subject; do
+            printf '%s' "$digest" | grep -Eq '^[0-9a-f]{64}$'
+            gh attestation verify "release/$subject" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v${VERSION}" --cert-oidc-issuer https://token.actions.githubusercontent.com --source-ref "refs/tags/v${VERSION}" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
+          done < subjects.sha256
+          cp "$BUNDLE" release.provenance.sigstore.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: provenance
+          path: release.provenance.sigstore.json
+          if-no-files-found: error
+          retention-days: 2
+
+  attest-sbom:
+    name: GitHub SBOM attestation (${{ matrix.key }})
+    needs: [metadata, prepare]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: linux-x64-runtime
+            suffix: -linux-x64.tar.gz
+          - key: linux-x64-symbols
+            suffix: -linux-x64-symbols.tar.gz
+          - key: linux-arm64-runtime
+            suffix: -linux-arm64.tar.gz
+          - key: linux-arm64-symbols
+            suffix: -linux-arm64-symbols.tar.gz
+          - key: osx-arm64-runtime
+            suffix: -osx-arm64.tar.gz
+          - key: osx-arm64-symbols
+            suffix: -osx-arm64-symbols.tar.gz
+          - key: win-x64-runtime
+            suffix: -win-x64.zip
+          - key: win-x64-symbols
+            suffix: -win-x64-symbols.zip
+          - key: oci
+            suffix: .oci.tar
+          - key: helm
+            suffix: .tgz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # Sign the SPDX predicate with the exact tag workflow identity.
+      attestations: write # Store the generated SBOM attestation in GitHub's attestation API.
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-unsigned
+          path: release
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        id: attest
+        env:
+          SUBJECT: perf-sentinel-hub-${{ needs.metadata.outputs.version }}${{ matrix.suffix }}
+        with:
+          subject-path: release/${{ env.SUBJECT }}
+          sbom-path: release/${{ env.SUBJECT }}.spdx.json
+          show-summary: false
+      - name: Verify SBOM attestation identity and subject
+        env:
+          SUBJECT: perf-sentinel-hub-${{ needs.metadata.outputs.version }}${{ matrix.suffix }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.metadata.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "release/$SUBJECT" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" --predicate-type https://spdx.dev/Document/v2.3 --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v${VERSION}" --cert-oidc-issuer https://token.actions.githubusercontent.com --source-ref "refs/tags/v${VERSION}" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
+          cp "$BUNDLE" "release/$SUBJECT.sbom.sigstore.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-attestation-${{ matrix.key }}
+          path: release/*.sbom.sigstore.json
+          if-no-files-found: error
+          retention-days: 2
+
+  manifest:
+    name: Close verified release manifest
+    needs: [metadata, oci, prepare, sign, attest-provenance, attest-sbom]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.metadata.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-unsigned
+          path: release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: signature-*
+          path: release
+          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: sbom-attestation-*
+          path: release
+          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: provenance
+          path: release
+      - name: Generate, re-read, and close the release manifest
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.metadata.outputs.source_commit }}
+          IMAGE_DIGEST: ${{ needs.oci.outputs.digest }}
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-release.py create --root release --manifest release-manifest.json --version "$VERSION" --source-commit "$SOURCE_COMMIT" --source-repository "https://github.com/$GITHUB_REPOSITORY" --image-digest "$IMAGE_DIGEST"
+          python3 scripts/verify-release.py verify --root release --manifest release-manifest.json
+          mv release-manifest.json release/
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          files = sorted(path for path in Path('release').iterdir() if path.is_file())
+          Path('release/SHA256SUMS').write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}' + chr(10) for path in files), encoding='ascii')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-verified
+          path: release
+          if-no-files-found: error
+          retention-days: 7

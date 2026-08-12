@@ -80,10 +80,10 @@ CANONICAL_PREFIX = "# PerfSentinelHub\n\n" + "".join(
 
 
 def validate(root: Path):
-    readme = (root / "README.md").read_text(encoding="utf-8")
+    readme = (root / "README.md").read_bytes()
     errors = []
 
-    if not readme.startswith(CANONICAL_PREFIX):
+    if not readme.startswith(CANONICAL_PREFIX.encode("utf-8")):
         errors.append("README must start with the canonical top badge block")
 
     for _, _, evidence in BADGES.values():

@@ -755,6 +755,20 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
             self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_accepts_a_shell_script_that_contains_no_download_declaration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "release.sh").write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\ngit status --porcelain=v1\n",
+                encoding="utf-8",
+            )
+            write_inventory(root, dotnet_inventory_item())
+            write_required_declarations(root)
+
+            result = run_checker(root)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_accepts_pinned_subactions_from_an_inventoried_action_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

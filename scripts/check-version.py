@@ -7,12 +7,15 @@ import re
 import shlex
 import sys
 import xml.etree.ElementTree as ElementTree
+from datetime import date
 from pathlib import Path
 
 
 STABLE_TAG = re.compile(r"^v0\.[0-9]+\.[0-9]+$")
 STABLE_VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
 CHART_ENTRY = re.compile(r"^(?P<key>[A-Za-z][A-Za-z0-9_-]*)[ ]*:[ ]*(?P<value>.*?)[ ]*$")
+CHANGELOG_HEADING = re.compile(r"^## \[(?P<version>[^]]+)] - (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})$")
+FENCE_OPENING = re.compile(r"^ {0,3}(?P<marker>`{3,}|~{3,})(?P<info>.*)$")
 IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
 VERSION_PROPERTIES = frozenset(("version", "versionprefix", "versionsuffix"))
 
@@ -122,9 +125,64 @@ def chart_values(root: Path) -> dict[str, str]:
     return values
 
 
+def without_html_comments(line: str, inside_comment: bool) -> tuple[str, bool]:
+    visible = []
+    position = 0
+    while position < len(line):
+        if inside_comment:
+            end = line.find("-->", position)
+            if end < 0:
+                return "".join(visible), True
+            position = end + 3
+            inside_comment = False
+            continue
+        start = line.find("<!--", position)
+        unmatched_end = line.find("-->", position)
+        if unmatched_end >= 0 and (start < 0 or unmatched_end < start):
+            fail("changelog heading contains an unmatched HTML comment terminator")
+        if start < 0:
+            visible.append(line[position:])
+            break
+        visible.append(line[position:start])
+        position = start + 4
+        inside_comment = True
+    return "".join(visible), inside_comment
+
+
 def changelog_versions(root: Path) -> list[str]:
     changelog = read(root / "CHANGELOG.md", "changelog heading")
-    return re.findall(r"^## \[([^]]+)](?: - [0-9]{4}-[0-9]{2}-[0-9]{2})?[ \t]*$", changelog, re.MULTILINE)
+    inside_comment = False
+    fence = None
+    versions = []
+    for line in changelog.splitlines():
+        if fence is not None:
+            marker, length = fence
+            if re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line):
+                fence = None
+            continue
+
+        visible, inside_comment = without_html_comments(line, inside_comment)
+        opening = FENCE_OPENING.fullmatch(visible)
+        if opening is not None:
+            marker = opening.group("marker")
+            fence = (marker[0], len(marker))
+            continue
+        if not visible.startswith("## ["):
+            continue
+        heading = CHANGELOG_HEADING.fullmatch(visible)
+        if heading is None:
+            fail("changelog heading must use canonical ## [VERSION] - YYYY-MM-DD syntax")
+        try:
+            date.fromisoformat(heading.group("date"))
+        except ValueError:
+            fail("changelog heading date must be a valid ISO calendar date")
+        versions.append(heading.group("version"))
+
+    if inside_comment:
+        fail("changelog heading is inside an unclosed HTML comment")
+    if fence is not None:
+        fail("changelog heading is inside an unclosed fenced code block")
+    return versions
 
 
 def docker_instructions(text: str) -> list[str]:
@@ -154,6 +212,8 @@ def docker_instructions(text: str) -> list[str]:
 
 def image_version(root: Path) -> str:
     dockerfile = read(root / "Dockerfile", "image version label")
+    if "<<" in dockerfile:
+        fail("image version label cannot be verified in a Dockerfile containing heredoc syntax")
     stage = -1
     values = []
     for instruction in docker_instructions(dockerfile):

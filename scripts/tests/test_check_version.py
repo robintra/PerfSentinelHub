@@ -39,7 +39,11 @@ class VersionContractTests(unittest.TestCase):
             "project version": ("PerfSentinelHub/PerfSentinelHub.csproj", "<Version>0.1.0</Version>", "<Version>0.1.1</Version>"),
             "chart version": ("deploy/helm/perf-sentinel-hub/Chart.yaml", "version: 0.1.0", "version: 0.1.1"),
             "chart appVersion": ("deploy/helm/perf-sentinel-hub/Chart.yaml", 'appVersion: "0.1.0"', 'appVersion: "0.1.1"'),
-            "changelog heading": ("CHANGELOG.md", "## [0.1.0] - 2026-08-12", "## [0.1.1] - 2026-08-12"),
+            "changelog heading": (
+                "CHANGELOG.md",
+                "## [0.1.0] - 2026-08-12",
+                "## [0.1.1] - 2026-08-12",
+            ),
             "image version label": ("Dockerfile", 'LABEL org.opencontainers.image.version="0.1.0"', 'LABEL org.opencontainers.image.version="0.1.1"'),
         }
         for expected_error, (relative, current, replacement) in cases.items():
@@ -197,6 +201,51 @@ class VersionContractTests(unittest.TestCase):
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("chart", result.stderr)
 
+    def test_accepts_one_visible_changelog_heading_outside_hidden_markdown(self):
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            fixture = Path(directory)
+            self.write_contract(fixture)
+            (fixture / "CHANGELOG.md").write_text(
+                "# Changelog\n\n"
+                "<!-- ## [9.9.9] - 2000-01-01 -->\n"
+                "<!--\n## [8.8.8] - 2000-01-01\n-->\n"
+                "```markdown\n## [7.7.7] - 2000-01-01\n```\n"
+                "~~~text\n## [6.6.6] - 2000-01-01\n~~~\n"
+                "## [0.1.0] - 2026-08-12\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("v0.1.0", fixture)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_hidden_duplicate_unclosed_or_noncanonical_changelog_headings(self):
+        heading = "## [0.1.0] - 2026-08-12"
+        changelogs = (
+            ("multiline comment", f"<!--\n{heading}\n-->\n"),
+            ("single-line comment", f"<!-- {heading} -->\n"),
+            ("backtick fence", f"```markdown\n{heading}\n```\n"),
+            ("tilde fence", f"~~~text\n{heading}\n~~~\n"),
+            ("duplicate visible", f"{heading}\n{heading}\n"),
+            ("unclosed comment", f"{heading}\n<!--\n"),
+            ("unclosed backtick fence", f"{heading}\n```text\n"),
+            ("unclosed tilde fence", f"{heading}\n~~~text\n"),
+            ("missing date", "## [0.1.0]\n"),
+            ("invalid date", "## [0.1.0] - 2026-02-30\n"),
+            ("trailing whitespace", f"{heading} \n"),
+        )
+        for name, changelog in changelogs:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(dir=self.root) as directory:
+                fixture = Path(directory)
+                self.write_contract(fixture)
+                (fixture / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+
+                result = self.run_checker("v0.1.0", fixture)
+
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("changelog heading", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
     def test_accepts_minimal_valid_docker_label_forms(self):
         variants = (
             "LABEL org.opencontainers.image.version=0.1.0",
@@ -234,6 +283,24 @@ class VersionContractTests(unittest.TestCase):
             result = self.run_checker("v0.1.0", fixture)
 
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_any_dockerfile_heredoc_without_a_traceback(self):
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            fixture = Path(directory)
+            self.write_contract(fixture)
+            (fixture / "Dockerfile").write_text(
+                "FROM scratch\n"
+                "RUN <<EOF\n"
+                "LABEL org.opencontainers.image.version=0.1.0\n"
+                "EOF\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("v0.1.0", fixture)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("image version label", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
 
     def test_rejects_missing_or_ambiguous_final_docker_stage_version_labels(self):
         dockerfiles = (

@@ -311,6 +311,32 @@ class RepositoryPolicyTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn(field, result.stderr)
 
+    def test_accepts_canonical_pull_request_review_semantics(self):
+        result = run_checker(public_api_fixture())
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_each_pull_request_review_semantic_drift(self):
+        expected = {
+            "dismiss_stale_reviews_on_push": True,
+            "require_code_owner_review": False,
+            "require_last_push_approval": False,
+        }
+        for field, value in expected.items():
+            with self.subTest(field=field):
+                api = public_api_fixture()
+                pull_request = next(
+                    rule
+                    for rule in api["ruleset:101"]["body"]["rules"]
+                    if rule["type"] == "pull_request"
+                )
+                pull_request["parameters"][field] = not value
+
+                result = run_checker(api)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn(field, result.stderr)
+
     def test_requires_exact_checks_and_dedicated_app_source(self):
         for mutation in ("missing", "generic-source"):
             with self.subTest(mutation=mutation):

@@ -1,9 +1,48 @@
 # PerfSentinelHub
 
+[![CI](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
+[![Sonar quality](https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=robintra_PerfSentinelHub)
+[![Sonar coverage](https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=coverage)](https://sonarcloud.io/component_measures?id=robintra_PerfSentinelHub&metric=coverage&view=list)
+[![Qodana](https://img.shields.io/badge/Qodana-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml)
+[![Daily audit](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/robintra/PerfSentinelHub/badge)](https://securityscorecards.dev/viewer/?uri=github.com/robintra/PerfSentinelHub)
+[![Latest release](https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver)](https://github.com/robintra/PerfSentinelHub/releases/latest)
+[![GHCR](https://img.shields.io/badge/GHCR-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub)
+[![Helm](https://img.shields.io/badge/Helm-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub)
+[![.NET](https://img.shields.io/badge/.NET-10.0.302-512BD4)](https://github.com/robintra/PerfSentinelHub/blob/main/global.json)
+[![License](https://img.shields.io/github/license/robintra/PerfSentinelHub)](https://github.com/robintra/PerfSentinelHub/blob/main/LICENSE)
+
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
 [perf-sentinel 0.11.2](https://github.com/robintra/perf-sentinel/releases/tag/v0.11.2) daemons.
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
+
+The badges link to configured workflows, analysis projects, package destinations, and repository
+evidence. They become observed public evidence only after the public activation and release
+rehearsal pass. Until then, the Qodana, GHCR, and Helm badges deliberately say `configured`, and no
+badge should be read as proof of a successful public run or published package. The CI, Sonar,
+CodeQL, daily audit, Scorecard, latest-release, and package endpoints are activation-bound and may
+remain empty or inaccessible while the repository is private.
+
+## Release contract and maturity
+
+The configured release contract accepts only stable `v0.x.y` tags. “Stable” means a release has no
+prerelease suffix or beta channel; `0.x.y` still denotes pre-1.0 maturity, so compatibility may
+change between minor versions. The configured first release is `v0.1.0`; publication is not
+claimed until the linked release destination and public verification workflow show it.
+
+Each release is closed to these four NativeAOT runtime targets and their matching symbol archives:
+
+- `linux-x64`
+- `linux-arm64`
+- `osx-arm64`
+- `win-x64`
+
+There is no macOS AMD64 or Windows ARM64 artifact. The same closed release also contains one
+multi-architecture Linux OCI image archive, one digest-bound Helm chart, an SPDX document and a
+Cosign bundle for every subject, plus GitHub provenance. `release-manifest.json` and `SHA256SUMS`
+bind the exact filenames, source commit, and digests.
 
 ## Run locally in five minutes
 
@@ -25,14 +64,15 @@ curl http://localhost:5080/api/findings
 
 The first poll starts immediately. The SQLite file survives restarts at the configured path.
 
-## Install with Helm
+## Install with Helm from source
 
-The chart always deploys one replica and a persistent volume. Supply at least one source:
+For local evaluation, the source chart always deploys one replica and a persistent volume. Supply
+at least one source and an immutable image digest:
 
 ```bash
 helm upgrade --install perf-sentinel-hub deploy/helm/perf-sentinel-hub \
   --set image.repository=ghcr.io/robintra/perf-sentinel-hub \
-  --set image.tag=0.1.0 \
+  --set image.digest=sha256:IMAGE_DIGEST \
   --set 'sources[0].id=production' \
   --set 'sources[0].name=Production' \
   --set 'sources[0].environment=production' \
@@ -44,6 +84,21 @@ For an authenticated daemon poll, put the value in a Kubernetes Secret, then set
 `sources[].authHeaderName`, `sources[].authSecretName`, and `sources[].authSecretKey`. Never put
 the credential itself in Helm values. For daemon push, set `sources[].importSecretName` and
 `sources[].importSecretKey`; the referenced value must contain at least 32 characters.
+
+For a public release, use the image digest recorded in its authenticated release manifest. Resolve
+the chart's registry digest once, record it, and pull or install only `oci://...@sha256:...`; a
+version tag is a discovery hint, never a deployment identity:
+
+```bash
+IMAGE_DIGEST="$(jq -r .image.digest release/release-manifest.json)"
+docker pull "ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST"
+
+CHART=ghcr.io/robintra/charts/perf-sentinel-hub
+CHART_DIGEST="$(oras resolve "$CHART:0.1.0")"
+helm pull "oci://$CHART@$CHART_DIGEST"
+```
+
+These registry commands are usable only after the public rehearsal and publication succeed.
 
 ## Configuration
 
@@ -114,7 +169,7 @@ source ID and a stable error code.
 
 ## Deliberate exclusions
 
-This release has no ingress, user authentication, CI/SARIF import, worker execution, trace
+The current codebase has no ingress, user authentication, CI/SARIF import, worker execution, trace
 backend, dashboard, acknowledgment writer, or remote backup. Network exposure and authentication
 belong in the next independent design; acknowledgments remain in the repository consumed by
 perf-sentinel.
@@ -123,13 +178,41 @@ perf-sentinel.
 
 ```bash
 make verify
+make security
+make release-check VERSION=0.1.0
 ```
 
-The gate uses locked packages, tests, a linux NativeAOT publish, Docker/Trivy, and Helm linting.
+These are the stable local operator entry points. `make verify` is the local equivalent of the
+aggregate build and packaging gate, `make security` runs the configured security checks, and
+`make release-check VERSION=0.1.0` validates repository version consistency before signed-tag
+creation.
+The protected GitHub check is `CI / Gate` from the dedicated PerfSentinel CI Gate App; a same-named
+GitHub Actions check does not satisfy that App-backed boundary.
+
+The local gate uses locked packages, tests, a Linux NativeAOT publish, Docker/Trivy, and Helm linting.
 The toolchain is pinned to .NET SDK 10.0.302, ASP.NET/SQLite 10.0.10,
 SQLitePCLRaw 3.0.5, Helm 4.2.3, and SHA-pinned GitHub Actions: checkout 7.0.1,
 setup-dotnet 6.0.0, setup-helm 5.0.1, and Trivy Action 0.36.0. Runtime containers are non-root,
 read-only, and based on digest-pinned official NativeAOT/chiseled images.
+
+## Verify a public release in a clean room
+
+After public activation, start from a fresh checkout of the stable tag and download every asset
+from its exact GitHub Release URL into a new `release/` directory. No repository secret is needed:
+
+```bash
+python3 scripts/verify-release.py public-input \
+  https://github.com/robintra/PerfSentinelHub/releases/tag/v0.1.0
+python3 scripts/verify-release.py verify-published --root release
+```
+
+The first command accepts only a canonical stable-form tag or exact release URL; confirm on that
+page that the release is published, not draft or prerelease. The second fails closed unless the
+downloaded directory contains exactly the manifest-declared assets and every checksum, subject,
+source identity, image digest, chart binding, SBOM, signature bundle, and attestation bundle agrees.
+Follow [RELEASING.md](RELEASING.md) for the exact public Cosign and GitHub attestation commands.
+Public verification is configured for all four targets, the image by digest, and the chart by
+digest; successful observation is deferred to the public rehearsal.
 
 ## License
 

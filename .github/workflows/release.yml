@@ -44,8 +44,7 @@ jobs:
           set -euo pipefail
           printf '%s' "$REQUESTED_TAG" | grep -Eq '^v0[.][0-9]+[.][0-9]+$'
           test "$GITHUB_REF" = "refs/tags/$REQUESTED_TAG"
-          test "$(git cat-file -t "$REQUESTED_TAG")" = tag
-          test "$(git rev-list -n 1 "$REQUESTED_TAG")" = "$GITHUB_SHA"
+          python3 scripts/check-release-tag.py "$REQUESTED_TAG" "$GITHUB_SHA"
           python3 scripts/check-version.py "$REQUESTED_TAG"
           {
             echo "version=${REQUESTED_TAG#v}"
@@ -421,8 +420,13 @@ jobs:
             cmp "$RUNNER_TEMP/$architecture-a.digest" "$RUNNER_TEMP/$architecture-b.digest"
           done
           image="release/perf-sentinel-hub-$VERSION.oci.tar"
-          docker buildx build . --platform linux/amd64,linux/arm64 --provenance=false --sbom=false --build-arg "VERSION=$VERSION" --build-arg "SOURCE_COMMIT=$SOURCE_COMMIT" --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" --output "type=oci,dest=$image"
-          python3 scripts/check-image-manifest.py --layout "$image" --write-digest "$RUNNER_TEMP/image.digest"
+          for attempt in a b; do
+            python3 scripts/check-image-manifest.py --compose-output "$RUNNER_TEMP/image-$attempt.oci.tar" --source "linux/amd64=$RUNNER_TEMP/amd64-$attempt.oci.tar" --source "linux/arm64=$RUNNER_TEMP/arm64-$attempt.oci.tar" --source-date-epoch "$SOURCE_DATE_EPOCH" --write-digest "$RUNNER_TEMP/image-$attempt.digest"
+          done
+          cmp "$RUNNER_TEMP/image-a.digest" "$RUNNER_TEMP/image-b.digest"
+          cmp "$RUNNER_TEMP/image-a.oci.tar" "$RUNNER_TEMP/image-b.oci.tar"
+          mv "$RUNNER_TEMP/image-a.oci.tar" "$image"
+          mv "$RUNNER_TEMP/image-a.digest" "$RUNNER_TEMP/image.digest"
       - id: image
         name: Export immutable image digest
         run: echo "digest=$(cat "$RUNNER_TEMP/image.digest")" >> "$GITHUB_OUTPUT"

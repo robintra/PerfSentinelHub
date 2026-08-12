@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import os
 import re
 import sys
 import tarfile
+import tempfile
 from pathlib import Path, PurePosixPath
 
 
@@ -18,6 +21,7 @@ INDEX_MEDIA_TYPES = {
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
 }
+ALL_PLATFORMS = frozenset((('linux', 'amd64'), ('linux', 'arm64')))
 
 
 def load_json(content: bytes, description: str):
@@ -103,7 +107,11 @@ class Layout:
             raise ValueError("OCI layout contains missing, unreferenced, or unlisted blobs")
 
 
-def validated_digest(path: Path, expected_platforms: frozenset[tuple[str, str]]) -> str:
+def validated_layout(
+    path: Path,
+    expected_platforms: frozenset[tuple[str, str]],
+    expected_manifests: dict[tuple[str, str], str] | None = None,
+):
     layout = Layout(path)
     marker = load_json(layout.required("oci-layout"), "oci-layout")
     if marker != {"imageLayoutVersion": "1.0.0"}:
@@ -125,17 +133,23 @@ def validated_digest(path: Path, expected_platforms: frozenset[tuple[str, str]])
         root_digest = descriptor["digest"]
 
     actual_platforms = []
+    actual_manifests = {}
     for descriptor in manifests:
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("platform"), dict):
             raise ValueError("OCI manifest platform is required")
         platform = descriptor["platform"]
         if set(platform) != {"os", "architecture"}:
             raise ValueError("OCI manifest platform must contain only os and architecture")
-        actual_platforms.append((platform["os"], platform["architecture"]))
+        identity = (platform["os"], platform["architecture"])
+        actual_platforms.append(identity)
         layout.blob(descriptor)
     if len(actual_platforms) != len(set(actual_platforms)) or frozenset(actual_platforms) != expected_platforms:
         rendered = ", ".join(f"{os_name}/{architecture}" for os_name, architecture in sorted(actual_platforms))
         raise ValueError(f"OCI platforms differ from the exact expected set: {rendered}")
+    for identity, descriptor in zip(actual_platforms, manifests, strict=True):
+        actual_manifests[identity] = descriptor["digest"]
+    if expected_manifests is not None and actual_manifests != expected_manifests:
+        raise ValueError("OCI manifest digest differs from the exact verified platform subjects")
     for descriptor in manifests:
         manifest = load_json(layout.blob(descriptor), "OCI image manifest")
         if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 2:
@@ -148,7 +162,93 @@ def validated_digest(path: Path, expected_platforms: frozenset[tuple[str, str]])
         for layer in layers:
             layout.blob(layer)
     layout.reject_unreferenced_blobs()
-    return root_digest
+    return root_digest, layout, manifests
+
+
+def validated_digest(
+    path: Path,
+    expected_platforms: frozenset[tuple[str, str]],
+    expected_manifests: dict[tuple[str, str], str] | None = None,
+) -> str:
+    return validated_layout(path, expected_platforms, expected_manifests)[0]
+
+
+def descriptor_path(descriptor: dict) -> str:
+    match = SHA256.fullmatch(descriptor["digest"])
+    if match is None:
+        raise ValueError("OCI descriptor digest must be canonical")
+    return f"blobs/sha256/{match.group(1)}"
+
+
+def image_blob_paths(layout: Layout, descriptor: dict) -> set[str]:
+    manifest = load_json(layout.blob(descriptor), "OCI image manifest")
+    config = manifest.get("config") if isinstance(manifest, dict) else None
+    layers = manifest.get("layers") if isinstance(manifest, dict) else None
+    if not isinstance(config, dict) or not isinstance(layers, list):
+        raise ValueError("OCI image manifest config and layers are required")
+    result = {descriptor_path(descriptor), descriptor_path(config)}
+    layout.blob(config)
+    for layer in layers:
+        layout.blob(layer)
+        result.add(descriptor_path(layer))
+    return result
+
+
+def compose_layout(
+    output: Path,
+    sources: dict[tuple[str, str], Path],
+    source_date_epoch: int,
+) -> str:
+    if set(sources) != set(ALL_PLATFORMS):
+        raise ValueError("OCI composition requires exactly linux/amd64 and linux/arm64 sources")
+    if output.exists() or output.is_symlink():
+        raise ValueError("OCI composition output must not already exist")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptors = []
+    blobs = {}
+    expected_manifests = {}
+    for identity, source in sorted(sources.items()):
+        _, layout, manifests = validated_layout(source, frozenset((identity,)))
+        descriptor = manifests[0]
+        descriptors.append(descriptor)
+        expected_manifests[identity] = descriptor["digest"]
+        for name in image_blob_paths(layout, descriptor):
+            content = layout.entries[name]
+            if name in blobs and blobs[name] != content:
+                raise ValueError("OCI sources contain conflicting content for one digest")
+            blobs[name] = content
+
+    entries = {
+        "oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
+        "index.json": json.dumps(
+            {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.index.v1+json",
+                "manifests": descriptors,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii"),
+        **blobs,
+    }
+    temporary_name = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=f".{output.name}.", delete=False) as stream:
+            temporary_name = stream.name
+            with tarfile.open(fileobj=stream, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+                for name, content in sorted(entries.items()):
+                    info = tarfile.TarInfo(name)
+                    info.size = len(content)
+                    info.mode = 0o644
+                    info.uid = info.gid = 0
+                    info.mtime = source_date_epoch
+                    archive.addfile(info, io.BytesIO(content))
+        os.replace(temporary_name, output)
+        temporary_name = None
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
+    return validated_digest(output, ALL_PLATFORMS, expected_manifests)
 
 
 def parse_platforms(value: str) -> frozenset[tuple[str, str]]:
@@ -163,14 +263,60 @@ def parse_platforms(value: str) -> frozenset[tuple[str, str]]:
     return frozenset(result)
 
 
+def parse_source(value: str) -> tuple[tuple[str, str], Path]:
+    platform, separator, path = value.partition("=")
+    parsed = parse_platforms(platform)
+    if not separator or len(parsed) != 1 or not path:
+        raise argparse.ArgumentTypeError("source must be linux/ARCH=OCI_LAYOUT")
+    return next(iter(parsed)), Path(path)
+
+
+def parse_expected_manifest(value: str) -> tuple[tuple[str, str], str]:
+    platform, separator, digest = value.partition("=")
+    parsed = parse_platforms(platform)
+    if not separator or len(parsed) != 1 or SHA256.fullmatch(digest) is None:
+        raise argparse.ArgumentTypeError("expected manifest must be linux/ARCH=sha256:DIGEST")
+    return next(iter(parsed)), digest
+
+
+def unique_bindings(bindings, description: str):
+    result = {}
+    for key, value in bindings:
+        if key in result:
+            raise ValueError(f"duplicate {description} platform")
+        result[key] = value
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--layout", type=Path, required=True)
-    parser.add_argument("--platforms", type=parse_platforms, default=parse_platforms("linux/amd64,linux/arm64"))
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--layout", type=Path)
+    mode.add_argument("--compose-output", type=Path)
+    parser.add_argument("--platforms", type=parse_platforms, default=ALL_PLATFORMS)
+    parser.add_argument("--source", type=parse_source, action="append", default=[])
+    parser.add_argument("--source-date-epoch", type=int, default=0)
+    parser.add_argument("--expected-manifest", type=parse_expected_manifest, action="append", default=[])
     parser.add_argument("--write-digest", type=Path)
     arguments = parser.parse_args(argv)
     try:
-        digest = validated_digest(arguments.layout, arguments.platforms)
+        if arguments.source_date_epoch < 0:
+            raise ValueError("source date epoch must be nonnegative")
+        if arguments.layout is not None:
+            if arguments.source:
+                raise ValueError("source is valid only with compose-output")
+            expected = unique_bindings(arguments.expected_manifest, "expected manifest")
+            if expected and set(expected) != set(arguments.platforms):
+                raise ValueError("expected manifests must cover every requested platform exactly")
+            digest = validated_digest(arguments.layout, arguments.platforms, expected or None)
+        else:
+            if arguments.expected_manifest:
+                raise ValueError("expected-manifest is valid only with layout")
+            digest = compose_layout(
+                arguments.compose_output,
+                unique_bindings(arguments.source, "source"),
+                arguments.source_date_epoch,
+            )
         if arguments.write_digest is not None:
             if arguments.write_digest.exists() and (arguments.write_digest.is_symlink() or not arguments.write_digest.is_file()):
                 raise ValueError("digest output must be a regular file")

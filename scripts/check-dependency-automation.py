@@ -51,7 +51,10 @@ AUTO_MERGE_MARKER = re.compile(
 DEPENDABOT_IDENTITY = re.compile(
     r"(?<![a-z0-9_-])dependabot(?:\[bot\])?(?![a-z0-9_-])", re.IGNORECASE
 )
-GITHUB_ACTOR = re.compile(r"(?<![a-z0-9_])github\s*\.\s*actor(?![a-z0-9_])", re.IGNORECASE)
+GITHUB_IDENTITY = re.compile(
+    r"(?<![a-z0-9_])github\s*\.\s*(?:actor|event\s*\.\s*pull_request\s*\.\s*user\s*\.\s*login)(?![a-z0-9_])",
+    re.IGNORECASE,
+)
 WORKFLOW_TOKEN = re.compile(r"--[a-z0-9-]+|[a-z0-9_./\[\]-]+", re.IGNORECASE)
 YAML_KEY = re.compile(r"^(?P<key>[a-z][a-z0-9-]*):(?: (?P<value>.+))?$")
 
@@ -134,15 +137,15 @@ def load_dependabot_yaml(path):
     return parsed
 
 
-def has_dependabot_gh_auto_merge(text):
-    if GITHUB_ACTOR.search(text) is None or DEPENDABOT_IDENTITY.search(text) is None:
+def has_dependabot_gh_merge(text):
+    if GITHUB_IDENTITY.search(text) is None or DEPENDABOT_IDENTITY.search(text) is None:
         return False
     normalized = re.sub(r"\\\s*\r?\n\s*", " ", text.casefold())
     tokens = WORKFLOW_TOKEN.findall(normalized)
-    for index in range(len(tokens) - 2):
-        if tokens[index : index + 3] == ["gh", "pr", "merge"]:
-            return "--auto" in tokens[index + 3 :]
-    return False
+    return any(
+        tokens[index : index + 3] == ["gh", "pr", "merge"]
+        for index in range(len(tokens) - 2)
+    )
 
 
 def validate_ownership(root):
@@ -157,7 +160,7 @@ def validate_ownership(root):
             errors.append(f"{workflow.relative_to(root)}: unable to inspect workflow: {error}")
             continue
         if DEPENDABOT_IDENTITY.search(text) and (
-            AUTO_MERGE_MARKER.search(text) or has_dependabot_gh_auto_merge(text)
+            AUTO_MERGE_MARKER.search(text) or has_dependabot_gh_merge(text)
         ):
             errors.append(f"{workflow.relative_to(root)}: Dependabot auto-merge is forbidden")
         if "renovatebot/" in text.casefold():

@@ -332,6 +332,31 @@ class DependencyAutomationTests(unittest.TestCase):
 
         self.check_invalid(add_auto_merge, "auto-merge")
 
+    def test_rejects_direct_dependabot_merges_without_auto(self):
+        identities = (
+            "github . actor == 'dependabot[bot]'",
+            "github . event . pull_request . user . login == 'DEPENDABOT[BOT]'",
+        )
+        for identity in identities:
+            with self.subTest(identity=identity):
+                def add_direct_merge(_config, root, identity=identity):
+                    workflow = root / ".github" / "workflows" / "merge.yml"
+                    workflow.parent.mkdir(parents=True, exist_ok=True)
+                    workflow.write_text(
+                        "name: Dependency updates\n"
+                        "jobs:\n"
+                        "  merge:\n"
+                        f"    if: ${{{{ {identity} }}}}\n"
+                        "    steps:\n"
+                        "      - run: |\n"
+                        "          gh \\\n"
+                        "            pr \\\n"
+                        "            merge \"$PR_URL\" --squash\n",
+                        encoding="utf-8",
+                    )
+
+                self.check_invalid(add_direct_merge, "auto-merge")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -165,10 +165,15 @@ def changelog_versions(root: Path) -> list[str]:
         opening = FENCE_OPENING.fullmatch(visible)
         if opening is not None:
             marker = opening.group("marker")
+            if marker[0] == "`" and "`" in opening.group("info"):
+                fail("changelog heading cannot be hidden by invalid backtick fence info")
             fence = (marker[0], len(marker))
             continue
-        if not visible.startswith("## ["):
+        heading_candidate = visible.lstrip(" \t")
+        if not heading_candidate.startswith("## ["):
             continue
+        if heading_candidate != visible:
+            fail("changelog heading must not be indented")
         heading = CHANGELOG_HEADING.fullmatch(visible)
         if heading is None:
             fail("changelog heading must use canonical ## [VERSION] - YYYY-MM-DD syntax")

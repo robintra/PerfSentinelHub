@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "release_tag": {
+    "principal": "robin.trassard@gmail.com",
+    "key_type": "ssh-ed25519",
+    "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEeff9aSY7E1k7ilkhOYqKqu6YlceyTtyIrL7Ps5HrPP",
+    "fingerprint": "SHA256:PXKuwB2z5bZZ3oIp+fY+Xz6iV03G/e2xkgzJJxieD4k"
+  },
+  "github": {
+    "oidc_issuer": "https://token.actions.githubusercontent.com",
+    "repository": "robintra/PerfSentinelHub",
+    "repository_url": "https://github.com/robintra/PerfSentinelHub",
+    "release_workflow": ".github/workflows/release.yml",
+    "tag_ref_template": "refs/tags/v{version}",
+    "workflow_identity_template": "https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v{version}"
+  }
+}

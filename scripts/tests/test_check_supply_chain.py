@@ -804,6 +804,14 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_accepts_canonical_bounded_download_retries(self):
+        result = run_download_lines(
+            f"/usr/bin/curl -q -fsSL --retry 5 --retry-all-errors --retry-delay 2 {ARTIFACT_URL} -o tool",
+            f"/usr/bin/printf '{CHECKSUM}  tool\\n' | /usr/bin/sha256sum -c -",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
     def test_rejects_noncanonical_download_command_suffixes(self):
         suffixes = {
             "semicolon": " ; true",

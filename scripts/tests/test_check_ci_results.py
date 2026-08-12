@@ -281,6 +281,11 @@ class CiWorkflowTests(unittest.TestCase):
                 self.assertTrue(script.startswith("#!/bin/dash\nset -eu\n"))
                 for marker in markers:
                     self.assertIn(marker, script)
+                if filename == "download-secret-scanners.sh":
+                    self.assertIn(
+                        "--retry 5 --retry-all-errors --retry-delay 2",
+                        script,
+                    )
 
         for name in ("secret-scan", "action-pins"):
             with self.subTest(job=name):

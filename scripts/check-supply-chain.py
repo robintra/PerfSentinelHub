@@ -51,7 +51,8 @@ GITHUB_ARTIFACT = re.compile(
     rf"^https://github\.com/({SAFE_NAME})/({SAFE_NAME})/releases/download/({SAFE_NAME})/({SAFE_NAME})$"
 )
 CANONICAL_DOWNLOAD = re.compile(
-    rf"/usr/bin/curl -q -fsSL (?P<url>{GITHUB_ARTIFACT_URL}) -o (?P<output>{SAFE_RELATIVE_PATH})"
+    rf"/usr/bin/curl -q -fsSL(?: --retry 5 --retry-all-errors --retry-delay 2)? "
+    rf"(?P<url>{GITHUB_ARTIFACT_URL}) -o (?P<output>{SAFE_RELATIVE_PATH})"
 )
 CANONICAL_USES = re.compile(
     rf"^\s+- uses: (?P<name>{SAFE_RELATIVE_PATH})@(?P<sha>[0-9A-Fa-f]{{40}})(?: # {SAFE_NAME})?$"

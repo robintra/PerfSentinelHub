@@ -68,7 +68,11 @@ def complete_readme():
     return "# PerfSentinelHub\n\n" + "\n".join(
         badge(label, image, destination)
         for label, (image, destination) in BADGES.items()
-    ) + "\n"
+    ) + "\n\n"
+
+
+def add_to_badge_block(addition):
+    return complete_readme()[:-1] + addition + "\n"
 
 
 def write_root(
@@ -116,6 +120,27 @@ class BadgeTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_rejects_collapsed_shortcut_and_title_variants(self):
+        first, second = (
+            badge(label, image, destination)
+            for label, (image, destination) in tuple(BADGES.items())[:2]
+        )
+        variants = {
+            "collapsed lines": complete_readme().replace(
+                f"{first}\n{second}", f"{first}{second}"
+            ),
+            "shortcut image": add_to_badge_block("![Build]\n"),
+            "different title": complete_readme().replace(
+                "# PerfSentinelHub", "# Other", 1
+            ),
+        }
+        for name, readme in variants.items():
+            with self.subTest(name=name):
+                result = run_checker(readme)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical top badge block", result.stderr)
+
     def test_requires_each_named_badge(self):
         for label, (image, destination) in BADGES.items():
             with self.subTest(label=label):
@@ -126,7 +151,7 @@ class BadgeTests(unittest.TestCase):
                 result = run_checker(readme)
 
                 self.assertEqual(1, result.returncode)
-                self.assertIn(f"missing badge: {label}", result.stderr)
+                self.assertIn("canonical top badge block", result.stderr)
 
     def test_rejects_a_badge_linked_to_a_decorative_destination(self):
         image, destination = BADGES["CodeQL"]
@@ -138,23 +163,25 @@ class BadgeTests(unittest.TestCase):
         result = run_checker(readme)
 
         self.assertEqual(1, result.returncode)
-        self.assertIn("CodeQL badge must link to its evidence", result.stderr)
+        self.assertIn("canonical top badge block", result.stderr)
 
     def test_rejects_an_unlinked_decorative_badge(self):
-        readme = complete_readme() + "![Build](https://img.shields.io/badge/build-pretty-green)\n"
+        readme = add_to_badge_block(
+            "![Build](https://img.shields.io/badge/build-pretty-green)\n"
+        )
 
         result = run_checker(readme)
 
         self.assertEqual(1, result.returncode)
-        self.assertIn("badge image without an evidence link", result.stderr)
+        self.assertIn("canonical top badge block", result.stderr)
 
     def test_rejects_an_unlinked_decorative_image_with_a_generic_url(self):
-        readme = complete_readme() + "![Build](https://example.test/status.svg)\n"
+        readme = add_to_badge_block("![Build](https://example.test/status.svg)\n")
 
         result = run_checker(readme)
 
         self.assertEqual(1, result.returncode)
-        self.assertIn("image without an evidence link: Build", result.stderr)
+        self.assertIn("canonical top badge block", result.stderr)
 
     def test_allows_an_ordinary_image_outside_the_top_badge_block(self):
         readme = complete_readme() + "\n## Architecture\n\n![Flow](docs/flow.svg)\n"
@@ -173,22 +200,24 @@ class BadgeTests(unittest.TestCase):
         }
         for name, addition in additions.items():
             with self.subTest(name=name):
-                result = run_checker(complete_readme() + addition)
+                result = run_checker(add_to_badge_block(addition))
 
                 self.assertEqual(1, result.returncode)
-                self.assertIn("unsupported image syntax in top badge block", result.stderr)
+                self.assertIn("canonical top badge block", result.stderr)
 
     def test_rejects_an_unknown_linked_decorative_badge(self):
-        readme = complete_readme() + badge(
-            "Build",
-            "https://img.shields.io/badge/build-pretty-green",
-            "https://github.com/robintra/PerfSentinelHub",
-        ) + "\n"
+        readme = add_to_badge_block(
+            badge(
+                "Build",
+                "https://img.shields.io/badge/build-pretty-green",
+                "https://github.com/robintra/PerfSentinelHub",
+            ) + "\n"
+        )
 
         result = run_checker(readme)
 
         self.assertEqual(1, result.returncode)
-        self.assertIn("unsupported badge: Build", result.stderr)
+        self.assertIn("canonical top badge block", result.stderr)
 
     def test_rejects_a_link_to_missing_committed_workflow_evidence(self):
         result = run_checker(complete_readme(), include_daily_workflow=False)

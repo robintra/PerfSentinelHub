@@ -11,20 +11,19 @@ import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 
-SONAR_PROPERTIES = {
-    "sonar.projectKey": "robintrassard_PerfSentinelHub",
-    "sonar.organization": "robintrassard",
-    "sonar.host.url": "https://sonarcloud.io",
-    "sonar.sources": "PerfSentinelHub",
-    "sonar.tests": "PerfSentinelHub.Tests",
-    "sonar.exclusions": (
-        "**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,"
-        "artifacts/sonar/**,graphify-out/**"
-    ),
-    "sonar.coverageReportPaths": "artifacts/sonar/SonarQube.xml",
-    "sonar.cs.vstest.reportsPaths": "artifacts/coverage/tests.trx",
-    "sonar.sourceEncoding": "UTF-8",
-}
+# SonarScanner for .NET refuses to run when a sonar-project.properties file exists, so every
+# setting is passed on its command line instead and validated there.
+SONAR_SCANNER_ARGUMENTS = (
+    "/k:robintrassard_PerfSentinelHub",
+    "/o:robintrassard",
+    "/d:sonar.host.url=https://sonarcloud.io",
+    "/d:sonar.qualitygate.wait=true",
+    "/d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml",
+    "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx",
+    "/d:sonar.sourceEncoding=UTF-8",
+    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"',
+)
+SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}
 REQUIRED_SECRETS = {
     "CI_GATE_APP_ID",
@@ -62,38 +61,23 @@ def load_json(path: Path):
 
 
 def validate_sonar(root: Path) -> list[str]:
-    path = root / "sonar-project.properties"
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        return [f"sonar-project.properties: unable to read strict UTF-8: {error}"]
     errors = []
-    if "\r" in text or not text.endswith("\n"):
-        errors.append("sonar-project.properties: canonical LF-terminated properties are required")
-    properties = {}
-    for number, line in enumerate(text.splitlines(), start=1):
-        if not line or line.startswith(("#", "!")) or "\\" in line or "=" not in line:
-            errors.append(f"sonar-project.properties:{number}: non-canonical property")
+    if (root / "sonar-project.properties").exists():
+        errors.append(
+            "sonar-project.properties must not exist: SonarScanner for .NET rejects it"
+        )
+    for relative in SONAR_WORKFLOWS:
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            errors.append(f"{relative}: unable to read strict UTF-8: {error}")
             continue
-        key, value = line.split("=", 1)
-        if key.strip() != key or value.strip() != value or not key or not value:
-            errors.append(f"sonar-project.properties:{number}: non-canonical property")
-            continue
-        if key in properties:
-            errors.append(f"sonar-project.properties:{number}: duplicate property {key}")
-            continue
-        properties[key] = value
-    unknown = set(properties) - set(SONAR_PROPERTIES)
-    missing = set(SONAR_PROPERTIES) - set(properties)
-    errors.extend(
-        f"sonar-project.properties: unknown property {key}" for key in sorted(unknown)
-    )
-    errors.extend(
-        f"sonar-project.properties: missing required property {key}" for key in sorted(missing)
-    )
-    for key, expected in SONAR_PROPERTIES.items():
-        if key in properties and properties[key] != expected:
-            errors.append(f"sonar-project.properties: {key} differs from the canonical policy")
+        errors.extend(
+            f"{relative}: Sonar scanner is missing {argument}"
+            for argument in SONAR_SCANNER_ARGUMENTS
+            if argument not in text
+        )
     return errors
 
 

@@ -19,12 +19,12 @@ BADGES = {
     "Sonar quality": (
         "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status",
         "https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub",
-        "sonar-project.properties",
+        ".github/workflows/ci.yml",
     ),
     "Sonar coverage": (
         "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
         "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
-        "sonar-project.properties",
+        ".github/workflows/ci.yml",
     ),
     "CodeQL": (
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg",

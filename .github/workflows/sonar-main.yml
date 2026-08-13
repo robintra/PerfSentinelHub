@@ -1,0 +1,61 @@
+name: Sonar main
+
+# The CI workflow only runs on pull requests, so SonarCloud would never see main and pull request
+# analyses would have no reference branch to compute new code against. This workflow refreshes that
+# baseline on every merge and does nothing else.
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: sonar-main
+  cancel-in-progress: true
+
+jobs:
+  sonar-main:
+    name: SonarCloud main baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/packages.lock.json
+      - name: Restore locked dependencies and tools
+        run: |
+          dotnet restore PerfSentinelHub.sln --locked-mode
+          dotnet tool restore
+      - name: Build with warnings as errors
+        run: dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
+      - name: Run the covered suites
+        run: |
+          rm -rf artifacts/coverage
+          mkdir -p artifacts/coverage
+          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --filter "FullyQualifiedName~ConfigurationTests|FullyQualifiedName~FindingIngestionTests|FullyQualifiedName~FindingsApiTests|FullyQualifiedName~ImportApiTests|FullyQualifiedName~PollingTests|FullyQualifiedName~StatusTests|FullyQualifiedName~StorageTests|FullyQualifiedName~WorkerAndRetentionTests" --collect:"XPlat Code Coverage" --logger:"trx;LogFileName=tests.trx" --results-directory artifacts/coverage
+      - name: Prepare locked Sonar inputs
+        run: |
+          rm -rf artifacts/sonar
+          mkdir -p artifacts/sonar
+          dotnet tool run reportgenerator -- -reports:artifacts/coverage/coverage.cobertura.xml -targetdir:artifacts/sonar -reporttypes:SonarQube
+          python3 scripts/check-analysis-config.py --require-analysis-inputs
+      - name: Refresh the SonarCloud main baseline
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool run dotnet-sonarscanner begin /k:robintrassard_PerfSentinelHub /o:robintrassard /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx
+          dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
+          dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"

@@ -218,7 +218,7 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.302
+          dotnet-version: 10.0.400
           cache: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
           cache-dependency-path: |
             Directory.Packages.props
@@ -292,7 +292,7 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.302
+          dotnet-version: 10.0.400
           cache: true
           cache-dependency-path: |
             Directory.Packages.props
@@ -337,7 +337,7 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.302
+          dotnet-version: 10.0.400
           cache: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
           cache-dependency-path: |
             Directory.Packages.props
@@ -449,7 +449,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         if: ${{ github.event_name != 'pull_request' || github.event.repository.private == true }}
         with:
-          dotnet-version: 10.0.302
+          dotnet-version: 10.0.400
       - name: Audit dispatched dependencies
         if: ${{ github.event_name != 'pull_request' || github.event.repository.private == true }}
         run: make audit

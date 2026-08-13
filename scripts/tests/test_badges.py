@@ -50,7 +50,7 @@ BADGES = {
         "https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub",
     ),
     ".NET": (
-        "https://img.shields.io/badge/.NET-10.0.302-512BD4",
+        "https://img.shields.io/badge/.NET-10.0.400-512BD4",
         "https://github.com/robintra/PerfSentinelHub/blob/main/global.json",
     ),
     "License": (
@@ -80,7 +80,7 @@ def write_root(
     readme,
     *,
     include_daily_workflow=True,
-    sdk_version="10.0.302",
+    sdk_version="10.0.400",
     license_text=CANONICAL_LICENSE,
 ):
     if isinstance(readme, bytes):

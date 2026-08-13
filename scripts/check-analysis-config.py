@@ -22,6 +22,16 @@ SONAR_SCANNER_ARGUMENTS = (
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx",
     "/d:sonar.sourceEncoding=UTF-8",
     '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"',
+    # scripts/ holds CI tooling, not shipped code: it stays analysed for quality but is kept out
+    # of the coverage figure, which measures the service itself.
+    '"/d:sonar.coverage.exclusions=scripts/**"',
+    # secrets:S6338 reads the base64 NuGet lock hashes as Azure Storage keys, and pythonsecurity:S8707
+    # flags CLI paths in tooling the workflow itself invokes with fixed arguments.
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clitooling",
+    "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338",
+    "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json",
+    "/d:sonar.issue.ignore.multicriteria.clitooling.ruleKey=pythonsecurity:S8707",
+    '"/d:sonar.issue.ignore.multicriteria.clitooling.resourceKey=scripts/**"',
 )
 SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}
@@ -33,7 +43,8 @@ REQUIRED_SECRETS = {
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 WORKFLOW_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)\}\}")
 CANONICAL_SECRET_REFERENCE = re.compile(r"\s*secrets\.([A-Z][A-Z0-9_]*)\s*")
-SECRET_TOKEN = re.compile(r"(?<![A-Za-z0-9_])secrets(?![A-Za-z0-9_])", re.IGNORECASE)
+# "secrets:S6338" is a Sonar rule key, not a GitHub secret reference.
+SECRET_TOKEN = re.compile(r"(?<![A-Za-z0-9_])secrets(?![A-Za-z0-9_])(?!:S\d)", re.IGNORECASE)
 SECRET_VALUE = re.compile(
     r"(?i)(?:\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{16,}"
     r"|(?:gh[pousr]_|github_pat_|sqa_|qdt_)[A-Za-z0-9_=-]{16,}"

@@ -1000,7 +1000,13 @@ def trusted_context() -> ssl.SSLContext:
         (path for path in (Path("/etc/ssl/cert.pem"),) if path.exists()),
         None,
     )
-    return ssl.create_default_context(cafile=str(certificate_bundle) if certificate_bundle else None)
+    context = ssl.create_default_context(
+        cafile=str(certificate_bundle) if certificate_bundle else None
+    )
+    # create_default_context already negotiates TLS 1.2 or better on supported runtimes. Stating
+    # the floor makes it independent of the interpreter's defaults.
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
 
 
 def request_headers(url: str, accept: str) -> dict[str, str]:

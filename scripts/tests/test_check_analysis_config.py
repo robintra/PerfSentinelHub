@@ -16,7 +16,13 @@ SCANNER = (
     "/d:sonar.host.url=https://sonarcloud.io /d:sonar.token=\"$SONAR_TOKEN\" "
     "/d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml "
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx /d:sonar.sourceEncoding=UTF-8 "
-    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"\n'
+    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**" '
+    '"/d:sonar.coverage.exclusions=scripts/**" '
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clitooling "
+    "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338 "
+    "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json "
+    "/d:sonar.issue.ignore.multicriteria.clitooling.ruleKey=pythonsecurity:S8707 "
+    '"/d:sonar.issue.ignore.multicriteria.clitooling.resourceKey=scripts/**"\n'
 )
 SONAR = SCANNER
 

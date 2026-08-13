@@ -34,8 +34,8 @@ failureConditions:
     high: 0
 '''
 
-SONAR = '''sonar.projectKey=robintra_PerfSentinelHub
-sonar.organization=robintra
+SONAR = '''sonar.projectKey=robintrassard_PerfSentinelHub
+sonar.organization=robintrassard
 sonar.host.url=https://sonarcloud.io
 sonar.sources=PerfSentinelHub
 sonar.tests=PerfSentinelHub.Tests

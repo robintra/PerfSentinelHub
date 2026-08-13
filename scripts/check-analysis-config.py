@@ -26,8 +26,8 @@ QODANA_PATHS = (
     "graphify-out",
 )
 SONAR_PROPERTIES = {
-    "sonar.projectKey": "robintra_PerfSentinelHub",
-    "sonar.organization": "robintra",
+    "sonar.projectKey": "robintrassard_PerfSentinelHub",
+    "sonar.organization": "robintrassard",
     "sonar.host.url": "https://sonarcloud.io",
     "sonar.sources": "PerfSentinelHub",
     "sonar.tests": "PerfSentinelHub.Tests",

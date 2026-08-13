@@ -14,12 +14,12 @@ BADGES = {
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml",
     ),
     "Sonar quality": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=alert_status",
-        "https://sonarcloud.io/summary/new_code?id=robintra_PerfSentinelHub",
+        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status",
+        "https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub",
     ),
     "Sonar coverage": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=coverage",
-        "https://sonarcloud.io/component_measures?id=robintra_PerfSentinelHub&metric=coverage&view=list",
+        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
+        "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
     ),
     "Qodana": (
         "https://img.shields.io/badge/Qodana-configured-lightgrey",
@@ -100,7 +100,7 @@ def write_root(
     )
     (root / "LICENSE").write_text(license_text, encoding="utf-8")
     (root / "sonar-project.properties").write_text(
-        "sonar.projectKey=robintra_PerfSentinelHub\n", encoding="utf-8"
+        "sonar.projectKey=robintrassard_PerfSentinelHub\n", encoding="utf-8"
     )
 
 

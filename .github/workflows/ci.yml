@@ -313,7 +313,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          dotnet tool run dotnet-sonarscanner begin /k:robintra_PerfSentinelHub /o:robintra /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx
+          dotnet tool run dotnet-sonarscanner begin /k:robintrassard_PerfSentinelHub /o:robintrassard /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx
           dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
           dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 

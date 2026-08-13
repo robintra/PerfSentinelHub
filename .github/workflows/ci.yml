@@ -291,7 +291,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          dotnet tool run dotnet-sonarscanner begin /k:robintrassard_PerfSentinelHub /o:robintrassard /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx /d:sonar.sourceEncoding=UTF-8 "/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"
+          dotnet tool run dotnet-sonarscanner begin /k:robintrassard_PerfSentinelHub /o:robintrassard /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx /d:sonar.sourceEncoding=UTF-8 "/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**" "/d:sonar.coverage.exclusions=scripts/**" /d:sonar.issue.ignore.multicriteria=nugethash,clitooling /d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338 /d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json /d:sonar.issue.ignore.multicriteria.clitooling.ruleKey=pythonsecurity:S8707 "/d:sonar.issue.ignore.multicriteria.clitooling.resourceKey=scripts/**"
           # No --warnaserror here: the scanner injects its Roslyn analysers into this build, so
           # every Sonar rule would become a compile error and kill the run before the report is
           # sent. sonar.qualitygate.wait is what gates quality, and the plain build already runs

@@ -4,7 +4,7 @@ Thank you for contributing. Keep changes focused, preserve the AGPL-3.0-only lic
 
 ## Before you start
 
-Use .NET SDK 10.0.400, Python 3, Docker, Helm 4, and the security tools used by the relevant Make targets. Package restores are locked. Do not edit generated `bin`, `obj`, coverage, Qodana, or release output.
+Use .NET SDK 10.0.400, Python 3, Docker, Helm 4, and the security tools used by the relevant Make targets. Package restores are locked. Do not edit generated `bin`, `obj`, coverage, or release output.
 
 For a defect or behavior change, write a test that demonstrates the failure before changing production code. Run the narrow test during development, then run:
 
@@ -32,7 +32,7 @@ git log --show-signature -1
 
 Open a pull request against `main`, complete the pull request checklist, and resolve every review conversation. The repository requires linear history and disallows direct pushes, force pushes, branch deletion, and administrator bypass. The solo-maintainer policy requires zero additional approving reviews, but it still requires a pull request, signed commits, resolved conversations, and every required check.
 
-Required checks include the dedicated-App-authored `CI / Gate`, SonarCloud, Qodana, CodeQL, and dependency review. A check named `CI / Gate` from GitHub Actions or any other source does not satisfy the dedicated App boundary.
+Required checks include the dedicated-App-authored `CI / Gate`, SonarCloud, CodeQL, and dependency review. A check named `CI / Gate` from GitHub Actions or any other source does not satisfy the dedicated App boundary.
 
 ## Fork trust boundary
 

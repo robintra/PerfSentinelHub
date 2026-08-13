@@ -16,14 +16,12 @@ APP_ID = 4242
 CHECKS = (
     ("CI / Gate", APP_ID),
     ("CI / Dependency review", None),
-    ("CI / Trusted Qodana", None),
     ("CI / Trusted SonarCloud", None),
     ("CodeQL / CodeQL C#", None),
 )
 SECRETS = (
     "CI_GATE_APP_ID",
     "CI_GATE_APP_PRIVATE_KEY",
-    "QODANA_TOKEN",
     "SONAR_TOKEN",
 )
 

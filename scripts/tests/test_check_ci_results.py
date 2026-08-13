@@ -21,7 +21,6 @@ EXPENSIVE = {
     "helm",
     "native-aot",
     "oci",
-    "qodana",
     "quality-tests-coverage",
     "sonar",
 }
@@ -42,7 +41,6 @@ def allowed_results(mode: str, decision: str) -> dict[str, set[str]]:
         for job in EXPENSIVE:
             allowed[job] = {"success", "skipped"}
     if mode in {"fork", "dispatch"}:
-        allowed["qodana"] = {"skipped"}
         allowed["sonar"] = {"skipped"}
     return allowed
 
@@ -137,7 +135,7 @@ class CheckCiResultsTests(unittest.TestCase):
 
     def test_trusted_analysis_must_be_skipped_for_forks_and_dispatches(self):
         for mode in ("fork", "dispatch"):
-            for job in ("qodana", "sonar"):
+            for job in ("sonar",):
                 needs = valid_needs(mode, "code")
                 needs[job]["result"] = "success"
                 with self.subTest(mode=mode, job=job):
@@ -330,10 +328,9 @@ class CiWorkflowTests(unittest.TestCase):
             for name in ALL_JOBS
             if "secrets." in job_body(name)
         }
-        self.assertEqual({"publish-gate", "qodana", "sonar"}, secret_jobs)
-        self.assertIn("secrets.QODANA_TOKEN", job_body("qodana"))
+        self.assertEqual({"publish-gate", "sonar"}, secret_jobs)
         self.assertIn("secrets.SONAR_TOKEN", job_body("sonar"))
-        for name in ("qodana", "sonar"):
+        for name in ("sonar",):
             body = job_body(name)
             self.assertIn("github.event_name == 'pull_request'", body)
             self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", body)
@@ -361,7 +358,7 @@ class CiWorkflowTests(unittest.TestCase):
             preflight.index("core.setOutput('head_sha'"),
         )
 
-        for name in VALIDATION_JOBS - {"changes", "qodana", "sonar"}:
+        for name in VALIDATION_JOBS - {"changes", "sonar"}:
             body = job_body(name)
             if "actions/checkout@" not in body:
                 continue

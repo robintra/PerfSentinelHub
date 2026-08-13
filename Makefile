@@ -3,11 +3,8 @@ OUTPUT ?= dist
 override COVERAGE_DIR := artifacts/coverage
 override COVERAGE_REPORT := $(COVERAGE_DIR)/coverage.cobertura.xml
 override SONAR_DIR := artifacts/sonar
-override QODANA_RESULTS := artifacts/qodana
-override QODANA_IMAGE := jetbrains/qodana-dotnet:2026.1@sha256:c893fb5f5dbe54cd4b9c2cb1bd11d711242add66c5a3ac65fe7fc302cdb8c0a3
-QODANA_TIMEOUT_SECONDS ?= 1800
 
-.PHONY: tool-restore restore format build coverage coverage-check analysis-config-check badge-check security-exceptions security sonar-prepare qodana python-tests test publish package-native audit image image-scan helm-lint helm-template release-check verify-fast verify
+.PHONY: tool-restore restore format build coverage coverage-check analysis-config-check badge-check security-exceptions security sonar-prepare python-tests test publish package-native audit image image-scan helm-lint helm-template release-check verify-fast verify
 
 tool-restore:
 	dotnet tool restore
@@ -46,23 +43,6 @@ sonar-prepare: analysis-config-check tool-restore coverage
 	rm -rf "$(SONAR_DIR)"
 	dotnet tool run reportgenerator -- -reports:"$(COVERAGE_REPORT)" -targetdir:"$(SONAR_DIR)" -reporttypes:SonarQube
 	python3 scripts/check-analysis-config.py --require-analysis-inputs
-
-qodana: analysis-config-check
-	rm -rf "$(QODANA_RESULTS)"
-	mkdir -p "$(QODANA_RESULTS)"
-	@set -eu; \
-		docker run --rm --name perf-sentinel-hub-qodana \
-			-v "$(CURDIR):/data/project" \
-			-v "$(CURDIR)/$(QODANA_RESULTS):/data/results" \
-			$(if $(QODANA_TOKEN),--env QODANA_TOKEN,) \
-			"$(QODANA_IMAGE)" --no-statistics=true & \
-		qodana_pid=$$!; \
-		( sleep "$(QODANA_TIMEOUT_SECONDS)"; docker stop --time 10 perf-sentinel-hub-qodana >/dev/null 2>&1 || true ) & \
-		watchdog_pid=$$!; \
-		set +e; wait "$$qodana_pid"; status=$$?; set -e; \
-		kill "$$watchdog_pid" >/dev/null 2>&1 || true; \
-		wait "$$watchdog_pid" 2>/dev/null || true; \
-		exit "$$status"
 
 python-tests:
 	python3 -m unittest discover -s scripts/tests

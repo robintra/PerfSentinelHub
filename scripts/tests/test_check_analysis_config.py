@@ -8,31 +8,8 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY / "scripts" / "check-analysis-config.py"
-QODANA_DIGEST = "sha256:c893fb5f5dbe54cd4b9c2cb1bd11d711242add66c5a3ac65fe7fc302cdb8c0a3"
 
 
-QODANA = f'''version: "1.0"
-linter: jetbrains/qodana-dotnet:2026.1@{QODANA_DIGEST}
-profile:
-  name: qodana.recommended
-dotnet:
-  solution: PerfSentinelHub.sln
-exclude:
-  - name: All
-    paths:
-      - PerfSentinelHub/bin
-      - PerfSentinelHub/obj
-      - PerfSentinelHub.Tests/bin
-      - PerfSentinelHub.Tests/obj
-      - TestResults
-      - artifacts/coverage
-      - artifacts/sonar
-      - graphify-out
-failureConditions:
-  severityThresholds:
-    critical: 0
-    high: 0
-'''
 
 SONAR = '''sonar.projectKey=robintrassard_PerfSentinelHub
 sonar.organization=robintrassard
@@ -51,7 +28,6 @@ def secret_inventory(**entry_overrides):
     for name, purpose in (
         ("CI_GATE_APP_ID", "Identify the dedicated CI gate GitHub App."),
         ("CI_GATE_APP_PRIVATE_KEY", "Mint a short-lived CI gate installation token."),
-        ("QODANA_TOKEN", "Authenticate the trusted Qodana CI analysis job."),
         ("SONAR_TOKEN", "Authenticate the trusted SonarCloud analysis job."),
     ):
         entry = {
@@ -73,22 +49,11 @@ def secret_inventory(**entry_overrides):
 def supply_chain():
     return {
         "schema_version": 1,
-        "inventory": [
-            {
-                "name": "jetbrains/qodana-dotnet",
-                "kind": "container",
-                "version": "2026.1",
-                "digest_or_sha": QODANA_DIGEST,
-                "released_at": "2026-04-21T09:02:03.110286Z",
-                "source": "https://hub.docker.com/v2/namespaces/jetbrains/repositories/qodana-dotnet/tags/2026.1",
-                "reason": "Latest eligible stable Qodana for .NET image.",
-            }
-        ],
+        "inventory": [],
     }
 
 
-def write_repository(root, *, qodana=QODANA, sonar=SONAR, secrets=None, workflow=None):
-    (root / "qodana.yaml").write_text(qodana, encoding="utf-8")
+def write_repository(root, *, sonar=SONAR, secrets=None, workflow=None):
     (root / "sonar-project.properties").write_text(sonar, encoding="utf-8")
     config = root / "config"
     config.mkdir()
@@ -124,8 +89,7 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
                     "jobs:\n  analysis:\n    env:\n"
                     "      CI_GATE_APP_ID: ${{ secrets.CI_GATE_APP_ID }}\n"
                     "      CI_GATE_APP_PRIVATE_KEY: ${{ secrets.CI_GATE_APP_PRIVATE_KEY }}\n"
-                    "      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}\n"
-                    "      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n"
+                                        "      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n"
                 ),
             )
 
@@ -149,57 +113,6 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
                     self.assertEqual(1, result.returncode)
                     self.assertIn(missing, result.stderr)
 
-    def test_rejects_starter_profile_and_commented_failure_conditions(self):
-        cases = (
-            QODANA.replace("qodana.recommended", "qodana.starter"),
-            QODANA.replace("failureConditions:", "#failureConditions:"),
-        )
-        for qodana in cases:
-            with self.subTest(qodana=qodana):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    write_repository(root, qodana=qodana)
-
-                    result = run_checker(root)
-
-                    self.assertEqual(1, result.returncode)
-                    self.assertIn("qodana.yaml", result.stderr)
-
-    def test_rejects_mutable_qodana_image_and_blanket_exclusion(self):
-        cases = (
-            QODANA.replace(f"@{QODANA_DIGEST}", ""),
-            QODANA.replace("    paths:\n", "").replace(
-                "      - PerfSentinelHub/bin\n      - PerfSentinelHub/obj\n"
-                "      - PerfSentinelHub.Tests/bin\n      - PerfSentinelHub.Tests/obj\n"
-                "      - TestResults\n      - artifacts/coverage\n      - artifacts/sonar\n"
-                "      - graphify-out\n",
-                "",
-            ),
-        )
-        for qodana in cases:
-            with self.subTest(qodana=qodana):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    write_repository(root, qodana=qodana)
-
-                    result = run_checker(root)
-
-                    self.assertEqual(1, result.returncode)
-                    self.assertIn("qodana.yaml", result.stderr)
-
-    def test_rejects_qodana_exclusion_outside_generated_build_paths(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            write_repository(
-                root,
-                qodana=QODANA.replace("      - graphify-out", "      - PerfSentinelHub/Api"),
-            )
-
-            result = run_checker(root)
-
-            self.assertEqual(1, result.returncode)
-            self.assertIn("PerfSentinelHub/Api", result.stderr)
-
     def test_rejects_missing_sonar_coverage_path_and_source_exclusion(self):
         cases = (
             SONAR.replace(
@@ -218,17 +131,16 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
                     self.assertEqual(1, result.returncode)
                     self.assertIn("sonar-project.properties", result.stderr)
 
-    def test_rejects_ambiguous_yaml_and_properties_forms(self):
+    def test_rejects_ambiguous_properties_forms(self):
         cases = (
-            (QODANA.replace("profile:", "'profile':"), SONAR),
-            (QODANA, SONAR.replace("sonar.sources=", "sonar.sources =")),
-            (QODANA, SONAR + "sonar.sources=Other\n"),
+            SONAR.replace("sonar.sources=", "sonar.sources ="),
+            SONAR + "sonar.sources=Other\n",
         )
-        for qodana, sonar in cases:
-            with self.subTest(qodana=qodana, sonar=sonar):
+        for sonar in cases:
+            with self.subTest(sonar=sonar):
                 with tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
-                    write_repository(root, qodana=qodana, sonar=sonar)
+                    write_repository(root, sonar=sonar)
 
                     result = run_checker(root)
 

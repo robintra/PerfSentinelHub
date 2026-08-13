@@ -21,10 +21,6 @@ BADGES = {
         "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
         "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
     ),
-    "Qodana": (
-        "https://img.shields.io/badge/Qodana-configured-lightgrey",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml",
-    ),
     "CodeQL": (
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg",
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml",

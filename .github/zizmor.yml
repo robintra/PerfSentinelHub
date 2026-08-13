@@ -1,0 +1,12 @@
+# Findings this repository accepts, with the reasoning that earned the exception.
+
+rules:
+  # zizmor asks for at least seven days before Dependabot proposes a release, as protection against
+  # consuming a freshly compromised version before it is yanked. This repository takes updates
+  # immediately instead: every bump is reviewed by a human, lockfiles and checksums are pinned, and
+  # the full pipeline runs before anything merges, so a bad release is caught by the gate rather
+  # than by waiting. The cost of the delay on security patches is judged higher than the residual
+  # risk. Reviewed 2026-08-14.
+  dependabot-cooldown:
+    ignore:
+      - dependabot.yml

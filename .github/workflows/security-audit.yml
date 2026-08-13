@@ -21,7 +21,6 @@ on:
       - 'LICENSE'
       - 'NuGet.Config'
       - 'osv-scanner.toml'
-      - 'qodana.yaml'
       - 'scripts/check-*.py'
       - 'scripts/download-*.sh'
   workflow_dispatch:
@@ -250,36 +249,6 @@ jobs:
           test "$CONFIG_OUTCOME" = success
           test "$IMAGE_SCAN_OUTCOME" = success
 
-  qodana:
-    name: Blocking Qodana audit
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-      - name: Run the digest-pinned Qodana audit
-        id: qodana
-        continue-on-error: true
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-        run: make qodana
-      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
-        if: ${{ always() }}
-        with:
-          sarif_file: artifacts/qodana/qodana.sarif.json
-          category: security-audit/qodana
-      - name: Fail when Qodana did not pass
-        if: ${{ always() && steps.qodana.outcome != 'success' }}
-        run: exit 1
-
   scorecard:
     name: OpenSSF Scorecard
     runs-on: ubuntu-24.04
@@ -317,7 +286,7 @@ jobs:
 
   notify:
     name: Reconcile the scheduled audit alert
-    needs: [source-audit, trivy, qodana, scorecard]
+    needs: [source-audit, trivy, scorecard]
     if: ${{ always() && github.event_name == 'schedule' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -335,7 +304,7 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const needs = JSON.parse(process.env.NEEDS_JSON);
-            const expected = ['qodana', 'scorecard', 'source-audit', 'trivy'];
+            const expected = ['scorecard', 'source-audit', 'trivy'];
             if (Object.keys(needs).sort().join(',') !== expected.join(',')) {
               throw new Error('scheduled audit result set is incomplete');
             }

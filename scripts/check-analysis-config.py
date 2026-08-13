@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the repository's canonical Qodana, Sonar, and secret metadata."""
+"""Validate the repository's canonical Sonar and secret metadata."""
 
 from __future__ import annotations
 
@@ -11,20 +11,6 @@ import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 
-QODANA_IMAGE = re.compile(
-    r"^jetbrains/qodana-dotnet:(?P<version>[0-9]{4}\.[0-9]+)@"
-    r"(?P<digest>sha256:[0-9a-f]{64})$"
-)
-QODANA_PATHS = (
-    "PerfSentinelHub/bin",
-    "PerfSentinelHub/obj",
-    "PerfSentinelHub.Tests/bin",
-    "PerfSentinelHub.Tests/obj",
-    "TestResults",
-    "artifacts/coverage",
-    "artifacts/sonar",
-    "graphify-out",
-)
 SONAR_PROPERTIES = {
     "sonar.projectKey": "robintrassard_PerfSentinelHub",
     "sonar.organization": "robintrassard",
@@ -43,7 +29,6 @@ SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}
 REQUIRED_SECRETS = {
     "CI_GATE_APP_ID",
     "CI_GATE_APP_PRIVATE_KEY",
-    "QODANA_TOKEN",
     "SONAR_TOKEN",
 }
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -74,80 +59,6 @@ def unique_object(pairs: list[tuple[str, object]]) -> dict:
 
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
-
-
-def canonical_qodana_lines(linter: str) -> tuple[str, ...]:
-    return (
-        'version: "1.0"',
-        f"linter: {linter}",
-        "profile:",
-        "  name: qodana.recommended",
-        "dotnet:",
-        "  solution: PerfSentinelHub.sln",
-        "exclude:",
-        "  - name: All",
-        "    paths:",
-        *(f"      - {path}" for path in QODANA_PATHS),
-        "failureConditions:",
-        "  severityThresholds:",
-        "    critical: 0",
-        "    high: 0",
-    )
-
-
-def validate_qodana(root: Path) -> list[str]:
-    path = root / "qodana.yaml"
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        return [f"qodana.yaml: unable to read strict UTF-8: {error}"]
-    errors = []
-    if "\r" in text or not text.endswith("\n"):
-        errors.append("qodana.yaml: canonical LF-terminated YAML is required")
-    if "qodana.starter" in text:
-        errors.append("qodana.yaml: qodana.starter is not permitted")
-    if any(
-        line.lstrip().startswith("#") and "failureConditions" in line
-        for line in text.splitlines()
-    ):
-        errors.append("qodana.yaml: failureConditions must not be commented out")
-    ambiguous = re.compile(r"\t|(^|\s)(?:[&*!]|<<:)|[{}\[\]\\]|^[ ]*['\"][^'\"]+['\"]:")
-    if any(ambiguous.search(line) for line in text.splitlines() if not line.lstrip().startswith("#")):
-        errors.append("qodana.yaml: ambiguous YAML forms are not permitted")
-    lines = tuple(text.splitlines())
-    linter = lines[1].removeprefix("linter: ") if len(lines) > 1 else ""
-    image = QODANA_IMAGE.fullmatch(linter)
-    if image is None:
-        errors.append("qodana.yaml: linter must use a stable version and sha256 digest")
-        return errors
-    unexpected_paths = [
-        line.removeprefix("      - ")
-        for line in lines
-        if line.startswith("      - ")
-        and line.removeprefix("      - ") not in QODANA_PATHS
-    ]
-    errors.extend(
-        f"qodana.yaml: excluded path is not permitted: {excluded}"
-        for excluded in unexpected_paths
-    )
-    if lines != canonical_qodana_lines(linter):
-        errors.append("qodana.yaml: configuration differs from the canonical blocking policy")
-    try:
-        inventory = load_json(root / "config" / "supply-chain.json")["inventory"]
-        pin = next(
-            item
-            for item in inventory
-            if isinstance(item, dict) and item.get("name") == "jetbrains/qodana-dotnet"
-        )
-        if (
-            pin.get("kind") != "container"
-            or pin.get("version") != image.group("version")
-            or pin.get("digest_or_sha") != image.group("digest")
-        ):
-            errors.append("qodana.yaml: linter differs from the supply-chain pin")
-    except (OSError, UnicodeError, ValueError, KeyError, StopIteration, TypeError):
-        errors.append("qodana.yaml: matching supply-chain container pin is required")
-    return errors
 
 
 def validate_sonar(root: Path) -> list[str]:
@@ -310,7 +221,6 @@ def main(argv: list[str] | None = None) -> int:
     root = Path.cwd()
     secret_errors, inventory_names = validate_secret_inventory(root)
     errors = [
-        *validate_qodana(root),
         *validate_sonar(root),
         *secret_errors,
         *validate_workflow_secrets(root, inventory_names),

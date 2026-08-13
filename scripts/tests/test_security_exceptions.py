@@ -182,7 +182,6 @@ class SecurityWorkflowContractTests(unittest.TestCase):
             "gitleaks git",
             "trivy-action",
             "zizmor",
-            "make qodana",
             "scorecard-action",
             "syft",
             "check-supply-chain.py",
@@ -200,7 +199,6 @@ class SecurityWorkflowContractTests(unittest.TestCase):
             {
                 "security-audit/gitleaks",
                 "security-audit/osv",
-                "security-audit/qodana",
                 "security-audit/scorecard",
                 "security-audit/trivy-config",
                 "security-audit/trivy-fs",
@@ -222,7 +220,6 @@ class SecurityWorkflowContractTests(unittest.TestCase):
         self.assertIn("listForRepo", notification)
         self.assertIn("issues.update", notification)
         self.assertIn("issues.create", notification)
-        self.assertNotIn("QODANA_TOKEN", notification)
 
     def test_codeql_uses_manual_locked_release_build_and_both_query_suites(self):
         workflow = CODEQL_WORKFLOW.read_text(encoding="utf-8")

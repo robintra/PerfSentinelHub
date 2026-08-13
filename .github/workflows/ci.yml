@@ -251,28 +251,6 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  qodana:
-    name: Trusted Qodana
-    needs: [validate-dispatch, changes]
-    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.result == 'success' && needs.changes.outputs.decision == 'code' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    permissions:
-      contents: read
-    steps:
-      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-          fetch-depth: 1
-      - name: Run blocking Qodana 2026.1 analysis
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-        run: make qodana
-
   sonar:
     name: Trusted SonarCloud
     needs: [validate-dispatch, changes, quality-tests-coverage]
@@ -538,7 +516,7 @@ jobs:
 
   aggregate:
     name: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'CI / Internal validation (non-required)' || 'CI / Fork validation (non-required)' }}
-    needs: [validate-dispatch, changes, markdown, quality-tests-coverage, qodana, sonar, native-aot, oci, helm, dependency-review, secret-scan, action-pins]
+    needs: [validate-dispatch, changes, markdown, quality-tests-coverage, sonar, native-aot, oci, helm, dependency-review, secret-scan, action-pins]
     if: ${{ always() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -563,7 +541,7 @@ jobs:
 
   publish-gate:
     name: Publish trusted gate
-    needs: [validate-dispatch, changes, markdown, quality-tests-coverage, qodana, sonar, native-aot, oci, helm, dependency-review, secret-scan, action-pins]
+    needs: [validate-dispatch, changes, markdown, quality-tests-coverage, sonar, native-aot, oci, helm, dependency-review, secret-scan, action-pins]
     if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

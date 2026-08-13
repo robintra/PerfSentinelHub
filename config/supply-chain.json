@@ -330,15 +330,6 @@
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.11."
     },
     {
-      "name": "jetbrains/qodana-dotnet",
-      "kind": "container",
-      "version": "2026.1",
-      "digest_or_sha": "sha256:c893fb5f5dbe54cd4b9c2cb1bd11d711242add66c5a3ac65fe7fc302cdb8c0a3",
-      "released_at": "2026-04-21T09:02:03.110286Z",
-      "source": "https://hub.docker.com/v2/namespaces/jetbrains/repositories/qodana-dotnet/tags/2026.1",
-      "reason": "Latest eligible stable Qodana for .NET image, Dependabot manages later upgrades."
-    },
-    {
       "name": "helm",
       "kind": "github-release",
       "version": "4.2.3",
@@ -346,15 +337,6 @@
       "released_at": "2026-07-09T20:56:43Z",
       "source": "https://github.com/helm/helm/releases/tag/v4.2.3",
       "reason": "Latest stable Helm release; release commit is retained for the setup action provenance."
-    },
-    {
-      "name": "JetBrains/qodana-action",
-      "kind": "github-action",
-      "version": "2026.2.0",
-      "digest_or_sha": "b588768b6e7e6da579e518bc584f79de0d243692",
-      "released_at": "2026-07-29T08:04:23Z",
-      "source": "https://github.com/JetBrains/qodana-action/releases/tag/v2026.2.0",
-      "reason": "Latest stable Qodana action reserved for the quality gate."
     },
     {
       "name": "SonarSource/sonarqube-scan-action",

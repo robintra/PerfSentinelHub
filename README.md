@@ -3,7 +3,6 @@
 [![CI](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
 [![Sonar quality](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub)
 [![Sonar coverage](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage)](https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list)
-[![Qodana](https://img.shields.io/badge/Qodana-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml)
 [![Daily audit](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/robintra/PerfSentinelHub/badge)](https://securityscorecards.dev/viewer/?uri=github.com/robintra/PerfSentinelHub)
@@ -20,7 +19,7 @@ recovery safety net, and the Hub preserves read-compatible finding envelopes for
 
 The badges link to configured workflows, analysis projects, package destinations, and repository
 evidence. They become observed public evidence only after the public activation and release
-rehearsal pass. Until then, the Qodana, GHCR, and Helm badges deliberately say `configured`, and no
+rehearsal pass. Until then, the GHCR and Helm badges deliberately say `configured`, and no
 badge should be read as proof of a successful public run or published package. The CI, Sonar,
 CodeQL, daily audit, Scorecard, latest-release, and package endpoints are activation-bound and may
 remain empty or inaccessible while the repository is private.

@@ -1574,7 +1574,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(
             {
-                "JetBrains/qodana-action",
                 "SonarSource/sonarqube-scan-action",
                 "slsa-framework/slsa-github-generator",
             }.issubset(names)

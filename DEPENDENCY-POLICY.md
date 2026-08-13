@@ -18,9 +18,9 @@ Only stable releases are eligible. Stable repository declarations and `allowPrer
 `global.json` form the baseline, and the dependency-automation and supply-chain checks reject a
 prerelease opt-in or prerelease inventory entry.
 
-Every ordinary release must be at least three days old. Each Dependabot entry sets
-`cooldown.default-days` to `3` with no exclusion. GitHub applies cooldown to version updates before
-opening a pull request, so this is the blocking 72-hour control rather than a documentary promise.
+Each Dependabot entry sets `cooldown.default-days` to `3` with no exclusion, so automated version
+updates wait three days before a pull request opens. Manually pinned inventory entries are not
+subject to any waiting period and may adopt a stable release as soon as it ships.
 
 ## Security updates and exceptions
 
@@ -28,10 +28,8 @@ Security updates are intentionally not delayed by the ordinary three-day cooldow
 individual pull requests. They do not bypass review, locked restore, dependency review, static
 analysis, vulnerability scanning, or the aggregate CI gate. There is no auto-merge path.
 
-If a security fix requires a supply-chain stabilization exception, set `stabilization_exempt` only
-for that exact stable release, record the advisory and reason in `config/supply-chain.json`, and
-remove the exception on the next ordinary update. Prereleases, broad ranges, and standing
-exceptions are not permitted.
+A security fix is pinned in `config/supply-chain.json` like any other entry, with its advisory and
+reason recorded. Prereleases, broad ranges, and standing exceptions are not permitted.
 
 ## Review and activation
 

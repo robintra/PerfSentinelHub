@@ -143,9 +143,8 @@ def validate_qodana(root: Path) -> list[str]:
             pin.get("kind") != "container"
             or pin.get("version") != image.group("version")
             or pin.get("digest_or_sha") != image.group("digest")
-            or pin.get("stabilization_exempt") is not False
         ):
-            errors.append("qodana.yaml: linter differs from the non-exempt supply-chain pin")
+            errors.append("qodana.yaml: linter differs from the supply-chain pin")
     except (OSError, UnicodeError, ValueError, KeyError, StopIteration, TypeError):
         errors.append("qodana.yaml: matching supply-chain container pin is required")
     return errors

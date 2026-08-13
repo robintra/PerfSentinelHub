@@ -14,6 +14,6 @@ Maintainers will acknowledge a report within three business days, provide an ini
 
 ## Disclosure and release
 
-Keep the report confidential until a fixed release and advisory are ready or a disclosure date has been agreed. A security release follows the same signed, verified release process as other releases, but it does not wait for the ordinary 72-hour dependency stabilization period when a security update is urgent.
+Keep the report confidential until a fixed release and advisory are ready or a disclosure date has been agreed. A security release follows the same signed, verified release process as other releases.
 
 Public release artifacts are checksummed, signed with Sigstore, and accompanied by GitHub attestations. Follow `RELEASING.md` to verify the workflow identity, source commit, and artifact digest independently.

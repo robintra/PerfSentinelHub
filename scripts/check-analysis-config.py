@@ -21,6 +21,7 @@ SONAR_SCANNER_ARGUMENTS = (
     "/d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml",
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx",
     "/d:sonar.sourceEncoding=UTF-8",
+    "/d:sonar.python.version=3.12",
     '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"',
     # scripts/ holds CI tooling, not shipped code: it stays analysed for quality but is kept out
     # of the coverage figure, which measures the service itself.

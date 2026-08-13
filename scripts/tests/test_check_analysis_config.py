@@ -16,6 +16,7 @@ SCANNER = (
     "/d:sonar.host.url=https://sonarcloud.io /d:sonar.token=\"$SONAR_TOKEN\" "
     "/d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml "
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx /d:sonar.sourceEncoding=UTF-8 "
+    "/d:sonar.python.version=3.12 "
     '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**" '
     '"/d:sonar.coverage.exclusions=scripts/**" '
     "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder "

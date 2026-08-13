@@ -10,7 +10,7 @@
 [![Latest release](https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver)](https://github.com/robintra/PerfSentinelHub/releases/latest)
 [![GHCR](https://img.shields.io/badge/GHCR-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub)
 [![Helm](https://img.shields.io/badge/Helm-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub)
-[![.NET](https://img.shields.io/badge/.NET-10.0.302-512BD4)](https://github.com/robintra/PerfSentinelHub/blob/main/global.json)
+[![.NET](https://img.shields.io/badge/.NET-10.0.400-512BD4)](https://github.com/robintra/PerfSentinelHub/blob/main/global.json)
 [![License](https://img.shields.io/github/license/robintra/PerfSentinelHub)](https://github.com/robintra/PerfSentinelHub/blob/main/LICENSE)
 
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
@@ -46,7 +46,7 @@ bind the exact filenames, source commit, and digests.
 
 ## Run locally in five minutes
 
-Requirements: .NET SDK 10.0.302 and a reachable perf-sentinel daemon.
+Requirements: .NET SDK 10.0.400 and a reachable perf-sentinel daemon.
 
 ```bash
 Hub__DatabasePath=/tmp/perf-sentinel-hub.db \
@@ -190,7 +190,7 @@ The protected GitHub check is `CI / Gate` from the dedicated PerfSentinel CI Gat
 GitHub Actions check does not satisfy that App-backed boundary.
 
 The local gate uses locked packages, tests, a Linux NativeAOT publish, Docker/Trivy, and Helm linting.
-The toolchain is pinned to .NET SDK 10.0.302, ASP.NET/SQLite 10.0.10,
+The toolchain is pinned to .NET SDK 10.0.400, ASP.NET/SQLite 10.0.11,
 SQLitePCLRaw 3.0.5, Helm 4.2.3, and SHA-pinned GitHub Actions: checkout 7.0.1,
 setup-dotnet 6.0.0, setup-helm 5.0.1, and Trivy Action 0.36.0. Runtime containers are non-root,
 read-only, and based on digest-pinned official NativeAOT/chiseled images.

@@ -4,7 +4,7 @@ Thank you for contributing. Keep changes focused, preserve the AGPL-3.0-only lic
 
 ## Before you start
 
-Use .NET SDK 10.0.302, Python 3, Docker, Helm 4, and the security tools used by the relevant Make targets. Package restores are locked. Do not edit generated `bin`, `obj`, coverage, Qodana, or release output.
+Use .NET SDK 10.0.400, Python 3, Docker, Helm 4, and the security tools used by the relevant Make targets. Package restores are locked. Do not edit generated `bin`, `obj`, coverage, Qodana, or release output.
 
 For a defect or behavior change, write a test that demonstrates the failure before changing production code. Run the narrow test during development, then run:
 

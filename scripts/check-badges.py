@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-SDK_VERSION = "10.0.302"
+SDK_VERSION = "10.0.400"
 LICENSE_SHA256 = "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
 BADGES = {
     "CI": (

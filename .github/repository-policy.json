@@ -8,7 +8,7 @@
     "allow_rebase_merge": true,
     "allow_merge_commit": false,
     "allow_auto_merge": false,
-    "delete_branch_on_merge": false
+    "delete_branch_on_merge": true
   },
   "security_features": [
     "secret_scanning",

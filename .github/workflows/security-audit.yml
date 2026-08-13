@@ -192,6 +192,7 @@ jobs:
           exit-code: 1
           ignore-unfixed: false
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           version: v0.70.0
           cache: false
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -204,6 +205,7 @@ jobs:
           output: artifacts/security/trivy-config.sarif
           exit-code: 1
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           version: v0.70.0
           cache: false
       - name: Build the audit image without publishing
@@ -219,6 +221,7 @@ jobs:
           exit-code: 1
           ignore-unfixed: false
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           version: v0.70.0
           cache: false
       - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6

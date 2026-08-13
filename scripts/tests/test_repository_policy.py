@@ -39,7 +39,7 @@ def public_api_fixture():
                 "allow_rebase_merge": True,
                 "allow_merge_commit": False,
                 "allow_auto_merge": False,
-                "delete_branch_on_merge": False,
+                "delete_branch_on_merge": True,
                 "security_and_analysis": {
                     "secret_scanning": {"status": "enabled"},
                     "secret_scanning_push_protection": {"status": "enabled"},
@@ -297,7 +297,7 @@ class RepositoryPolicyTests(unittest.TestCase):
             "allow_rebase_merge": True,
             "allow_merge_commit": False,
             "allow_auto_merge": False,
-            "delete_branch_on_merge": False,
+            "delete_branch_on_merge": True,
         }
         for field, value in expected.items():
             with self.subTest(field=field):

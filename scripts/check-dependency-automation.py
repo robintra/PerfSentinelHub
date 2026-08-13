@@ -16,11 +16,13 @@ ECOSYSTEMS = {
     "helm": "/deploy/helm/perf-sentinel-hub",
     "github-actions": "/",
 }
+# Dependabot expresses a release delay only through cooldown; the Renovate spellings cannot
+# reach here, the canonical-key check rejects camelCase first.
+FORBIDDEN_DELAY_KEYS = {"cooldown"}
 UPDATE_KEYS = {
     "package-ecosystem",
     "directory",
     "schedule",
-    "cooldown",
     "open-pull-requests-limit",
     "labels",
     "groups",
@@ -214,14 +216,9 @@ def validate_update(entry):
         errors.append(f"{ecosystem}: unsupported or missing Dependabot options")
     if entry.get("schedule") != SCHEDULE:
         errors.append(f"{ecosystem}: ordinary updates must run Monday at 06:00 Europe/Paris")
-    cooldown = entry.get("cooldown")
-    if (
-        not isinstance(cooldown, dict)
-        or set(cooldown) != {"default-days"}
-        or type(cooldown.get("default-days")) is not int
-        or cooldown["default-days"] != 3
-    ):
-        errors.append(f"{ecosystem}: ordinary updates require an unbypassed three-day cooldown")
+    delays = set(entry) & FORBIDDEN_DELAY_KEYS
+    if delays:
+        errors.append(f"{ecosystem}: stable releases must be immediate; release delays are forbidden")
     limit = entry.get("open-pull-requests-limit")
     labels = entry.get("labels")
     if (

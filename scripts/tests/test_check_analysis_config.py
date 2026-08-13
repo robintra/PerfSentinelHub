@@ -18,11 +18,17 @@ SCANNER = (
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx /d:sonar.sourceEncoding=UTF-8 "
     '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**" '
     '"/d:sonar.coverage.exclusions=scripts/**" '
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clitooling "
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder "
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338 "
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json "
-    "/d:sonar.issue.ignore.multicriteria.clitooling.ruleKey=pythonsecurity:S8707 "
-    '"/d:sonar.issue.ignore.multicriteria.clitooling.resourceKey=scripts/**"\n'
+    "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707 "
+    '"/d:sonar.issue.ignore.multicriteria.clipath.resourceKey=scripts/**" '
+    "/d:sonar.issue.ignore.multicriteria.clishell.ruleKey=pythonsecurity:S8705 "
+    '"/d:sonar.issue.ignore.multicriteria.clishell.resourceKey=scripts/**" '
+    "/d:sonar.issue.ignore.multicriteria.cliargs.ruleKey=pythonsecurity:S6350 "
+    '"/d:sonar.issue.ignore.multicriteria.cliargs.resourceKey=scripts/**" '
+    "/d:sonar.issue.ignore.multicriteria.sqlbuilder.ruleKey=csharpsquid:S2077 "
+    "/d:sonar.issue.ignore.multicriteria.sqlbuilder.resourceKey=PerfSentinelHub/Storage/HubDatabase.cs\n"
 )
 SONAR = SCANNER
 

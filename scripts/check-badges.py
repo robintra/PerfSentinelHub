@@ -17,13 +17,13 @@ BADGES = {
         ".github/workflows/ci.yml",
     ),
     "Sonar quality": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=alert_status",
-        "https://sonarcloud.io/summary/new_code?id=robintra_PerfSentinelHub",
+        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status",
+        "https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub",
         "sonar-project.properties",
     ),
     "Sonar coverage": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=coverage",
-        "https://sonarcloud.io/component_measures?id=robintra_PerfSentinelHub&metric=coverage&view=list",
+        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
+        "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
         "sonar-project.properties",
     ),
     "Qodana": (

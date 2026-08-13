@@ -1,8 +1,8 @@
 # PerfSentinelHub
 
 [![CI](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
-[![Sonar quality](https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=robintra_PerfSentinelHub)
-[![Sonar coverage](https://sonarcloud.io/api/project_badges/measure?project=robintra_PerfSentinelHub&metric=coverage)](https://sonarcloud.io/component_measures?id=robintra_PerfSentinelHub&metric=coverage&view=list)
+[![Sonar quality](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub)
+[![Sonar coverage](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage)](https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list)
 [![Qodana](https://img.shields.io/badge/Qodana-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml)
 [![Daily audit](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml)

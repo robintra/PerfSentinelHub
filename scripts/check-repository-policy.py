@@ -13,7 +13,8 @@ from urllib.parse import quote
 
 
 SECRET_REFERENCE = re.compile(r"\$\{\{\s*secrets\.([A-Z][A-Z0-9_]*)\s*\}\}")
-SECRET_TOKEN = re.compile(r"(?<![A-Za-z0-9_])secrets(?![A-Za-z0-9_])", re.IGNORECASE)
+# "secrets:S6338" is a Sonar rule key, not a GitHub secret reference.
+SECRET_TOKEN = re.compile(r"(?<![A-Za-z0-9_])secrets(?![A-Za-z0-9_])(?!:S\d)", re.IGNORECASE)
 LIST = "list"
 NULLABLE = "nullable"
 

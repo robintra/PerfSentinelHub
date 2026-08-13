@@ -46,6 +46,10 @@ jobs:
           rm -rf artifacts/coverage
           mkdir -p artifacts/coverage
           dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --filter "FullyQualifiedName~ConfigurationTests|FullyQualifiedName~FindingIngestionTests|FullyQualifiedName~FindingsApiTests|FullyQualifiedName~ImportApiTests|FullyQualifiedName~PollingTests|FullyQualifiedName~StatusTests|FullyQualifiedName~StorageTests|FullyQualifiedName~WorkerAndRetentionTests" --collect:"XPlat Code Coverage" --logger:"trx;LogFileName=tests.trx" --results-directory artifacts/coverage
+          set -- artifacts/coverage/*/coverage.cobertura.xml
+          test "$#" -eq 1
+          test -f "$1"
+          mv "$1" artifacts/coverage/coverage.cobertura.xml
       - name: Prepare locked Sonar inputs
         run: |
           rm -rf artifacts/sonar

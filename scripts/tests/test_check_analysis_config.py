@@ -11,16 +11,14 @@ CHECKER = REPOSITORY / "scripts" / "check-analysis-config.py"
 
 
 
-SONAR = '''sonar.projectKey=robintrassard_PerfSentinelHub
-sonar.organization=robintrassard
-sonar.host.url=https://sonarcloud.io
-sonar.sources=PerfSentinelHub
-sonar.tests=PerfSentinelHub.Tests
-sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**
-sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml
-sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx
-sonar.sourceEncoding=UTF-8
-'''
+SCANNER = (
+    "dotnet tool run dotnet-sonarscanner begin /k:robintrassard_PerfSentinelHub /o:robintrassard "
+    "/d:sonar.host.url=https://sonarcloud.io /d:sonar.token=\"$SONAR_TOKEN\" "
+    "/d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml "
+    "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx /d:sonar.sourceEncoding=UTF-8 "
+    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"\n'
+)
+SONAR = SCANNER
 
 
 def secret_inventory(**entry_overrides):
@@ -54,7 +52,10 @@ def supply_chain():
 
 
 def write_repository(root, *, sonar=SONAR, secrets=None, workflow=None):
-    (root / "sonar-project.properties").write_text(sonar, encoding="utf-8")
+    workflows = root / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").write_text(sonar, encoding="utf-8")
+    (workflows / "sonar-main.yml").write_text(sonar, encoding="utf-8")
     config = root / "config"
     config.mkdir()
     (config / "secret-inventory.json").write_text(
@@ -64,8 +65,6 @@ def write_repository(root, *, sonar=SONAR, secrets=None, workflow=None):
         json.dumps(supply_chain()), encoding="utf-8"
     )
     if workflow is not None:
-        workflows = root / ".github" / "workflows"
-        workflows.mkdir(parents=True)
         (workflows / "analysis.yml").write_text(workflow, encoding="utf-8")
 
 
@@ -115,9 +114,7 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
 
     def test_rejects_missing_sonar_coverage_path_and_source_exclusion(self):
         cases = (
-            SONAR.replace(
-                "sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml\n", ""
-            ),
+            SONAR.replace("/d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml ", ""),
             SONAR.replace("graphify-out/**", "PerfSentinelHub/Api/**"),
         )
         for sonar in cases:
@@ -129,12 +126,12 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
                     result = run_checker(root)
 
                     self.assertEqual(1, result.returncode)
-                    self.assertIn("sonar-project.properties", result.stderr)
+                    self.assertIn(".github/workflows/ci.yml", result.stderr)
 
-    def test_rejects_ambiguous_properties_forms(self):
+    def test_rejects_missing_scanner_arguments(self):
         cases = (
-            SONAR.replace("sonar.sources=", "sonar.sources ="),
-            SONAR + "sonar.sources=Other\n",
+            SONAR.replace("/o:robintrassard ", ""),
+            SONAR.replace("/d:sonar.qualitygate.wait=true ", ""),
         )
         for sonar in cases:
             with self.subTest(sonar=sonar):

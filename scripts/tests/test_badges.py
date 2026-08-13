@@ -95,7 +95,7 @@ def write_root(
         f'{{"sdk": {{"version": "{sdk_version}"}}}}\n', encoding="utf-8"
     )
     (root / "LICENSE").write_text(license_text, encoding="utf-8")
-    (root / "sonar-project.properties").write_text(
+    (root / ".github/workflows/ci.yml").write_text(
         "sonar.projectKey=robintrassard_PerfSentinelHub\n", encoding="utf-8"
     )
 

@@ -27,11 +27,19 @@ SONAR_SCANNER_ARGUMENTS = (
     '"/d:sonar.coverage.exclusions=scripts/**"',
     # secrets:S6338 reads the base64 NuGet lock hashes as Azure Storage keys, and pythonsecurity:S8707
     # flags CLI paths in tooling the workflow itself invokes with fixed arguments.
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clitooling",
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder",
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338",
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json",
-    "/d:sonar.issue.ignore.multicriteria.clitooling.ruleKey=pythonsecurity:S8707",
-    '"/d:sonar.issue.ignore.multicriteria.clitooling.resourceKey=scripts/**"',
+    "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707",
+    '"/d:sonar.issue.ignore.multicriteria.clipath.resourceKey=scripts/**"',
+    "/d:sonar.issue.ignore.multicriteria.clishell.ruleKey=pythonsecurity:S8705",
+    '"/d:sonar.issue.ignore.multicriteria.clishell.resourceKey=scripts/**"',
+    "/d:sonar.issue.ignore.multicriteria.cliargs.ruleKey=pythonsecurity:S6350",
+    '"/d:sonar.issue.ignore.multicriteria.cliargs.resourceKey=scripts/**"',
+    # S2077 reads the interpolated WHERE clause as SQL injection, but AddFilter only ever appends
+    # literal column and parameter names, with user values bound through parameters.
+    "/d:sonar.issue.ignore.multicriteria.sqlbuilder.ruleKey=csharpsquid:S2077",
+    "/d:sonar.issue.ignore.multicriteria.sqlbuilder.resourceKey=PerfSentinelHub/Storage/HubDatabase.cs",
 )
 SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}

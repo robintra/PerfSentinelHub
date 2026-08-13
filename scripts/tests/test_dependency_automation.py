@@ -27,7 +27,6 @@ def update_block(ecosystem, directory):
             "time": "06:00",
             "timezone": "Europe/Paris",
         },
-        "cooldown": {"default-days": 3},
         "open-pull-requests-limit": 5,
         "labels": ["dependencies", f"ecosystem:{ecosystem}"],
         "groups": {
@@ -173,14 +172,14 @@ class DependencyAutomationTests(unittest.TestCase):
                     "Monday at 06:00 Europe/Paris",
                 )
 
-    def test_rejects_a_cooldown_bypass(self):
-        for cooldown in ({}, {"default-days": 2}, {"default-days": 3, "exclude": ["*"]}):
-            with self.subTest(cooldown=cooldown):
+    def test_rejects_any_release_delay(self):
+        for value in ({"default-days": 3}, {"default-days": 1}, {}):
+            with self.subTest(cooldown=value):
                 self.check_invalid(
-                    lambda config, _root, cooldown=cooldown: config["updates"][0].__setitem__(
-                        "cooldown", cooldown
+                    lambda config, _root, value=value: config["updates"][0].__setitem__(
+                        "cooldown", value
                     ),
-                    "three-day cooldown",
+                    "release delays are forbidden",
                 )
 
     def test_rejects_non_integer_policy_numbers(self):
@@ -190,14 +189,6 @@ class DependencyAutomationTests(unittest.TestCase):
                 (True, 2.0, "2"),
                 lambda config, value: config.__setitem__("version", value),
                 "version 2",
-            ),
-            (
-                "cooldown",
-                (True, 3.0, "3"),
-                lambda config, value: config["updates"][0]["cooldown"].__setitem__(
-                    "default-days", value
-                ),
-                "three-day cooldown",
             ),
             (
                 "pull-request-limit",

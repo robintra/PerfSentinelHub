@@ -57,5 +57,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           dotnet tool run dotnet-sonarscanner begin /k:robintrassard_PerfSentinelHub /o:robintrassard /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" /d:sonar.qualitygate.wait=true /d:sonar.coverageReportPaths=artifacts/sonar/SonarQube.xml /d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx
-          dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
+          # No --warnaserror here: the scanner injects its Roslyn analysers into this build, so
+          # every Sonar rule would become a compile error and kill the run before the report is
+          # sent. sonar.qualitygate.wait is what gates quality, and the plain build already runs
+          # with --warnaserror elsewhere.
+          dotnet build PerfSentinelHub.sln -c Release --no-restore
           dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"

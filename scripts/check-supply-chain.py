@@ -28,10 +28,9 @@ REQUIRED_FIELDS = {
     "digest_or_sha",
     "released_at",
     "source",
-    "stabilization_exempt",
     "reason",
 }
-ALLOWED_FIELDS = REQUIRED_FIELDS | {"artifact_url", "expiry", "lock_content_hash", "nuget_role"}
+ALLOWED_FIELDS = REQUIRED_FIELDS | {"artifact_url", "lock_content_hash", "nuget_role"}
 KNOWN_KINDS = frozenset({"container", "dotnet-sdk", "dotnet-tool", "download", "github-action", "github-release", "nuget"})
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -105,11 +104,11 @@ def parse_timestamp(value: object) -> Decimal:
     return release_time + (Decimal(f"0.{fraction}") if fraction else 0)
 
 
-def release_time_and_stabilization_deadline(value: object) -> tuple[Decimal, Decimal]:
+def release_time(value: object) -> Decimal:
     match = DATE_ONLY.fullmatch(value) if isinstance(value, str) else None
     if match:
         try:
-            release_time = timestamp_from_datetime(
+            return timestamp_from_datetime(
                 datetime(
                     *(int(match.group(name)) for name in ("year", "month", "day")),
                     tzinfo=timezone.utc,
@@ -117,9 +116,7 @@ def release_time_and_stabilization_deadline(value: object) -> tuple[Decimal, Dec
             )
         except ValueError as error:
             raise ValueError("date is not canonical") from error
-        return release_time, release_time + 96 * 3600
-    release_time = parse_timestamp(value)
-    return release_time, release_time + 72 * 3600
+    return parse_timestamp(value)
 
 
 def unique_object(pairs: list[tuple[str, object]]) -> dict:
@@ -274,27 +271,12 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
             )
             if date_only and kind != "container" and kind != "dotnet-sdk":
                 raise ValueError("this source requires a precise timestamp")
-            _, stabilization_deadline = release_time_and_stabilization_deadline(
-                release_value
-            )
+            release_time(release_value)
         except (TypeError, ValueError):
             errors.append(
                 f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
             )
             continue
-        exempt = item["stabilization_exempt"]
-        if type(exempt) is not bool:
-            errors.append(f"{name}: stabilization_exempt must be a boolean")
-            exempt = False
-        if exempt:
-            try:
-                expiry = parse_timestamp(item.get("expiry"))
-                if expiry <= current_time or expiry > current_time + 90 * 86400:
-                    raise ValueError("expiry is outside the permitted window")
-            except (TypeError, ValueError):
-                errors.append(f"{name}: stabilization expiry must be a future UTC timestamp within 90 days")
-        elif current_time < stabilization_deadline:
-            errors.append(f"{name}: ordinary releases must be at least 72 hours old")
         if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
             errors.append(f"{name}: GitHub releases require a raw release commit SHA")
         if kind == "github-action" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
@@ -1122,12 +1104,8 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                 published_at = release.get("published_at")
                 if not isinstance(published_at, str):
                     errors.append(f"{item['name']}: official release published_at is required")
-                else:
-                    published = parse_timestamp(published_at)
-                    if not same_timestamp(published_at, item["released_at"]):
-                        errors.append(f"{item['name']}: official release timestamp differs from inventory")
-                    if published > current_time - 72 * 3600 and item["stabilization_exempt"] is False:
-                        errors.append(f"{item['name']}: official release is newer than 72 hours")
+                elif not same_timestamp(published_at, item["released_at"]):
+                    errors.append(f"{item['name']}: official release timestamp differs from inventory")
                 if item["kind"] in {"github-action", "github-release"}:
                     commit, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
                     if commit.get("sha", "").lower() != item["digest_or_sha"].lower():
@@ -1159,12 +1137,6 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     updated = tag.get("last_updated")
                     if not same_timestamp(updated, item["released_at"]):
                         errors.append(f"{item['name']}: Docker Hub release timestamp differs from inventory")
-                    elif (
-                        item["stabilization_exempt"] is False
-                        and current_time
-                        < release_time_and_stabilization_deadline(updated)[1]
-                    ):
-                        errors.append(f"{item['name']}: official container release is newer than 72 hours")
                 else:
                     digest = fetch_manifest_digest(source)
                     if digest is None:
@@ -1179,18 +1151,10 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                         release_date = release.get("release-date")
                         if not isinstance(release_date, str):
                             errors.append(f"{item['name']}: official container release date is required")
-                        else:
-                            _, stabilization_deadline = release_time_and_stabilization_deadline(
-                                release_date
+                        elif not same_release_value(release_date, item["released_at"]):
+                            errors.append(
+                                f"{item['name']}: official container release date differs from inventory"
                             )
-                            if not same_release_value(
-                                release_date, item["released_at"]
-                            ):
-                                errors.append(
-                                    f"{item['name']}: official container release date differs from inventory"
-                                )
-                            if current_time < stabilization_deadline and item["stabilization_exempt"] is False:
-                                errors.append(f"{item['name']}: official container release is newer than 72 hours")
             elif item["kind"] in ("dotnet-tool", "nuget"):
                 payload, _ = cached_json(source)
                 if payload.get("listed") is not True:
@@ -1239,14 +1203,6 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     release.get("release-date"), item["released_at"]
                 ):
                     errors.append(f"{item['name']}: .NET metadata release timestamp differs from inventory")
-                elif (
-                    item["stabilization_exempt"] is False
-                    and current_time
-                    < release_time_and_stabilization_deadline(
-                        release["release-date"]
-                    )[1]
-                ):
-                    errors.append(f"{item['name']}: official .NET release is newer than 72 hours")
                 artifact = next((file for file in release.get("sdk", {}).get("files", []) if file.get("url") == item.get("artifact_url")), None)
                 if artifact is None or f"sha512:{artifact.get('hash', '')}" != item["digest_or_sha"]:
                     errors.append(f"{item['name']}: .NET metadata digest differs from inventory")

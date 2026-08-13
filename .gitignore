@@ -17,3 +17,4 @@ artifacts/
 
 # config locale portant le credential d'import (§9)
 appsettings.*.local.json
+__pycache__/

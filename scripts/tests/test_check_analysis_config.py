@@ -81,7 +81,6 @@ def supply_chain():
                 "digest_or_sha": QODANA_DIGEST,
                 "released_at": "2026-04-21T09:02:03.110286Z",
                 "source": "https://hub.docker.com/v2/namespaces/jetbrains/repositories/qodana-dotnet/tags/2026.1",
-                "stabilization_exempt": False,
                 "reason": "Latest eligible stable Qodana for .NET image.",
             }
         ],

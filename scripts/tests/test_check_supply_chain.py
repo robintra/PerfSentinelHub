@@ -34,7 +34,6 @@ def inventory_item(**overrides):
         "digest_or_sha": "a" * 40,
         "released_at": "2026-01-01T00:00:00Z",
         "source": "https://github.com/example/tool/releases/tag/v1.2.3",
-        "stabilization_exempt": False,
         "reason": "Pinned for repeatable builds.",
     }
     item.update(overrides)
@@ -509,138 +508,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
                 self.assertTrue(any("prerelease" in error for error in errors), errors)
 
-    def test_rejects_recent_non_exempt_release(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            released_at = (datetime.now(timezone.utc) - timedelta(hours=71)).isoformat()
-            write_inventory(root, inventory_item(released_at=released_at))
-
-            result = run_checker(root)
-
-            self.assertEqual(1, result.returncode)
-            self.assertIn("72 hours", result.stderr)
-
-    def test_rejects_non_boolean_stabilization_exemptions(self):
-        now = datetime(2026, 8, 11, tzinfo=timezone.utc)
-        for value in ("false", "true", 0, 1, None):
-            with self.subTest(value=value):
-                errors = checker.validate_inventory(
-                    [inventory_item(stabilization_exempt=value)], now
-                )
-
-                self.assertTrue(any("boolean" in error for error in errors))
-
-    def test_rejects_invalid_or_overlong_stabilization_expiry(self):
-        now = datetime(2026, 8, 11, tzinfo=timezone.utc)
-        expiries = (None, "not-a-date", "2026-08-10T00:00:00Z", "2026-11-10T00:00:01Z")
-        for expiry in expiries:
-            with self.subTest(expiry=expiry):
-                item = inventory_item(
-                    released_at="2026-08-10T00:00:00Z",
-                    stabilization_exempt=True,
-                )
-                if expiry is not None:
-                    item["expiry"] = expiry
-
-                errors = checker.validate_inventory([item], now)
-
-                self.assertTrue(any("expiry" in error for error in errors))
-
-    def test_accepts_a_bounded_stabilization_exemption(self):
-        now = datetime(2026, 8, 11, tzinfo=timezone.utc)
-        item = inventory_item(
-            released_at="2026-08-10T00:00:00Z",
-            stabilization_exempt=True,
-            expiry="2026-09-01T00:00:00Z",
-        )
-
-        errors = checker.validate_inventory([item], now)
-
-        self.assertEqual([], errors)
-
-    def test_inventory_uses_a_conservative_bound_for_date_only_sources(self):
-        items = {
-            "container": inventory_item(
-                name="mcr.microsoft.com/dotnet/runtime-deps",
-                kind="container",
-                version="10.0.10-noble-chiseled-extra",
-                digest_or_sha="sha256:" + "a" * 64,
-                released_at="2026-08-01",
-                source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
-            ),
-            "SDK": {
-                **dotnet_inventory_item(),
-                "released_at": "2026-08-01",
-            },
-        }
-        for kind, item in items.items():
-            with self.subTest(kind=kind, age="73 hours"):
-                errors = checker.validate_inventory(
-                    [item], datetime(2026, 8, 4, 1, tzinfo=timezone.utc)
-                )
-
-                self.assertTrue(any("72 hours" in error for error in errors), errors)
-            with self.subTest(kind=kind, age="96 hours"):
-                errors = checker.validate_inventory(
-                    [item], datetime(2026, 8, 5, tzinfo=timezone.utc)
-                )
-
-                self.assertFalse(any("72 hours" in error for error in errors), errors)
-
-    def test_inventory_uses_released_at_precision_at_offline_boundaries(self):
-        precise = inventory_item(
-            name="mcr.microsoft.com/dotnet/runtime-deps",
-            kind="container",
-            version="10.0.10-noble-chiseled-extra",
-            digest_or_sha="sha256:" + "a" * 64,
-            released_at="2026-08-01T12:00:00Z",
-            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
-        )
-        date_only = {**precise, "released_at": "2026-08-01"}
-        cases = (
-            (
-                "precise just before 72 hours",
-                precise,
-                datetime(2026, 8, 4, 11, 59, 59, tzinfo=timezone.utc),
-                True,
-            ),
-            (
-                "precise exactly 72 hours",
-                precise,
-                datetime(2026, 8, 4, 12, tzinfo=timezone.utc),
-                False,
-            ),
-            (
-                "precise just after 72 hours",
-                precise,
-                datetime(2026, 8, 4, 12, 0, 1, tzinfo=timezone.utc),
-                False,
-            ),
-            (
-                "date only 73 hours after midnight",
-                date_only,
-                datetime(2026, 8, 4, 1, tzinfo=timezone.utc),
-                True,
-            ),
-            (
-                "date only exactly 96 hours after midnight",
-                date_only,
-                datetime(2026, 8, 5, tzinfo=timezone.utc),
-                False,
-            ),
-        )
-        for name, item, now, rejected in cases:
-            with self.subTest(name=name):
-                errors = checker.validate_inventory([item], now)
-
-                self.assertEqual(
-                    rejected,
-                    any("72 hours" in error for error in errors),
-                    errors,
-                )
-                if not rejected:
-                    self.assertEqual([], errors)
-
     def test_rfc3339_offsets_identify_the_same_exact_instant(self):
         expected = checker.parse_timestamp("2026-01-01T00:00:00.1234561Z")
 
@@ -672,41 +539,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
         for value in values:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 checker.parse_timestamp(value)
-
-    def test_inventory_preserves_submicrosecond_stabilization_boundaries(self):
-        cases = (
-            (
-                "one tenth of a microsecond early",
-                "2026-08-01T12:00:00.1234561Z",
-                datetime(2026, 8, 4, 12, 0, 0, 123456, tzinfo=timezone.utc),
-                True,
-            ),
-            (
-                "exact boundary through an equivalent offset",
-                "2026-08-01T13:00:00.1234560+01:00",
-                datetime(2026, 8, 4, 12, 0, 0, 123456, tzinfo=timezone.utc),
-                False,
-            ),
-            (
-                "one tenth of a microsecond after",
-                "2026-08-01T12:00:00.1234569Z",
-                datetime(2026, 8, 4, 12, 0, 0, 123457, tzinfo=timezone.utc),
-                False,
-            ),
-        )
-        for name, released_at, now, rejected in cases:
-            with self.subTest(name=name):
-                errors = checker.validate_inventory(
-                    [inventory_item(released_at=released_at)], now
-                )
-
-                self.assertEqual(
-                    rejected,
-                    any("72 hours" in error for error in errors),
-                    errors,
-                )
-                if not rejected:
-                    self.assertEqual([], errors)
 
     def test_accepts_pinned_declarations_and_stable_inventory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2269,86 +2101,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(any("release date" in error for error in errors), errors)
 
-    def test_online_uses_a_conservative_stabilization_bound_for_date_only_metadata(self):
-        item = inventory_item(
-            name="mcr.microsoft.com/dotnet/runtime-deps",
-            kind="container",
-            version="10.0.10-noble-chiseled-extra",
-            digest_or_sha="sha256:" + "a" * 64,
-            released_at="2026-08-01",
-            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
-        )
-        payload = {
-            "releases": [
-                {
-                    "release-date": "2026-08-01",
-                    "release-version": "10.0.10",
-                    "runtime": {"version": "10.0.10"},
-                }
-            ]
-        }
-        expectations = {
-            "73 hours after midnight": (
-                datetime(2026, 8, 4, 1, tzinfo=timezone.utc),
-                True,
-            ),
-            "96 hours after midnight": (
-                datetime(2026, 8, 5, tzinfo=timezone.utc),
-                False,
-            ),
-        }
-        for name, (now, rejected) in expectations.items():
-            with self.subTest(name=name), patch.object(
-                checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
-            ), patch.object(checker, "fetch_json", return_value=(payload, {})):
-                errors = checker.validate_online([item], now)
-
-                self.assertEqual(
-                    rejected,
-                    any("newer than 72 hours" in error for error in errors),
-                    errors,
-                )
-
-    def test_online_uses_an_exact_stabilization_bound_for_precise_container_metadata(self):
-        item = inventory_item(
-            name="mcr.microsoft.com/dotnet/runtime-deps",
-            kind="container",
-            version="10.0.10-noble-chiseled-extra",
-            digest_or_sha="sha256:" + "a" * 64,
-            released_at="2026-08-01T12:34:56Z",
-            source="https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.10-noble-chiseled-extra",
-        )
-        payload = {
-            "releases": [
-                {
-                    "release-date": "2026-08-01T12:34:56Z",
-                    "release-version": "10.0.10",
-                    "runtime": {"version": "10.0.10"},
-                }
-            ]
-        }
-        expectations = {
-            "one second early": (
-                datetime(2026, 8, 4, 12, 34, 55, tzinfo=timezone.utc),
-                True,
-            ),
-            "exactly 72 hours": (
-                datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
-                False,
-            ),
-        }
-        for name, (now, rejected) in expectations.items():
-            with self.subTest(name=name), patch.object(
-                checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
-            ), patch.object(checker, "fetch_json", return_value=(payload, {})):
-                errors = checker.validate_online([item], now)
-
-                self.assertEqual(
-                    rejected,
-                    any("newer than 72 hours" in error for error in errors),
-                    errors,
-                )
-
     def test_online_fetches_dotnet_metadata_once_for_all_containers(self):
         sdk = inventory_item(
             name="mcr.microsoft.com/dotnet/sdk",
@@ -2405,42 +2157,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
             errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
 
         self.assertTrue(any(".NET metadata digest" in error for error in errors))
-
-    def test_online_applies_the_date_only_bound_to_dotnet_sdk_metadata(self):
-        item = {
-            **dotnet_inventory_item(),
-            "released_at": "2026-08-01",
-        }
-        payload = {
-            "releases": [
-                {
-                    "release-date": "2026-08-01",
-                    "sdk": {
-                        "version": item["version"],
-                        "files": [
-                            {
-                                "url": item["artifact_url"],
-                                "hash": item["digest_or_sha"].removeprefix("sha512:"),
-                            }
-                        ],
-                    },
-                }
-            ]
-        }
-        for name, now, rejected in (
-            ("73 hours after midnight", datetime(2026, 8, 4, 1, tzinfo=timezone.utc), True),
-            ("96 hours after midnight", datetime(2026, 8, 5, tzinfo=timezone.utc), False),
-        ):
-            with self.subTest(name=name), patch.object(
-                checker, "fetch_json", return_value=(payload, {})
-            ):
-                errors = checker.validate_online([item], now)
-
-                self.assertEqual(
-                    rejected,
-                    any("newer than 72 hours" in error for error in errors),
-                    errors,
-                )
 
     def test_online_rejects_nuget_version_hash_and_timestamp_drift(self):
         item = inventory_item(

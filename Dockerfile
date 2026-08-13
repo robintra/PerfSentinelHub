@@ -15,8 +15,10 @@ LABEL org.opencontainers.image.version="0.1.0" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
       org.opencontainers.image.source="https://github.com/robintra/PerfSentinelHub"
 WORKDIR /app
-COPY --from=build --chown=1654:1654 /out/PerfSentinelHub /app/PerfSentinelHub
-COPY --from=build --chown=1654:1654 /out/libe_sqlite3.so /app/libe_sqlite3.so
+# Root owns what it runs, so the service account cannot rewrite its own binary.
+COPY --from=build /out/PerfSentinelHub /app/PerfSentinelHub
+COPY --from=build /out/libe_sqlite3.so /app/libe_sqlite3.so
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
+USER 1654:1654
 ENTRYPOINT ["/app/PerfSentinelHub"]

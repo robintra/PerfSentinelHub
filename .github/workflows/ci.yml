@@ -370,6 +370,25 @@ jobs:
           fetch-depth: 1
       - name: Build OCI image
         run: docker build --platform linux/amd64 -t perf-sentinel-hub:ci .
+      # The image runs as an unprivileged account that owns none of its files, so start it once
+      # here rather than discovering a permission mistake during the release.
+      - name: Start the image as its unprivileged user
+        run: |
+          test "$(docker inspect --format '{{.Config.User}}' perf-sentinel-hub:ci)" = 1654:1654
+          id="$(docker run -d --rm -p 127.0.0.1:5082:8080 -e Hub__DatabasePath=/tmp/hub.db -e Hub__Sources__0__Id=ci -e Hub__Sources__0__Name=CI -e Hub__Sources__0__Environment=ci -e Hub__Sources__0__BaseUrl=http://127.0.0.1:9 perf-sentinel-hub:ci)"
+          trap 'docker stop "$id" >/dev/null 2>&1 || true' EXIT
+          python3 - <<'PY'
+          import time
+          import urllib.request
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:5082/health/ready', timeout=1) as response:
+                      if response.status == 200:
+                          raise SystemExit(0)
+              except OSError:
+                  time.sleep(.5)
+          raise SystemExit('image health smoke timed out')
+          PY
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: perf-sentinel-hub:ci

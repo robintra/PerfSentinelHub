@@ -522,7 +522,7 @@ jobs:
               values.write_text(content.replace(expected, replacement) + ('' if content.endswith(chr(10)) else chr(10)), encoding='utf-8')
           PY
           find chart-a chart-b -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
-          helm lint chart-a --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318'
+          helm lint chart-a --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=https://perf-sentinel:4318'
           helm package chart-a --destination dist-a
           helm package chart-b --destination dist-b
           cmp "dist-a/perf-sentinel-hub-$VERSION.tgz" "dist-b/perf-sentinel-hub-$VERSION.tgz"

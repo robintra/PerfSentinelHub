@@ -36,7 +36,7 @@ await app.Services.GetRequiredService<HubDatabase>()
 
 app.MapHubApi();
 
-app.Run();
+await app.RunAsync();
 
 // Exposed for WebApplicationFactory<Program> integration tests.
 // ReSharper disable once ClassNeverInstantiated.Global

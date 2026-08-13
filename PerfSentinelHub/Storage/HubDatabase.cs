@@ -228,6 +228,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         // import for the duration of the purge.
         while (await PurgeChunkAsync(cutoffMs, cancellationToken) > 0)
         {
+            // Every chunk is deleted by the call in the condition itself.
         }
     }
 

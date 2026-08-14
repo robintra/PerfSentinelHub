@@ -30,19 +30,19 @@
     "required_status_checks": [
       {
         "context": "CI / Gate",
-        "app_slug": "perf-sentinel-ci-gate"
+        "app_id": 4586215
       },
       {
-        "context": "CI / Dependency review",
-        "app_slug": null
+        "context": "Dependency review",
+        "app_id": 15368
       },
       {
-        "context": "CI / Trusted SonarCloud",
-        "app_slug": null
+        "context": "Trusted SonarCloud",
+        "app_id": 15368
       },
       {
-        "context": "CodeQL / CodeQL C#",
-        "app_slug": null
+        "context": "CodeQL C#",
+        "app_id": 15368
       }
     ],
     "require_linear_history": true,

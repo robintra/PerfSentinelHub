@@ -44,7 +44,7 @@ POLICY_SCHEMA = {
         "allowed_merge_methods": (LIST, str),
         "required_status_checks": (
             LIST,
-            {"context": str, "app_slug": (NULLABLE, str)},
+            {"context": str, "app_id": int},
         ),
         "require_linear_history": bool,
         "require_signed_commits": bool,
@@ -130,7 +130,9 @@ ENVIRONMENT_SCHEMA = {
         },
     ),
 }
-APP_SCHEMA = {"id": int, "slug": str}
+# The dedicated gate App, and GitHub Actions itself. Both are stable numeric App ids.
+CI_GATE_APP_ID = 4586215
+GITHUB_ACTIONS_APP_ID = 15368
 
 
 def unique_object(pairs):
@@ -186,11 +188,13 @@ def validate_policy_schema(policy) -> None:
         "allow_auto_merge": False,
         "delete_branch_on_merge": True,
     }
+    # Every check is pinned to the numeric id of the App that may publish it. Ids are immutable,
+    # slugs can be renamed, and a private App cannot be resolved from its slug at all.
     expected_checks = {
-        ("CI / Gate", "perf-sentinel-ci-gate"),
-        ("CI / Dependency review", None),
-        ("CI / Trusted SonarCloud", None),
-        ("CodeQL / CodeQL C#", None),
+        ("CI / Gate", CI_GATE_APP_ID),
+        ("Dependency review", GITHUB_ACTIONS_APP_ID),
+        ("Trusted SonarCloud", GITHUB_ACTIONS_APP_ID),
+        ("CodeQL C#", GITHUB_ACTIONS_APP_ID),
     }
     expected_secrets = {
         "CI_GATE_APP_ID",
@@ -229,7 +233,7 @@ def canonical_branch_policy(branch, checks, expected_checks) -> bool:
         and len(branch["allowed_merge_methods"]) == len(set(branch["allowed_merge_methods"]))
         and bool(checks)
         and len({check["context"] for check in checks}) == len(checks)
-        and {(check["context"], check["app_slug"]) for check in checks} == expected_checks
+        and {(check["context"], check["app_id"]) for check in checks} == expected_checks
         and branch["require_linear_history"] is True
         and branch["require_signed_commits"] is True
         and branch["allow_force_pushes"] is False
@@ -464,8 +468,6 @@ class GitHubApi:
         environment = quote("hub-release", safe="")
         if endpoint == f"repos/{self.repository}/environments/{environment}":
             return "environment"
-        if endpoint.startswith("apps/"):
-            return "app"
         raise ApiError(f"unrecognized fixture endpoint: {endpoint}")
 
     def _live(self, endpoint: str, page: int | None):
@@ -552,13 +554,6 @@ class GitHubApi:
             f"repos/{self.repository}/environments/{quote(name, safe='')}",
             schema=ENVIRONMENT_SCHEMA,
             normalizer=normalize_environment,
-        )
-
-    def app(self, slug: str):
-        return self._fetch(
-            f"apps/{quote(slug, safe='')}",
-            schema=APP_SCHEMA,
-            normalizer=lambda value: selected(value, ("id", "slug"), "GitHub App"),
         )
 
 
@@ -733,17 +728,11 @@ def normalized_status_checks(status_parameters):
     return normalized
 
 
-def status_check_errors(branch_rules, branch_policy, api: GitHubApi) -> list[str]:
-    expected_checks = []
-    for check in branch_policy["required_status_checks"]:
-        app_slug = check.get("app_slug")
-        source = None
-        if app_slug is not None:
-            app = api.app(app_slug)
-            if app["slug"] != app_slug:
-                raise ApiError(f"GitHub App {app_slug} identity is ambiguous")
-            source = app["id"]
-        expected_checks.append({"context": check.get("context"), "integration_id": source})
+def status_check_errors(branch_rules, branch_policy) -> list[str]:
+    expected_checks = [
+        {"context": check.get("context"), "integration_id": check.get("app_id")}
+        for check in branch_policy["required_status_checks"]
+    ]
     status_rule = branch_rules.get("required_status_checks")
     status_parameters = status_rule.get("parameters") if isinstance(status_rule, dict) else None
     normalized_checks = normalized_status_checks(status_parameters)
@@ -761,7 +750,7 @@ def status_check_errors(branch_rules, branch_policy, api: GitHubApi) -> list[str
     return []
 
 
-def branch_errors(detailed, policy, api: GitHubApi) -> list[str]:
+def branch_errors(detailed, policy) -> list[str]:
     branch_policy = require_object(policy["branch_ruleset"], "branch policy")
     branch = active_ruleset(detailed, "branch", branch_policy["ref_include"], "default branch")
     branch_rules = rule_map(branch, "default branch ruleset")
@@ -788,7 +777,7 @@ def branch_errors(detailed, policy, api: GitHubApi) -> list[str]:
     if not branch_policy["allow_deletions"] and "deletion" not in branch_rules:
         errors.append("default branch requires deletion protection")
     errors.extend(pull_request_errors(branch_rules, branch_policy))
-    errors.extend(status_check_errors(branch_rules, branch_policy, api))
+    errors.extend(status_check_errors(branch_rules, branch_policy))
     return errors
 
 
@@ -850,7 +839,7 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
     except ApiError as error:
         return [*errors, str(error)]
     detailed = detailed_rulesets(api, summaries)
-    errors.extend(branch_errors(detailed, policy, api))
+    errors.extend(branch_errors(detailed, policy))
     errors.extend(tag_errors(detailed, policy))
     errors.extend(environment_errors(policy, api))
     return errors

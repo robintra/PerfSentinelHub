@@ -12,12 +12,13 @@ CHECKER = REPOSITORY / "scripts" / "check-repository-policy.py"
 CHECKER_SPEC = importlib.util.spec_from_file_location("repository_policy_checker", CHECKER)
 CHECKER_MODULE = importlib.util.module_from_spec(CHECKER_SPEC)
 CHECKER_SPEC.loader.exec_module(CHECKER_MODULE)
-APP_ID = 4242
+CI_GATE_APP_ID = 4586215
+GITHUB_ACTIONS_APP_ID = 15368
 CHECKS = (
-    ("CI / Gate", APP_ID),
-    ("CI / Dependency review", None),
-    ("CI / Trusted SonarCloud", None),
-    ("CodeQL / CodeQL C#", None),
+    ("CI / Gate", CI_GATE_APP_ID),
+    ("Dependency review", GITHUB_ACTIONS_APP_ID),
+    ("Trusted SonarCloud", GITHUB_ACTIONS_APP_ID),
+    ("CodeQL C#", GITHUB_ACTIONS_APP_ID),
 )
 SECRETS = (
     "CI_GATE_APP_ID",
@@ -129,10 +130,6 @@ def public_api_fixture():
                     }
                 ],
             },
-        },
-        "app": {
-            "status": 200,
-            "body": {"id": APP_ID, "slug": "perf-sentinel-ci-gate"},
         },
     }
 
@@ -271,15 +268,13 @@ class RepositoryPolicyTests(unittest.TestCase):
                 api["environment"]["body"]["protection_rules"][0]["id"] = True
             elif name == "reviewer unknown":
                 api["environment"]["body"]["protection_rules"][0]["reviewers"][0]["reviewer"]["login"] = "unexpected"
-            elif name == "app bool id":
-                api["app"]["body"]["id"] = True
 
         names = (
             "wrapper unknown", "repository unknown", "repository bool as integer",
             "security missing", "summary unknown", "ruleset bool id",
             "condition unknown", "simple rule unknown", "pull parameter missing",
             "check context wrong type", "environment unknown", "protection bool id",
-            "reviewer unknown", "app bool id",
+            "reviewer unknown",
         )
         for name in names:
             with self.subTest(name=name):
@@ -354,7 +349,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("required status checks", result.stderr)
 
-    def test_rejects_omitted_source_even_without_an_expected_app(self):
+    def test_rejects_a_check_whose_publishing_app_is_omitted(self):
         api = public_api_fixture()
         checks = next(
             rule["parameters"]["required_status_checks"]

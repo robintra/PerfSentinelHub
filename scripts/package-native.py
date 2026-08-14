@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path
 
 
+ARCHIVE_RANGE_ERROR = "commit time is outside the supported archive range"
 RIDS = frozenset(("linux-x64", "linux-arm64", "osx-arm64", "win-x64"))
 VERSION = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -44,13 +45,13 @@ def parse_commit_time(value: str) -> int:
         raise ValueError("commit time must be a canonical Unix timestamp")
     timestamp = int(value)
     if not 315532800 <= timestamp <= 0xFFFFFFFF:
-        raise ValueError("commit time is outside the supported archive range")
+        raise ValueError(ARCHIVE_RANGE_ERROR)
     try:
         year = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc).year
     except (OverflowError, OSError, ValueError) as error:
-        raise ValueError("commit time is outside the supported archive range") from error
+        raise ValueError(ARCHIVE_RANGE_ERROR) from error
     if not 1980 <= year <= 2106:
-        raise ValueError("commit time is outside the supported archive range")
+        raise ValueError(ARCHIVE_RANGE_ERROR)
     return timestamp
 
 

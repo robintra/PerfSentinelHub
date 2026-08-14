@@ -8,23 +8,25 @@ import sys
 from pathlib import Path
 
 
+CI_WORKFLOW = ".github/workflows/ci.yml"
+RELEASE_WORKFLOW = ".github/workflows/release.yml"
 SDK_VERSION = "10.0.400"
 LICENSE_SHA256 = "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
 BADGES = {
     "CI": (
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg",
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml",
-        ".github/workflows/ci.yml",
+        CI_WORKFLOW,
     ),
     "Sonar quality": (
         "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status",
         "https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub",
-        ".github/workflows/ci.yml",
+        CI_WORKFLOW,
     ),
     "Sonar coverage": (
         "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
         "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
-        ".github/workflows/ci.yml",
+        CI_WORKFLOW,
     ),
     "CodeQL": (
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg",
@@ -44,17 +46,17 @@ BADGES = {
     "Latest release": (
         "https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver",
         "https://github.com/robintra/PerfSentinelHub/releases/latest",
-        ".github/workflows/release.yml",
+        RELEASE_WORKFLOW,
     ),
     "GHCR": (
         "https://img.shields.io/badge/GHCR-configured-lightgrey",
         "https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub",
-        ".github/workflows/release.yml",
+        RELEASE_WORKFLOW,
     ),
     "Helm": (
         "https://img.shields.io/badge/Helm-configured-lightgrey",
         "https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub",
-        ".github/workflows/release.yml",
+        RELEASE_WORKFLOW,
     ),
     ".NET": (
         f"https://img.shields.io/badge/.NET-{SDK_VERSION}-512BD4",

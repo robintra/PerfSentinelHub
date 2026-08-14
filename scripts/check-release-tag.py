@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 
 
+GPG_FORMAT_KEY = "gpg.format"
+ALLOWED_SIGNERS_KEY = "gpg.ssh.allowedSignersFile"
 TAG = re.compile(r"^v0[.][0-9]+[.][0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 PRINCIPAL = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$")
@@ -137,8 +139,8 @@ def restore_local_config(key: str, previous: str | None):
 
 
 def verify_signature(tag: str, identity: dict[str, str]) -> bool:
-    previous_format = git("config", "--local", "--get", "gpg.format")
-    previous_signers = git("config", "--local", "--get", "gpg.ssh.allowedSignersFile")
+    previous_format = git("config", "--local", "--get", GPG_FORMAT_KEY)
+    previous_signers = git("config", "--local", "--get", ALLOWED_SIGNERS_KEY)
     old_format = previous_format.stdout.strip() if previous_format.returncode == 0 else None
     old_signers = previous_signers.stdout.strip() if previous_signers.returncode == 0 else None
     with tempfile.TemporaryDirectory(prefix="perf-sentinel-release-signers-") as directory:
@@ -146,14 +148,14 @@ def verify_signature(tag: str, identity: dict[str, str]) -> bool:
         allowed_signers.write_text(f'{identity["principal"]} {identity["public_key"]}\n', encoding="ascii")
         allowed_signers.chmod(0o600)
         try:
-            if git("config", "--local", "gpg.format", "ssh").returncode != 0 or git(
-                "config", "--local", "gpg.ssh.allowedSignersFile", str(allowed_signers)
+            if git("config", "--local", GPG_FORMAT_KEY, "ssh").returncode != 0 or git(
+                "config", "--local", ALLOWED_SIGNERS_KEY, str(allowed_signers)
             ).returncode != 0:
                 return False
             verified = git("verify-tag", "--format=%GS%x00%GF", tag)
         finally:
-            restore_local_config("gpg.format", old_format)
-            restore_local_config("gpg.ssh.allowedSignersFile", old_signers)
+            restore_local_config(GPG_FORMAT_KEY, old_format)
+            restore_local_config(ALLOWED_SIGNERS_KEY, old_signers)
     if verified.returncode != 0:
         return False
     reported = verified.stdout.rstrip("\n").split("\0")

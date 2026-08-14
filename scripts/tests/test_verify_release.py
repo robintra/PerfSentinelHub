@@ -785,6 +785,21 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for forbidden in ("${{ toJSON(", "SARIF", "artifact body", "secrets."):
             self.assertNotIn(forbidden, content)
 
+    def test_daily_verification_stands_down_before_the_first_release_only(self):
+        content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
+        inventory = content.split("\n  inventory:\n", 1)[1].split("\n  public-release:\n", 1)[0]
+        public_release = content.split("\n  public-release:\n", 1)[1].split("\n  cryptography:\n", 1)[0]
+        report = content.split("\n  report:\n", 1)[1]
+
+        self.assertIn("releases?per_page=1", inventory)
+        self.assertIn('published=true', inventory)
+        self.assertIn('published=false', inventory)
+        self.assertIn("needs: inventory", public_release)
+        self.assertIn("if: ${{ needs.inventory.outputs.published == 'true' }}", public_release)
+        self.assertIn("needs: [inventory, public-release", report)
+        self.assertIn("needs.inventory.result != 'success'", report)
+        self.assertIn("needs.inventory.outputs.published == 'true' && (", report)
+
     def test_daily_alert_reuses_one_exact_non_pull_request_issue_across_all_states(self):
         content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
         report = content.split("\n  report:\n", 1)[1]

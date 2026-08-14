@@ -19,8 +19,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  inventory:
+    name: Check whether a public release exists
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read  # Lists the public releases to tell "none published yet" from "none canonical".
+    outputs:
+      published: ${{ steps.count.outputs.published }}
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
+      - id: count
+        name: Count the public releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_RELEASE: ${{ inputs.release || github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          # A repository that has never released is not a failed verification. One that has
+          # releases but no canonical stable tag still is, so only the empty case is excused.
+          if [ -n "$REQUESTED_RELEASE" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          total="$(gh api 'repos/robintra/PerfSentinelHub/releases?per_page=1' --jq 'length')"
+          if [ "$total" -gt 0 ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
   public-release:
     name: Download latest-stable public assets
+    needs: inventory
+    if: ${{ needs.inventory.outputs.published == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -306,7 +340,7 @@ jobs:
   report:
     name: Maintain one sanitized scheduled alert
     if: always() && github.event_name == 'schedule'
-    needs: [public-release, cryptography, native, image, chart]
+    needs: [inventory, public-release, cryptography, native, image, chart]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -317,7 +351,7 @@ jobs:
           egress-policy: audit
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          FAILED: ${{ needs.public-release.result != 'success' || needs.cryptography.result != 'success' || needs.native.result != 'success' || needs.image.result != 'success' || needs.chart.result != 'success' }}
+          FAILED: ${{ needs.inventory.result != 'success' || needs.inventory.outputs.published == 'true' && (needs.public-release.result != 'success' || needs.cryptography.result != 'success' || needs.native.result != 'success' || needs.image.result != 'success' || needs.chart.result != 'success') }}
         with:
           github-token: ${{ github.token }}
           script: |

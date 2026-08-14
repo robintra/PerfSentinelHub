@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     try:
         payload = json.loads(arguments.needs_json, object_pairs_hook=unique_object)
-    except (json.JSONDecodeError, TypeError, ValueError) as error:
+    except (TypeError, ValueError) as error:
         print(f"invalid needs JSON: {error}", file=sys.stderr)
         return 1
     errors = validate_needs(payload, arguments.mode, arguments.decision)

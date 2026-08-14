@@ -161,7 +161,7 @@ def load_numeric_baseline(path: Path) -> Decimal:
         if not isinstance(value, Decimal) or value < 0 or value > 100:
             raise ValueError("baseline value is not a percentage")
         return value
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+    except (OSError, ValueError) as error:
         raise CoverageError(
             f"{path}: unable to parse numeric coverage baseline: {error}"
         ) from error

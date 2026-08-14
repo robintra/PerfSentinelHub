@@ -102,7 +102,7 @@ def main(argv=None):
     arguments = parser.parse_args(argv)
     try:
         errors = validate(arguments.root)
-    except (OSError, UnicodeError, ValueError) as error:
+    except (OSError, ValueError) as error:
         errors = [f"badge check failed closed: {error}"]
     for error in errors:
         print(error, file=sys.stderr)

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import binascii
 import gzip
 import json
 import os
@@ -56,7 +55,7 @@ CANONICAL_DOWNLOAD = re.compile(
 CANONICAL_USES = re.compile(
     rf"^\s+- uses: (?P<name>{SAFE_RELATIVE_PATH})@(?P<sha>[0-9A-Fa-f]{{40}})(?: # {SAFE_NAME})?$"
 )
-YAML_USES_WORD = re.compile(r"(?<![A-Za-z0-9_-])['\"]?uses['\"]?(?![A-Za-z0-9_-])", re.IGNORECASE)
+YAML_USES_WORD = re.compile(r"(?<![a-z0-9_-])['\"]?uses['\"]?(?![a-z0-9_-])", re.IGNORECASE)
 YAML_QUOTED_KEY = re.compile(r"(?:^|[{,])\s*['\"][^'\"]+['\"]\s*:")
 DOWNLOAD_COMMAND = re.compile(r"(?<![A-Za-z0-9_-])(?:curl|wget)(?![A-Za-z0-9_-])")
 DOTNET_SHA512 = re.compile(r"^sha512:[0-9a-f]{128}$")
@@ -145,7 +144,7 @@ def is_canonical_sha512(value: object) -> bool:
         return False
     try:
         decoded = base64.b64decode(value, validate=True)
-    except (ValueError, binascii.Error):
+    except ValueError:
         return False
     return len(decoded) == 64 and base64.b64encode(decoded).decode("ascii") == value
 
@@ -228,7 +227,6 @@ def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     name_keys = set()
     artifact_keys = set()
-    current_time = timestamp_from_datetime(now)
     for item in inventory:
         name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
         if not isinstance(item, dict):
@@ -1038,7 +1036,6 @@ def fetch_manifest_digest(url: str) -> str | None:
 def validate_online(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     json_cache = {}
-    current_time = timestamp_from_datetime(now)
 
     def cached_json(url: str) -> tuple[dict, dict]:
         if url not in json_cache:
@@ -1214,7 +1211,7 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
                     errors.append(f"{item['name']}: .NET metadata digest differs from inventory")
             else:
                 errors.append(f"{item['name']}: unsupported official source")
-        except (AttributeError, UnicodeDecodeError, URLError, ValueError, TypeError, TimeoutError) as error:
+        except (AttributeError, URLError, ValueError, TypeError, TimeoutError) as error:
             errors.append(f"{item['name']}: unable to verify official source: {error}")
     return errors
 

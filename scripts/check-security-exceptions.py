@@ -104,7 +104,7 @@ def main() -> int:
         payload = json.loads(
             path.read_text(encoding="utf-8"), object_pairs_hook=unique_object
         )
-    except (OSError, UnicodeError, ValueError, TypeError) as error:
+    except (OSError, ValueError, TypeError) as error:
         print(f"invalid config/security-exceptions.json: {error}", file=sys.stderr)
         return 1
 

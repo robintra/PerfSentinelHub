@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 SECRET_REFERENCE = re.compile(r"\$\{\{\s*secrets\.([A-Z][A-Z0-9_]*)\s*\}\}")
 # "secrets:S6338" is a Sonar rule key, not a GitHub secret reference.
-SECRET_TOKEN = re.compile(r"(?<![A-Za-z0-9_])secrets(?![A-Za-z0-9_])(?!:S\d)", re.IGNORECASE)
+SECRET_TOKEN = re.compile(r"(?<![a-z0-9_])secrets(?![a-z0-9_])(?!:S\d)", re.IGNORECASE)
 LIST = "list"
 NULLABLE = "nullable"
 
@@ -606,7 +606,7 @@ def inventory_secrets(root: Path):
     try:
         payload = load_json(root / "config" / "secret-inventory.json")
         entries = payload["secrets"]
-    except (OSError, UnicodeError, ValueError, KeyError, TypeError) as error:
+    except (OSError, ValueError, KeyError, TypeError) as error:
         raise ApiError(f"invalid secret inventory: {error}") from error
     if not isinstance(entries, list):
         raise ApiError("secret inventory entries are missing")
@@ -815,7 +815,7 @@ def main(argv=None):
     try:
         policy = load_json(arguments.root / ".github" / "repository-policy.json")
         errors = validate(arguments.repo, arguments.root, policy, GitHubApi(arguments.repo, arguments.fixture))
-    except (OSError, UnicodeError, ValueError, TypeError, KeyError, ApiError) as error:
+    except (OSError, ValueError, TypeError, KeyError, ApiError) as error:
         errors = [f"repository policy check failed closed: {error}"]
     for error in errors:
         print(error, file=sys.stderr)

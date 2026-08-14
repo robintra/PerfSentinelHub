@@ -56,7 +56,7 @@ def project_version(root: Path) -> str:
     version = versions[0]
     parent_groups = [
         group
-        for group in list(project)
+        for group in project
         if group.tag == "PropertyGroup" and version in list(group)
     ]
     if (

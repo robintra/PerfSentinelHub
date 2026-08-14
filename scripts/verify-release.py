@@ -245,7 +245,7 @@ def validate_chart(path: Path, version: str, image_digest: str):
         raise ValueError(f"chart required files are missing or invalid: {error}") from error
     if f"version: {version}\n" not in chart or f'appVersion: "{version}"\n' not in chart:
         raise ValueError("chart version differs from release")
-    repositories = re.findall(r"(?m)^  repository: ([^\s#]+)\s*$", values)
+    repositories = re.findall(r"(?m)^ {2}repository: ([^\s#]+)\s*$", values)
     if len(repositories) != 1 or IMAGE_REPOSITORY.fullmatch(repositories[0]) is None:
         raise ValueError("chart image repository must contain neither a tag nor a digest")
     if re.search(r"(?m)^\s+tag\s*:", values) or values.count(f"  digest: {image_digest}\n") != 1:
@@ -474,7 +474,7 @@ def verify_published(root: Path):
     if "SHA256SUMS" not in files or RELEASE_MANIFEST_FILE not in files:
         raise ValueError("published release requires SHA256SUMS and release-manifest.json")
     checksums = {}
-    pattern = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
+    pattern = re.compile(r"^([0-9a-f]{64}) {2}([A-Za-z0-9][A-Za-z0-9._-]*)$")
     for line in files["SHA256SUMS"].read_text(encoding="ascii").splitlines():
         match = pattern.fullmatch(line)
         if match is None or match.group(2) in checksums or match.group(2) == "SHA256SUMS":

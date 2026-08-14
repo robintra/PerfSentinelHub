@@ -152,24 +152,29 @@ class ApiError(RuntimeError):
     pass
 
 
+def validate_object_shape(value, schema, label: str) -> None:
+    if not isinstance(value, dict) or set(value) != set(schema):
+        raise ApiError(f"{label}: expected exact object fields {sorted(schema)}")
+    for key, child_schema in schema.items():
+        validate_shape(value[key], child_schema, f"{label}.{key}")
+
+
+def validate_list_shape(value, item_schema, label: str) -> None:
+    if not isinstance(value, list):
+        raise ApiError(f"{label}: expected array")
+    for index, item in enumerate(value):
+        validate_shape(item, item_schema, f"{label}[{index}]")
+
+
 def validate_shape(value, schema, label: str) -> None:
     if isinstance(schema, dict):
-        if not isinstance(value, dict) or set(value) != set(schema):
-            raise ApiError(f"{label}: expected exact object fields {sorted(schema)}")
-        for key, child_schema in schema.items():
-            validate_shape(value[key], child_schema, f"{label}.{key}")
-        return
-    if isinstance(schema, tuple) and schema[0] == LIST:
-        if not isinstance(value, list):
-            raise ApiError(f"{label}: expected array")
-        for index, item in enumerate(value):
-            validate_shape(item, schema[1], f"{label}[{index}]")
-        return
-    if isinstance(schema, tuple) and schema[0] == NULLABLE:
+        validate_object_shape(value, schema, label)
+    elif isinstance(schema, tuple) and schema[0] == LIST:
+        validate_list_shape(value, schema[1], label)
+    elif isinstance(schema, tuple) and schema[0] == NULLABLE:
         if value is not None:
             validate_shape(value, schema[1], label)
-        return
-    if type(value) is not schema:
+    elif type(value) is not schema:
         raise ApiError(f"{label}: expected {schema.__name__}")
 
 
@@ -441,21 +446,27 @@ def normalize_environment(value):
     return result
 
 
+FIXTURE_KEY = re.compile(r"^(?:repository|environment|rulesets:[1-9][0-9]*|ruleset:[1-9][0-9]*)$")
+
+
+def validate_fixture(fixture) -> None:
+    if not isinstance(fixture, dict):
+        raise ApiError("normalized API schema fixture must be an object")
+    for key, response in fixture.items():
+        if FIXTURE_KEY.fullmatch(key) is None:
+            raise ApiError(f"normalized API schema fixture key is invalid: {key}")
+        if not isinstance(response, dict) or set(response) != {"status", "body"}:
+            raise ApiError(f"normalized API schema response {key} requires exactly status and body")
+        if type(response["status"]) is not int:
+            raise ApiError(f"normalized API schema response {key}.status must be int")
+
+
 class GitHubApi:
     def __init__(self, repository: str, fixture: Path | None):
         self.repository = repository
         self.fixture = load_json(fixture) if fixture else None
         if self.fixture is not None:
-            if not isinstance(self.fixture, dict):
-                raise ApiError("normalized API schema fixture must be an object")
-            allowed = re.compile(r"^(?:repository|environment|app|rulesets:[1-9][0-9]*|ruleset:[1-9][0-9]*)$")
-            for key, response in self.fixture.items():
-                if allowed.fullmatch(key) is None:
-                    raise ApiError(f"normalized API schema fixture key is invalid: {key}")
-                if not isinstance(response, dict) or set(response) != {"status", "body"}:
-                    raise ApiError(f"normalized API schema response {key} requires exactly status and body")
-                if type(response["status"]) is not int:
-                    raise ApiError(f"normalized API schema response {key}.status must be int")
+            validate_fixture(self.fixture)
 
     def _fixture_key(self, endpoint: str, page: int | None) -> str:
         if endpoint == f"repos/{self.repository}":

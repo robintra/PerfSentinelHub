@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read  # Reads the pull request to confirm the reviewed fork head still matches the request.
     outputs:
       head_repository: ${{ steps.verify.outputs.head_repository }}
       head_sha: ${{ steps.verify.outputs.head_sha }}
@@ -81,7 +81,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read  # Lists the changed files that decide whether a pull request is documentation only.
     outputs:
       decision: ${{ steps.classify.outputs.decision }}
     steps:

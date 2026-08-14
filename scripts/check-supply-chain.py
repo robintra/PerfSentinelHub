@@ -511,6 +511,53 @@ def msbuild_attributes(element: ElementTree.Element) -> dict[str, str]:
     return attributes
 
 
+def central_element_errors(element, local_tag: str, parents, properties) -> list[str]:
+    errors = []
+    if any(msbuild_name(attribute) == "condition" for attribute in element.attrib):
+        errors.append("Directory.Packages.props: conditional declarations are not permitted")
+    if local_tag in {"choose", "when", "otherwise", "import"}:
+        errors.append(f"Directory.Packages.props: {local_tag} declarations are not permitted")
+    if local_tag not in properties:
+        return errors
+    parent = parents.get(element)
+    if (
+        "}" in element.tag
+        or parent is None
+        or "}" in parent.tag
+        or msbuild_name(parent.tag) != "propertygroup"
+        or element.attrib
+    ):
+        errors.append(
+            f"Directory.Packages.props: {local_tag} must be an unconditioned PropertyGroup value"
+        )
+    properties[local_tag].append(element.text)
+    return errors
+
+
+def package_version_errors(element, parents, central, nuget_pins) -> list[str]:
+    parent = parents.get(element)
+    attributes = msbuild_attributes(element)
+    if (
+        "}" in element.tag
+        or parent is None
+        or "}" in parent.tag
+        or msbuild_name(parent.tag) != "itemgroup"
+        or set(attributes) != {"include", "version"}
+        or list(element)
+    ):
+        return ["Directory.Packages.props: PackageVersion must be a canonical unnamespaced ItemGroup child"]
+    name = attributes["include"]
+    version = attributes["version"]
+    key = name.casefold()
+    if key in central:
+        return [f"Directory.Packages.props: {name} is declared more than once"]
+    central[key] = (name, version)
+    expected = nuget_pins.get(key)
+    if expected is None or expected["name"] != name or expected["version"] != version:
+        return [f"Directory.Packages.props: {name} differs from the inventory"]
+    return []
+
+
 def msbuild_tag_errors(relative, folded_tag: str, forbidden_msbuild_properties) -> list[str]:
     errors = []
     if folded_tag in forbidden_msbuild_properties:
@@ -616,64 +663,9 @@ def validate_package_declarations(
                 if not isinstance(element.tag, str):
                     continue
                 local_tag = msbuild_name(element.tag)
-                if any(
-                    msbuild_name(attribute) == "condition"
-                    for attribute in element.attrib
-                ):
-                    errors.append(
-                        "Directory.Packages.props: conditional declarations are not permitted"
-                    )
-                if local_tag in {"choose", "when", "otherwise", "import"}:
-                    errors.append(
-                        f"Directory.Packages.props: {local_tag} declarations are not permitted"
-                    )
-                if local_tag in properties:
-                    parent = parents.get(element)
-                    if (
-                        "}" in element.tag
-                        or parent is None
-                        or "}" in parent.tag
-                        or msbuild_name(parent.tag) != "propertygroup"
-                        or element.attrib
-                    ):
-                        errors.append(
-                            f"Directory.Packages.props: {local_tag} must be an unconditioned PropertyGroup value"
-                        )
-                    properties[local_tag].append(element.text)
-                if local_tag != "packageversion":
-                    continue
-                parent = parents.get(element)
-                attributes = msbuild_attributes(element)
-                if (
-                    "}" in element.tag
-                    or parent is None
-                    or "}" in parent.tag
-                    or msbuild_name(parent.tag) != "itemgroup"
-                    or set(attributes) != {"include", "version"}
-                    or list(element)
-                ):
-                    errors.append(
-                        "Directory.Packages.props: PackageVersion must be a canonical unnamespaced ItemGroup child"
-                    )
-                    continue
-                name = attributes["include"]
-                version = attributes["version"]
-                key = name.casefold()
-                if key in central:
-                    errors.append(
-                        f"Directory.Packages.props: {name} is declared more than once"
-                    )
-                    continue
-                central[key] = (name, version)
-                expected = nuget_pins.get(key)
-                if (
-                    expected is None
-                    or expected["name"] != name
-                    or expected["version"] != version
-                ):
-                    errors.append(
-                        f"Directory.Packages.props: {name} differs from the inventory"
-                    )
+                errors.extend(central_element_errors(element, local_tag, parents, properties))
+                if local_tag == "packageversion":
+                    errors.extend(package_version_errors(element, parents, central, nuget_pins))
             if properties["managepackageversionscentrally"] != ["true"]:
                 errors.append(
                     "Directory.Packages.props: ManagePackageVersionsCentrally must be exactly true"

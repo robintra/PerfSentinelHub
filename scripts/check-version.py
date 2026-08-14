@@ -187,6 +187,21 @@ def heading_version(visible: str) -> str | None:
     return heading.group("version")
 
 
+def fence_closes(fence, line: str) -> bool:
+    marker, length = fence
+    return re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line) is not None
+
+
+def opened_fence(visible: str):
+    opening = FENCE_OPENING.fullmatch(visible)
+    if opening is None:
+        return None
+    marker = opening.group("marker")
+    if marker[0] == "`" and "`" in opening.group("info"):
+        fail("changelog heading cannot be hidden by invalid backtick fence info")
+    return (marker[0], len(marker))
+
+
 def changelog_versions(root: Path) -> list[str]:
     changelog = read(root / "CHANGELOG.md", "changelog heading")
     inside_comment = False
@@ -195,18 +210,13 @@ def changelog_versions(root: Path) -> list[str]:
     for line in changelog.splitlines():
         reject_ambiguous_comment_marker(line)
         if fence is not None:
-            marker, length = fence
-            if re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line):
+            if fence_closes(fence, line):
                 fence = None
             continue
 
         visible, inside_comment = without_html_comments(line, inside_comment)
-        opening = FENCE_OPENING.fullmatch(visible)
-        if opening is not None:
-            marker = opening.group("marker")
-            if marker[0] == "`" and "`" in opening.group("info"):
-                fail("changelog heading cannot be hidden by invalid backtick fence info")
-            fence = (marker[0], len(marker))
+        fence = opened_fence(visible)
+        if fence is not None:
             continue
         version = heading_version(visible)
         if version is not None:

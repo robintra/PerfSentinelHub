@@ -68,7 +68,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
                     break;
                 if (output.Length + read > MaxBodyBytes)
                     throw new ResponseTooLargeException();
-                output.Write(buffer, 0, read);
+                await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
             }
             return output.ToArray();
         }

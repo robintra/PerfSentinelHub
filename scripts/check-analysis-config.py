@@ -28,7 +28,7 @@ SONAR_SCANNER_ARGUMENTS = (
     '"/d:sonar.coverage.exclusions=scripts/**"',
     # secrets:S6338 reads the base64 NuGet lock hashes as Azure Storage keys, and pythonsecurity:S8707
     # flags CLI paths in tooling the workflow itself invokes with fixed arguments.
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder",
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin",
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338",
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json",
     "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707",
@@ -41,6 +41,14 @@ SONAR_SCANNER_ARGUMENTS = (
     # literal column and parameter names, with user values bound through parameters.
     "/d:sonar.issue.ignore.multicriteria.sqlbuilder.ruleKey=csharpsquid:S2077",
     "/d:sonar.issue.ignore.multicriteria.sqlbuilder.resourceKey=PerfSentinelHub/Storage/HubDatabase.cs",
+    # [0-9] and [A-Za-z0-9_] are ASCII by design: \d and \w also match Unicode digits and
+    # letters, which would let these fail-closed validators accept a tag like v0.١.٠.
+    "/d:sonar.issue.ignore.multicriteria.asciiclass.ruleKey=python:S6353",
+    '"/d:sonar.issue.ignore.multicriteria.asciiclass.resourceKey=scripts/**"',
+    # The base images pin a tag and a digest on purpose: the digest makes them immutable and
+    # check-supply-chain.py requires it, while the tag keeps the file readable.
+    "/d:sonar.issue.ignore.multicriteria.imagepin.ruleKey=docker:S8431",
+    "/d:sonar.issue.ignore.multicriteria.imagepin.resourceKey=Dockerfile",
 )
 SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}

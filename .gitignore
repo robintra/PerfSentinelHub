@@ -4,6 +4,7 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 .idea/
+.codex/
 .DS_Store
 .dotnet/
 TestResults/

@@ -129,6 +129,7 @@ class VersionContractTests(unittest.TestCase):
             self.assertNotEqual(0, implicit.returncode)
             self.assertIn("project version", implicit.stderr)
 
+    # noinspection SpellCheckingInspection
     def test_rejects_case_insensitive_project_version_overrides_on_the_search_path(self):
         cases = (
             (

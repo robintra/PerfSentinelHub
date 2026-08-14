@@ -20,33 +20,33 @@ usage() {
 }
 
 cleanup() {
-  if [ -n "${SIGNING_SCRATCH}" ] && [ -d "${SIGNING_SCRATCH}" ]; then
+  if [[ -n "${SIGNING_SCRATCH}" ]] && [[ -d "${SIGNING_SCRATCH}" ]]; then
     rm -rf -- "${SIGNING_SCRATCH}"
   fi
 }
 trap cleanup EXIT HUP INT TERM
 
-while [ "$#" -gt 0 ]; do
+while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --dry-run)
-      [ "${DRY_RUN}" -eq 0 ] || usage
+      [[ "${DRY_RUN}" -eq 0 ]] || usage
       DRY_RUN=1
       ;;
     -*) usage ;;
     *)
-      [ -z "${TAG}" ] || usage
+      [[ -z "${TAG}" ]] || usage
       TAG="$1"
       ;;
   esac
   shift
 done
 
-[ -n "${TAG}" ] || usage
+[[ -n "${TAG}" ]] || usage
 [[ "${TAG}" =~ ^v0\.[0-9]+\.[0-9]+$ ]] || fail "tag must be a stable tag matching v0.MINOR.PATCH without a suffix"
 VERSION="${TAG#v}"
 
 cd "${REPOSITORY}"
-[ -f "PerfSentinelHub/PerfSentinelHub.csproj" ] || fail "must run from a PerfSentinelHub checkout"
+[[ -f "PerfSentinelHub/PerfSentinelHub.csproj" ]] || fail "must run from a PerfSentinelHub checkout"
 
 current_branch() {
   git symbolic-ref --quiet --short HEAD 2>/dev/null || true
@@ -55,11 +55,11 @@ current_branch() {
 ensure_main() {
   local branch
   branch="$(current_branch)"
-  [ "${branch}" = "main" ] || fail "release must run from main; current branch is '${branch:-detached}'"
+  [[ "${branch}" = "main" ]] || fail "release must run from main; current branch is '${branch:-detached}'"
 }
 
 ensure_clean() {
-  [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] || fail "working tree must be clean"
+  [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]] || fail "working tree must be clean"
 }
 
 ensure_synchronized_main() {
@@ -71,7 +71,7 @@ ensure_synchronized_main() {
     fail "origin/main returned an ambiguous ref"
   fi
   local_sha="$(git rev-parse --verify refs/heads/main)"
-  [ "${local_sha}" = "${BASH_REMATCH[1]}" ] || fail "local main and origin/main must be synchronized exactly"
+  [[ "${local_sha}" = "${BASH_REMATCH[1]}" ]] || fail "local main and origin/main must be synchronized exactly"
 }
 
 ensure_tag_absent() {
@@ -93,11 +93,11 @@ ensure_tag_absent() {
 verify_signing_identity() {
   local signing_key signing_format allowed_signers key value
   signing_key="$(git config --get user.signingkey 2>/dev/null || true)"
-  [ -n "${signing_key}" ] || fail "a verifiable signing identity is required in user.signingkey"
+  [[ -n "${signing_key}" ]] || fail "a verifiable signing identity is required in user.signingkey"
   signing_format="$(git config --get gpg.format 2>/dev/null || printf 'openpgp')"
-  if [ "${signing_format}" = "ssh" ]; then
+  if [[ "${signing_format}" = "ssh" ]]; then
     allowed_signers="$(git config --path --get gpg.ssh.allowedSignersFile 2>/dev/null || true)"
-    [ -n "${allowed_signers}" ] && [ -f "${allowed_signers}" ] || fail "SSH signing identity requires a readable gpg.ssh.allowedSignersFile"
+    [[ -n "${allowed_signers}" ]] && [[ -f "${allowed_signers}" ]] || fail "SSH signing identity requires a readable gpg.ssh.allowedSignersFile"
   fi
 
   SIGNING_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/perf-sentinel-hub-signing.XXXXXX")" || fail "cannot create signing probe"
@@ -108,11 +108,11 @@ verify_signing_identity() {
   git -C "${SIGNING_SCRATCH}" config gpg.format "${signing_format}"
   for key in gpg.program gpg.ssh.program gpg.x509.program; do
     value="$(git config --get "${key}" 2>/dev/null || true)"
-    if [ -n "${value}" ]; then
+    if [[ -n "${value}" ]]; then
       git -C "${SIGNING_SCRATCH}" config "${key}" "${value}"
     fi
   done
-  if [ "${signing_format}" = "ssh" ]; then
+  if [[ "${signing_format}" = "ssh" ]]; then
     git -C "${SIGNING_SCRATCH}" config gpg.ssh.allowedSignersFile "${allowed_signers}"
   fi
   git -C "${SIGNING_SCRATCH}" commit --allow-empty -q -m probe
@@ -132,7 +132,7 @@ verify_signing_identity
 make release-check VERSION="${VERSION}"
 
 short_sha="$(git rev-parse --short=12 HEAD)"
-if [ "${DRY_RUN}" -eq 1 ]; then
+if [[ "${DRY_RUN}" -eq 1 ]]; then
   printf 'release: dry-run passed; no repository or remote mutation\n'
   printf 'release: would create signed tag %s at %s, push main, then push the tag\n' "${TAG}" "${short_sha}"
   exit 0
@@ -140,7 +140,7 @@ fi
 
 printf 'Type %s to confirm the signed tag and pushes: ' "${TAG}"
 IFS= read -r confirmation || fail "confirmation was not provided"
-[ "${confirmation}" = "${TAG}" ] || fail "confirmation did not exactly match ${TAG}; nothing was mutated"
+[[ "${confirmation}" = "${TAG}" ]] || fail "confirmation did not exactly match ${TAG}; nothing was mutated"
 
 ensure_main
 ensure_clean
@@ -155,7 +155,7 @@ if ! git verify-tag "${TAG}" >/dev/null 2>&1; then
   git tag -d "${TAG}" >/dev/null 2>&1 || true
   fail "new tag signature could not be verified; local tag was removed"
 fi
-[ "$(git rev-list -n 1 "${TAG}")" = "$(git rev-parse refs/heads/main)" ] \
+[[ "$(git rev-list -n 1 "${TAG}")" = "$(git rev-parse refs/heads/main)" ]] \
   || { git tag -d "${TAG}" >/dev/null 2>&1 || true; fail "tag target is not the main commit"; }
 
 if ! git push origin refs/heads/main:refs/heads/main; then

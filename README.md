@@ -5,24 +5,20 @@
 [![Sonar coverage](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage)](https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list)
 [![CodeQL](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml)
 [![Daily audit](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/robintra/PerfSentinelHub/badge)](https://securityscorecards.dev/viewer/?uri=github.com/robintra/PerfSentinelHub)
-[![Latest release](https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver)](https://github.com/robintra/PerfSentinelHub/releases/latest)
+[![Release](https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml)
 [![GHCR](https://img.shields.io/badge/GHCR-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub)
 [![Helm](https://img.shields.io/badge/Helm-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub)
 [![.NET](https://img.shields.io/badge/.NET-10.0.400-512BD4)](https://github.com/robintra/PerfSentinelHub/blob/main/global.json)
-[![License](https://img.shields.io/github/license/robintra/PerfSentinelHub)](https://github.com/robintra/PerfSentinelHub/blob/main/LICENSE)
 
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
 [perf-sentinel 0.11.2](https://github.com/robintra/perf-sentinel/releases/tag/v0.11.2) daemons.
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 
-The badges link to configured workflows, analysis projects, package destinations, and repository
-evidence. They become observed public evidence only after the public activation and release
-rehearsal pass. Until then, the GHCR and Helm badges deliberately say `configured`, and no
-badge should be read as proof of a successful public run or published package. The CI, Sonar,
-CodeQL, daily audit, Scorecard, latest-release, and package endpoints are activation-bound and may
-remain empty or inaccessible while the repository is private.
+The badges link to workflows, analysis projects, and package destinations. CI, Sonar, CodeQL, and
+the daily audit report observed runs. The others do not: the GHCR and Helm badges deliberately say
+`configured` because nothing is published yet, and the release badge stays empty until the release
+workflow runs for the first time. No badge should be read as proof of a published package.
 
 ## Release contract and maturity
 

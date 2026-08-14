@@ -9,6 +9,7 @@ import sys
 import xml.etree.ElementTree as ElementTree
 from datetime import date
 from pathlib import Path
+from typing import NoReturn
 
 
 STABLE_TAG = re.compile(r"^v0\.[0-9]+\.[0-9]+$")
@@ -17,10 +18,11 @@ CHART_ENTRY = re.compile(r"(?P<key>[A-Za-z][A-Za-z0-9_-]*+) *+: *+(?P<value>.*)"
 CHANGELOG_HEADING = re.compile(r"^## \[(?P<version>[^]]+)] - (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})$")
 FENCE_OPENING = re.compile(r"^ {0,3}(?P<marker>`{3,}+|~{3,}+)(?P<info>.*)$")
 IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
+# noinspection SpellCheckingInspection
 VERSION_PROPERTIES = frozenset(("version", "versionprefix", "versionsuffix"))
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise ValueError(message)
 
 

@@ -52,7 +52,7 @@ AUTO_MERGE_MARKER = re.compile(
     r"auto.?merge|merge\s+dependabot|enablePullRequestAutoMerge", re.IGNORECASE
 )
 DEPENDABOT_IDENTITY = re.compile(
-    r"(?<![a-z0-9_-])dependabot(?:\[bot\])?(?![a-z0-9_-])", re.IGNORECASE
+    r"(?<![a-z0-9_-])dependabot(?:\[bot])?(?![a-z0-9_-])", re.IGNORECASE
 )
 GITHUB_IDENTITY = re.compile(
     r"(?<![a-z0-9_])github\s*\.\s*(?:actor|event\s*\.\s*pull_request\s*\.\s*user\s*\.\s*login)(?![a-z0-9_])",
@@ -98,7 +98,7 @@ def normalized_yaml_lines(path):
     return lines
 
 
-def parse_sequence_item(lines, index, indent):
+def parse_sequence_item(lines, index: int, indent: int):
     number, _, content = lines[index]
     if content == "-":
         index += 1
@@ -110,7 +110,7 @@ def parse_sequence_item(lines, index, indent):
     raise ValueError(f"line {number}: mixed mapping and sequence")
 
 
-def parse_mapping_entry(lines, index, indent, result):
+def parse_mapping_entry(lines, index: int, indent: int, result: dict) -> int:
     number, _, content = lines[index]
     match = YAML_KEY.fullmatch(content)
     if match is None:
@@ -132,15 +132,16 @@ def parse_mapping_entry(lines, index, indent, result):
 def parse_block(lines, index, indent):
     if index >= len(lines) or lines[index][1] != indent:
         raise ValueError("invalid indentation")
-    sequence = lines[index][2] == "-" or lines[index][2].startswith("- ")
-    result = [] if sequence else {}
-    while index < len(lines) and lines[index][1] == indent:
-        if sequence:
+    if lines[index][2] == "-" or lines[index][2].startswith("- "):
+        items: list = []
+        while index < len(lines) and lines[index][1] == indent:
             item, index = parse_sequence_item(lines, index, indent)
-            result.append(item)
-        else:
-            index = parse_mapping_entry(lines, index, indent, result)
-    return result, index
+            items.append(item)
+        return items, index
+    mapping: dict = {}
+    while index < len(lines) and lines[index][1] == indent:
+        index = parse_mapping_entry(lines, index, indent, mapping)
+    return mapping, index
 
 
 def load_dependabot_yaml(path):
@@ -174,7 +175,8 @@ def validate_ownership(root):
     for relative in RENOVATE_FILES:
         if (root / relative).exists():
             errors.append(f"{relative}: Renovate duplicates Dependabot ownership")
-    for workflow in sorted((root / ".github" / "workflows").glob("*.y*ml")):
+    workflows: list[Path] = sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    for workflow in workflows:
         try:
             text = workflow.read_text(encoding="utf-8")
         except OSError as error:
@@ -207,7 +209,7 @@ def validate_stable_only(root):
         for item in inventory:
             if not isinstance(item, dict):
                 raise ValueError("inventory entries must be objects")
-            version = item.get("version")
+            version: object = item.get("version")
             prerelease = (
                 UNSTABLE_CONTAINER_TAG.search(str(version))
                 if item.get("kind") == "container"

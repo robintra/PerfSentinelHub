@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 
-SECRET_REFERENCE = re.compile(r"\$\{\{\s*secrets\.([A-Z][A-Z0-9_]*)\s*\}\}")
+SECRET_REFERENCE = re.compile(r"\$\{\{\s*secrets\.([A-Z][A-Z0-9_]*)\s*}}")
 # "secrets:S6338" is a Sonar rule key, not a GitHub secret reference.
 SECRET_TOKEN = re.compile(r"(?<![a-z0-9_])secrets(?![a-z0-9_])(?!:S\d)", re.IGNORECASE)
 LIST = "list"
@@ -449,7 +449,7 @@ def normalize_environment(value):
 FIXTURE_KEY = re.compile(r"^(?:repository|environment|rulesets:[1-9][0-9]*|ruleset:[1-9][0-9]*)$")
 
 
-def validate_fixture(fixture) -> None:
+def validate_fixture(fixture: object) -> None:
     if not isinstance(fixture, dict):
         raise ApiError("normalized API schema fixture must be an object")
     for key, response in fixture.items():
@@ -472,6 +472,8 @@ class GitHubApi:
         if endpoint == f"repos/{self.repository}":
             return "repository"
         if endpoint == f"repos/{self.repository}/rulesets":
+            if page is None:
+                raise ApiError("the ruleset listing requires a page number")
             return f"rulesets:{page}"
         prefix = f"repos/{self.repository}/rulesets/"
         if endpoint.startswith(prefix):
@@ -481,7 +483,8 @@ class GitHubApi:
             return "environment"
         raise ApiError(f"unrecognized fixture endpoint: {endpoint}")
 
-    def _live(self, endpoint: str, page: int | None):
+    @staticmethod
+    def _live(endpoint: str, page: int | None):
         command = [
             "gh",
             "api",
@@ -506,8 +509,9 @@ class GitHubApi:
 
     def _fetch(self, endpoint, *, page=None, schema=None, validator=None, normalizer=lambda value: value):
         key = self._fixture_key(endpoint, page)
-        if self.fixture is not None:
-            response = self.fixture.get(key)
+        fixture = self.fixture
+        if fixture is not None:
+            response = fixture.get(key)
             if response is None:
                 raise ApiError(f"normalized API schema fixture response is missing: {key}")
             if response["status"] != 200:
@@ -618,7 +622,11 @@ def workflow_secrets(root: Path):
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
             raise ApiError(f"unable to read {path}: {error}") from error
-        stripped = SECRET_REFERENCE.sub(lambda match: names.add(match.group(1)) or "", text)
+        def collect(match) -> str:
+            names.add(match.group(1))
+            return ""
+
+        stripped = SECRET_REFERENCE.sub(collect, text)
         if SECRET_TOKEN.search(stripped):
             raise ApiError(f"{path}: non-canonical workflow secret reference")
     return names
@@ -750,7 +758,8 @@ def status_check_errors(branch_rules, branch_policy) -> list[str]:
     status_parameters = status_rule.get("parameters") if isinstance(status_rule, dict) else None
     normalized_checks = normalized_status_checks(status_parameters)
     if (
-        normalized_checks is None
+        status_parameters is None
+        or normalized_checks is None
         or status_parameters.get("strict_required_status_checks_policy") is not True
         or status_parameters.get("strict_required_status_checks_policy")
         is not branch_policy["strict_required_status_checks_policy"]

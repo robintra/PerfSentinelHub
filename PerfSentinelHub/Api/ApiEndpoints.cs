@@ -167,7 +167,8 @@ public static partial class ApiEndpoints
             return true;
 
         var bytes = new List<byte>(rawQuery.Length);
-        for (var index = 0; index < rawQuery.Length; index++)
+        var index = 0;
+        while (index < rawQuery.Length)
         {
             if (rawQuery[index] == '%')
             {
@@ -175,11 +176,12 @@ public static partial class ApiEndpoints
                     !byte.TryParse(rawQuery.AsSpan(index + 1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
                     return false;
                 bytes.Add(value);
-                index += 2;
+                index += 3;
             }
             else
             {
                 bytes.AddRange(Encoding.UTF8.GetBytes(rawQuery[index].ToString()));
+                index++;
             }
         }
 

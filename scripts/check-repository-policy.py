@@ -198,48 +198,62 @@ def validate_policy_schema(policy) -> None:
         "SONAR_TOKEN",
     }
     if (
-        policy["schema_version"] != 1
-        or policy["visibility"] != "public"
-        or policy["default_branch"] != "main"
-        or settings != expected_settings
-        or policy["security_features"]
-        != ["secret_scanning", "secret_scanning_push_protection"]
-        or branch["ref_include"] != "~DEFAULT_BRANCH"
-        or branch["required_approving_review_count"] != 0
-        or branch["required_review_thread_resolution"] is not True
-        or branch["dismiss_stale_reviews_on_push"] is not True
-        or branch["require_code_owner_review"] is not False
-        or branch["require_last_push_approval"] is not False
-        or branch["strict_required_status_checks_policy"] is not True
-        or branch["do_not_enforce_on_create"] is not False
-        or sorted(branch["allowed_merge_methods"]) != ["rebase", "squash"]
-        or len(branch["allowed_merge_methods"])
-        != len(set(branch["allowed_merge_methods"]))
-        or not checks
-        or len({check["context"] for check in checks}) != len(checks)
-        or {(check["context"], check["app_slug"]) for check in checks}
-        != expected_checks
-        or branch["require_linear_history"] is not True
-        or branch["require_signed_commits"] is not True
-        or branch["allow_force_pushes"] is not False
-        or branch["allow_deletions"] is not False
-        or branch["bypass_actors"] != []
-        or branch["emergency_bypass_record"] is not None
-        or policy["tag_ruleset"]
-        != {
+        not canonical_repository_policy(policy, settings, expected_settings)
+        or not canonical_branch_policy(branch, checks, expected_checks)
+        or not canonical_release_policy(policy, expected_secrets)
+    ):
+        raise ApiError("repository policy schema contains a non-canonical value")
+
+
+def canonical_repository_policy(policy, settings, expected_settings) -> bool:
+    return (
+        policy["schema_version"] == 1
+        and policy["visibility"] == "public"
+        and policy["default_branch"] == "main"
+        and settings == expected_settings
+        and policy["security_features"] == ["secret_scanning", "secret_scanning_push_protection"]
+    )
+
+
+def canonical_branch_policy(branch, checks, expected_checks) -> bool:
+    return (
+        branch["ref_include"] == "~DEFAULT_BRANCH"
+        and branch["required_approving_review_count"] == 0
+        and branch["required_review_thread_resolution"] is True
+        and branch["dismiss_stale_reviews_on_push"] is True
+        and branch["require_code_owner_review"] is False
+        and branch["require_last_push_approval"] is False
+        and branch["strict_required_status_checks_policy"] is True
+        and branch["do_not_enforce_on_create"] is False
+        and sorted(branch["allowed_merge_methods"]) == ["rebase", "squash"]
+        and len(branch["allowed_merge_methods"]) == len(set(branch["allowed_merge_methods"]))
+        and bool(checks)
+        and len({check["context"] for check in checks}) == len(checks)
+        and {(check["context"], check["app_slug"]) for check in checks} == expected_checks
+        and branch["require_linear_history"] is True
+        and branch["require_signed_commits"] is True
+        and branch["allow_force_pushes"] is False
+        and branch["allow_deletions"] is False
+        and branch["bypass_actors"] == []
+        and branch["emergency_bypass_record"] is None
+    )
+
+
+def canonical_release_policy(policy, expected_secrets) -> bool:
+    return (
+        policy["tag_ruleset"]
+        == {
             "ref_include": "refs/tags/v*",
             "allow_force_updates": False,
             "allow_deletions": False,
             "bypass_actors": [],
         }
-        or policy["release_environment"]["name"] != "hub-release"
-        or policy["release_environment"]["minimum_required_reviewers"] < 1
-        or policy["release_environment"]["prevent_self_review"] is not False
-        or len(policy["workflow_secrets"])
-        != len(set(policy["workflow_secrets"]))
-        or set(policy["workflow_secrets"]) != expected_secrets
-    ):
-        raise ApiError("repository policy schema contains a non-canonical value")
+        and policy["release_environment"]["name"] == "hub-release"
+        and policy["release_environment"]["minimum_required_reviewers"] >= 1
+        and policy["release_environment"]["prevent_self_review"] is False
+        and len(policy["workflow_secrets"]) == len(set(policy["workflow_secrets"]))
+        and set(policy["workflow_secrets"]) == expected_secrets
+    )
 
 
 def selected(value, keys, label: str):
@@ -298,25 +312,27 @@ def normalize_rule(value):
         )
         return rule
     if kind == "required_status_checks":
-        rule = selected(value, ("type", "parameters"), "required_status_checks rule")
-        parameters = selected(
-            rule["parameters"], STATUS_PARAMETERS_SCHEMA, "status check parameters"
-        )
-        checks = parameters["required_status_checks"]
-        if not isinstance(checks, list):
-            raise ApiError("status checks: expected array")
-        parameters["required_status_checks"] = [
-            {
-                "context": selected(check, ("context",), "status check")["context"],
-                "integration_id": check.get("integration_id")
-                if isinstance(check, dict)
-                else None,
-            }
-            for check in checks
-        ]
-        rule["parameters"] = parameters
-        return rule
+        return normalize_status_check_rule(value)
     raise ApiError(f"unsupported normalized rule type {kind!r}")
+
+
+def normalize_status_check_rule(value):
+    rule = selected(value, ("type", "parameters"), "required_status_checks rule")
+    parameters = selected(
+        rule["parameters"], STATUS_PARAMETERS_SCHEMA, "status check parameters"
+    )
+    checks = parameters["required_status_checks"]
+    if not isinstance(checks, list):
+        raise ApiError("status checks: expected array")
+    parameters["required_status_checks"] = [
+        {
+            "context": selected(check, ("context",), "status check")["context"],
+            "integration_id": check.get("integration_id") if isinstance(check, dict) else None,
+        }
+        for check in checks
+    ]
+    rule["parameters"] = parameters
+    return rule
 
 
 def normalize_ruleset(value):
@@ -620,25 +636,26 @@ def inventory_secrets(root: Path):
     return set(names)
 
 
-def validate(repository: str, root: Path, policy, api: GitHubApi):
-    errors = []
-    validate_policy_schema(policy)
-    if policy["repository"] != repository:
-        raise ApiError("--repo differs from repository-policy.json")
-
+def secret_errors(root: Path, policy) -> list[str]:
     expected_secrets = set(policy["workflow_secrets"])
     inventoried = inventory_secrets(root)
     referenced = workflow_secrets(root)
-    for name in sorted(referenced - inventoried):
-        errors.append(f"workflow secret {name} is absent from the inventory")
+    errors = [
+        f"workflow secret {name} is absent from the inventory"
+        for name in sorted(referenced - inventoried)
+    ]
     if inventoried != expected_secrets or referenced != expected_secrets:
         errors.append(
             "workflow secret references must exactly match policy: "
             f"expected={sorted(expected_secrets)}, inventoried={sorted(inventoried)}, "
             f"referenced={sorted(referenced)}"
         )
+    return errors
 
+
+def repository_errors(repository: str, policy, api: GitHubApi) -> list[str]:
     repository_data = api.repository_data()
+    errors = []
     if repository_data.get("full_name") != repository:
         errors.append("repository identity drift")
     if repository_data.get("visibility") != policy["visibility"] or repository_data.get("private") is not False:
@@ -651,16 +668,15 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
     security = repository_data.get("security_and_analysis")
     if not isinstance(security, dict):
         errors.append("public security_and_analysis fields are missing")
-    else:
-        for feature in policy["security_features"]:
-            state = security.get(feature)
-            if not isinstance(state, dict) or state.get("status") != "enabled":
-                errors.append(f"public security feature {feature} must be enabled")
+        return errors
+    for feature in policy["security_features"]:
+        state = security.get(feature)
+        if not isinstance(state, dict) or state.get("status") != "enabled":
+            errors.append(f"public security feature {feature} must be enabled")
+    return errors
 
-    try:
-        summaries = api.rulesets()
-    except ApiError as error:
-        return [*errors, str(error)]
+
+def detailed_rulesets(api: GitHubApi, summaries) -> list:
     detailed = []
     seen = set()
     for summary in summaries:
@@ -674,7 +690,78 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
         if detail["id"] != identifier:
             raise ApiError(f"normalized API schema ruleset {identifier}: id mismatch")
         detailed.append(detail)
+    return detailed
 
+
+def pull_request_errors(branch_rules, branch_policy) -> list[str]:
+    pull_request = branch_rules.get("pull_request")
+    parameters = pull_request.get("parameters") if isinstance(pull_request, dict) else None
+    if not isinstance(parameters, dict):
+        return ["pull_request rule is required for everyone"]
+    errors = []
+    if parameters.get("required_approving_review_count") != branch_policy["required_approving_review_count"]:
+        errors.append("pull_request approval count drift")
+    if parameters.get("required_review_thread_resolution") is not branch_policy["required_review_thread_resolution"]:
+        errors.append("pull_request conversations must be resolved")
+    for field in (
+        "dismiss_stale_reviews_on_push",
+        "require_code_owner_review",
+        "require_last_push_approval",
+    ):
+        if parameters[field] is not branch_policy[field]:
+            errors.append(f"pull_request {field} drift")
+    if sorted(parameters.get("allowed_merge_methods", [])) != sorted(branch_policy["allowed_merge_methods"]):
+        errors.append("pull_request merge methods drift")
+    return errors
+
+
+def normalized_status_checks(status_parameters):
+    actual_checks = status_parameters.get("required_status_checks") if isinstance(status_parameters, dict) else None
+    if not isinstance(actual_checks, list):
+        return None
+    normalized = []
+    for item in actual_checks:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("context"), str)
+            or set(item) - {"context", "integration_id"}
+            or item.get("integration_id") is not None
+            and type(item.get("integration_id")) is not int
+        ):
+            return None
+        normalized.append({"context": item["context"], "integration_id": item.get("integration_id")})
+    return normalized
+
+
+def status_check_errors(branch_rules, branch_policy, api: GitHubApi) -> list[str]:
+    expected_checks = []
+    for check in branch_policy["required_status_checks"]:
+        app_slug = check.get("app_slug")
+        source = None
+        if app_slug is not None:
+            app = api.app(app_slug)
+            if app["slug"] != app_slug:
+                raise ApiError(f"GitHub App {app_slug} identity is ambiguous")
+            source = app["id"]
+        expected_checks.append({"context": check.get("context"), "integration_id": source})
+    status_rule = branch_rules.get("required_status_checks")
+    status_parameters = status_rule.get("parameters") if isinstance(status_rule, dict) else None
+    normalized_checks = normalized_status_checks(status_parameters)
+    if (
+        normalized_checks is None
+        or status_parameters.get("strict_required_status_checks_policy") is not True
+        or status_parameters.get("strict_required_status_checks_policy")
+        is not branch_policy["strict_required_status_checks_policy"]
+        or status_parameters.get("do_not_enforce_on_create")
+        is not branch_policy["do_not_enforce_on_create"]
+        or sorted(normalized_checks, key=lambda item: item["context"])
+        != sorted(expected_checks, key=lambda item: item["context"])
+    ):
+        return ["required status checks differ or lack the expected App source"]
+    return []
+
+
+def branch_errors(detailed, policy, api: GitHubApi) -> list[str]:
     branch_policy = require_object(policy["branch_ruleset"], "branch policy")
     branch = active_ruleset(detailed, "branch", branch_policy["ref_include"], "default branch")
     branch_rules = rule_map(branch, "default branch ruleset")
@@ -686,6 +773,7 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
         "pull_request",
         "required_status_checks",
     }
+    errors = []
     if set(branch_rules) != expected_branch_rules:
         errors.append("default branch rule set differs from policy")
     if branch.get("bypass_actors") != branch_policy["bypass_actors"] or branch_policy.get("emergency_bypass_record") is not None:
@@ -699,73 +787,16 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
             errors.append(f"default branch requires {kind}")
     if not branch_policy["allow_deletions"] and "deletion" not in branch_rules:
         errors.append("default branch requires deletion protection")
-    pull_request = branch_rules.get("pull_request")
-    parameters = pull_request.get("parameters") if isinstance(pull_request, dict) else None
-    if not isinstance(parameters, dict):
-        errors.append("pull_request rule is required for everyone")
-    else:
-        if parameters.get("required_approving_review_count") != branch_policy["required_approving_review_count"]:
-            errors.append("pull_request approval count drift")
-        if parameters.get("required_review_thread_resolution") is not branch_policy["required_review_thread_resolution"]:
-            errors.append("pull_request conversations must be resolved")
-        for field in (
-            "dismiss_stale_reviews_on_push",
-            "require_code_owner_review",
-            "require_last_push_approval",
-        ):
-            if parameters[field] is not branch_policy[field]:
-                errors.append(f"pull_request {field} drift")
-        if sorted(parameters.get("allowed_merge_methods", [])) != sorted(branch_policy["allowed_merge_methods"]):
-            errors.append("pull_request merge methods drift")
+    errors.extend(pull_request_errors(branch_rules, branch_policy))
+    errors.extend(status_check_errors(branch_rules, branch_policy, api))
+    return errors
 
-    expected_checks = []
-    for check in branch_policy["required_status_checks"]:
-        app_slug = check.get("app_slug")
-        source = None
-        if app_slug is not None:
-            app = api.app(app_slug)
-            if app["slug"] != app_slug:
-                raise ApiError(f"GitHub App {app_slug} identity is ambiguous")
-            source = app["id"]
-        expected_checks.append({"context": check.get("context"), "integration_id": source})
-    status_rule = branch_rules.get("required_status_checks")
-    status_parameters = status_rule.get("parameters") if isinstance(status_rule, dict) else None
-    actual_checks = status_parameters.get("required_status_checks") if isinstance(status_parameters, dict) else None
-    normalized_checks = []
-    if isinstance(actual_checks, list):
-        for item in actual_checks:
-            if (
-                not isinstance(item, dict)
-                or not isinstance(item.get("context"), str)
-                or set(item) - {"context", "integration_id"}
-                or item.get("integration_id") is not None
-                and type(item.get("integration_id")) is not int
-            ):
-                normalized_checks = None
-                break
-            normalized_checks.append(
-                {
-                    "context": item["context"],
-                    "integration_id": item.get("integration_id"),
-                }
-            )
-    else:
-        normalized_checks = None
-    if (
-        normalized_checks is None
-        or status_parameters.get("strict_required_status_checks_policy") is not True
-        or status_parameters.get("strict_required_status_checks_policy")
-        is not branch_policy["strict_required_status_checks_policy"]
-        or status_parameters.get("do_not_enforce_on_create")
-        is not branch_policy["do_not_enforce_on_create"]
-        or sorted(normalized_checks, key=lambda item: item["context"])
-        != sorted(expected_checks, key=lambda item: item["context"])
-    ):
-        errors.append("required status checks differ or lack the expected App source")
 
+def tag_errors(detailed, policy) -> list[str]:
     tag_policy = require_object(policy["tag_ruleset"], "tag policy")
     tag = active_ruleset(detailed, "tag", tag_policy["ref_include"], "release tag")
     tag_rules = rule_map(tag, "release tag ruleset")
+    errors = []
     if set(tag_rules) != {"non_fast_forward", "deletion"}:
         errors.append("release tag rule set differs from policy")
     if tag.get("bypass_actors") != tag_policy["bypass_actors"]:
@@ -774,35 +805,54 @@ def validate(repository: str, root: Path, policy, api: GitHubApi):
         errors.append("release tag force updates must be forbidden")
     if not tag_policy["allow_deletions"] and "deletion" not in tag_rules:
         errors.append("release tag deletion protection is required")
+    return errors
 
+
+def environment_errors(policy, api: GitHubApi) -> list[str]:
     environment_policy = require_object(policy["release_environment"], "release environment policy")
     environment_name = environment_policy["name"]
     environment = api.environment(environment_name)
     rules = environment.get("protection_rules")
     reviewers = [rule for rule in rules if isinstance(rule, dict) and rule.get("type") == "required_reviewers"] if isinstance(rules, list) else []
     if len(reviewers) != 1:
-        errors.append(f"{environment_name} manual approval is required")
-    else:
-        reviewer_entries = reviewers[0].get("reviewers")
-        valid_reviewers = (
-            isinstance(reviewer_entries, list)
-            and len(reviewer_entries) >= environment_policy["minimum_required_reviewers"]
-            and all(
-                isinstance(entry, dict)
-                and entry.get("type") in {"User", "Team"}
-                and isinstance(entry.get("reviewer"), dict)
-                and type(entry["reviewer"].get("id")) is int
-                and isinstance(entry["reviewer"].get("name"), str)
-                and bool(entry["reviewer"]["name"])
-                for entry in reviewer_entries
-            )
+        return [f"{environment_name} manual approval is required"]
+    reviewer_entries = reviewers[0].get("reviewers")
+    valid_reviewers = (
+        isinstance(reviewer_entries, list)
+        and len(reviewer_entries) >= environment_policy["minimum_required_reviewers"]
+        and all(
+            isinstance(entry, dict)
+            and entry.get("type") in {"User", "Team"}
+            and isinstance(entry.get("reviewer"), dict)
+            and type(entry["reviewer"].get("id")) is int
+            and isinstance(entry["reviewer"].get("name"), str)
+            and bool(entry["reviewer"]["name"])
+            for entry in reviewer_entries
         )
-        if (
-            not valid_reviewers
-            or reviewers[0].get("prevent_self_review") is not environment_policy["prevent_self_review"]
-        ):
-            errors.append(f"{environment_name} manual approval reviewer policy drift")
+    )
+    if (
+        not valid_reviewers
+        or reviewers[0].get("prevent_self_review") is not environment_policy["prevent_self_review"]
+    ):
+        return [f"{environment_name} manual approval reviewer policy drift"]
+    return []
 
+
+def validate(repository: str, root: Path, policy, api: GitHubApi):
+    validate_policy_schema(policy)
+    if policy["repository"] != repository:
+        raise ApiError("--repo differs from repository-policy.json")
+
+    errors = secret_errors(root, policy)
+    errors.extend(repository_errors(repository, policy, api))
+    try:
+        summaries = api.rulesets()
+    except ApiError as error:
+        return [*errors, str(error)]
+    detailed = detailed_rulesets(api, summaries)
+    errors.extend(branch_errors(detailed, policy, api))
+    errors.extend(tag_errors(detailed, policy))
+    errors.extend(environment_errors(policy, api))
     return errors
 
 

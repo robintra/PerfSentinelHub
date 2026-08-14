@@ -74,6 +74,14 @@ RFC3339_TIMESTAMP = re.compile(
     r"(?P<zone>Z|(?P<offset_sign>[+-])(?P<offset_hour>[01][0-9]|2[0-3]):(?P<offset_minute>[0-5][0-9]))$"
 )
 NUGET_ROLES = frozenset({"sdk-aot-base", "sdk-aot-base-rid"})
+# The checksum shape each inventory kind must carry, with the message when it does not.
+DIGEST_SHAPES = {
+    "github-release": (ACTION_SHA, "GitHub releases require a raw release commit SHA"),
+    "github-action": (ACTION_SHA, "GitHub Actions require a full commit SHA"),
+    "container": (SHA256, "downloaded tools and containers require a sha256 checksum"),
+    "download": (SHA256, "downloaded tools and containers require a sha256 checksum"),
+    "dotnet-sdk": (DOTNET_SHA512, ".NET SDK artifacts require a sha512 checksum"),
+}
 UTC_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
@@ -225,29 +233,31 @@ def is_supported_source(item: dict) -> bool:
     return bool(GITHUB_RELEASE.fullmatch(source))
 
 
-def digest_errors(name, kind, item) -> list[str]:
+def nuget_field_errors(name, kind, item) -> list[str]:
+    if kind != "nuget":
+        return [
+            f"{name}: {field} is only valid for NuGet packages"
+            for field in ("lock_content_hash", "nuget_role")
+            if field in item
+        ]
     errors = []
-    if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: GitHub releases require a raw release commit SHA")
-    if kind == "github-action" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: GitHub Actions require a full commit SHA")
-    if (kind == "container" or kind == "download") and not SHA256.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
-    if kind == "dotnet-sdk" and not DOTNET_SHA512.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: .NET SDK artifacts require a sha512 checksum")
-    if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
-        errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
-    if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
+    if not is_canonical_sha512(item.get("lock_content_hash")):
         errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
     role = item.get("nuget_role")
-    if kind == "nuget" and "nuget_role" in item and (
-        not isinstance(role, str) or role not in NUGET_ROLES
-    ):
+    if "nuget_role" in item and (not isinstance(role, str) or role not in NUGET_ROLES):
         errors.append(f"{name}: unknown NuGet role")
-    if kind != "nuget" and "lock_content_hash" in item:
-        errors.append(f"{name}: lock_content_hash is only valid for NuGet packages")
-    if kind != "nuget" and "nuget_role" in item:
-        errors.append(f"{name}: nuget_role is only valid for NuGet packages")
+    return errors
+
+
+def digest_errors(name, kind, item) -> list[str]:
+    errors = []
+    # A malformed inventory can carry an unhashable kind, which must not raise here.
+    expected = DIGEST_SHAPES.get(kind) if isinstance(kind, str) else None
+    if expected is not None and not expected[0].fullmatch(str(item["digest_or_sha"])):
+        errors.append(f"{name}: {expected[1]}")
+    if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
+        errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
+    errors.extend(nuget_field_errors(name, kind, item))
     return errors
 
 
@@ -287,14 +297,7 @@ def artifact_url_errors(name, kind, item, artifact_keys) -> list[str]:
     return errors
 
 
-def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
-    name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
-    if not isinstance(item, dict):
-        return ["inventory contains a non-object item"]
-    missing = REQUIRED_FIELDS - item.keys()
-    if missing:
-        return [f"{name}: missing required fields: {', '.join(sorted(missing))}"]
-
+def inventory_field_errors(item, name, name_keys) -> list[str]:
     errors = []
     unknown = item.keys() - ALLOWED_FIELDS
     if unknown:
@@ -314,6 +317,45 @@ def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
         errors.append(f"{name}: unsupported official source")
     if not isinstance(item["reason"], str) or not item["reason"].strip():
         errors.append(f"{name}: reason must explain the pin")
+    return errors
+
+
+def release_timestamp_errors(item, name, kind) -> list[str]:
+    try:
+        release_value = item["released_at"]
+        date_only = bool(isinstance(release_value, str) and DATE_ONLY.fullmatch(release_value))
+        if date_only and kind not in ("container", "dotnet-sdk"):
+            raise ValueError("this source requires a precise timestamp")
+        release_time(release_value)
+    except (TypeError, ValueError):
+        return [
+            f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
+        ]
+    return []
+
+
+def source_release_errors(item, name, kind) -> list[str]:
+    match = GITHUB_RELEASE.fullmatch(str(item["source"]))
+    if not match:
+        return []
+    errors = []
+    if match.group(3).lstrip("v") != str(item["version"]).lstrip("v"):
+        errors.append(f"{name}: source release tag must match the inventory version")
+    if kind == "github-action" and str(item["name"]).lower() != f"{match.group(1)}/{match.group(2)}".lower():
+        errors.append(f"{name}: action name must match its owner/repository source")
+    return errors
+
+
+def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
+    name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
+    if not isinstance(item, dict):
+        return ["inventory contains a non-object item"]
+    missing = REQUIRED_FIELDS - item.keys()
+    if missing:
+        return [f"{name}: missing required fields: {', '.join(sorted(missing))}"]
+
+    kind = item["kind"]
+    errors = inventory_field_errors(item, name, name_keys)
     prerelease = (
         UNSTABLE_CONTAINER_TAG.search(str(item["version"]))
         if kind == "container"
@@ -321,29 +363,17 @@ def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
     )
     if prerelease:
         errors.append(f"{name}: prerelease versions are not permitted")
-    try:
-        release_value = item["released_at"]
-        date_only = bool(isinstance(release_value, str) and DATE_ONLY.fullmatch(release_value))
-        if date_only and kind != "container" and kind != "dotnet-sdk":
-            raise ValueError("this source requires a precise timestamp")
-        release_time(release_value)
-    except (TypeError, ValueError):
-        errors.append(
-            f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
-        )
-        return errors
+    timestamp_errors = release_timestamp_errors(item, name, kind)
+    if timestamp_errors:
+        return errors + timestamp_errors
 
     errors.extend(digest_errors(name, kind, item))
     errors.extend(artifact_url_errors(name, kind, item, artifact_keys))
-    match = GITHUB_RELEASE.fullmatch(str(item["source"]))
-    if match and match.group(3).lstrip("v") != str(item["version"]).lstrip("v"):
-        errors.append(f"{name}: source release tag must match the inventory version")
-    if kind == "github-action" and match and str(item["name"]).lower() != f"{match.group(1)}/{match.group(2)}".lower():
-        errors.append(f"{name}: action name must match its owner/repository source")
+    errors.extend(source_release_errors(item, name, kind))
     return errors
 
 
-def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
+def validate_inventory(inventory: list[dict]) -> list[str]:
     errors = []
     name_keys = set()
     artifact_keys = set()
@@ -1247,7 +1277,7 @@ def online_item_errors(item: dict, cached_json) -> list[str]:
     return [f"{item['name']}: unsupported official source"]
 
 
-def validate_online(inventory: list[dict], now: datetime) -> list[str]:
+def validate_online(inventory: list[dict]) -> list[str]:
     errors = []
     json_cache = {}
 
@@ -1284,10 +1314,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"invalid config/supply-chain.json: {error}", file=sys.stderr)
         return 1
 
-    now = datetime.now(timezone.utc)
-    errors = validate_inventory(inventory, now) + validate_declarations(root, inventory)
+    errors = validate_inventory(inventory) + validate_declarations(root, inventory)
     if arguments.online and not errors:
-        errors.extend(validate_online(inventory, now))
+        errors.extend(validate_online(inventory))
     for error in errors:
         print(error, file=sys.stderr)
     return int(bool(errors))

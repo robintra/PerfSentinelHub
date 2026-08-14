@@ -74,6 +74,15 @@ RFC3339_TIMESTAMP = re.compile(
     r"(?P<zone>Z|(?P<offset_sign>[+-])(?P<offset_hour>[01][0-9]|2[0-3]):(?P<offset_minute>[0-5][0-9]))$"
 )
 NUGET_ROLES = frozenset({"sdk-aot-base", "sdk-aot-base-rid"})
+FORBIDDEN_MSBUILD_PROPERTIES = {
+    "centralpackageversionoverrideenabled",
+    "managepackageversionscentrally",
+    "restoreconfigfile",
+    "restoresources",
+    "restoreadditionalprojectsources",
+    "restorefallbackfolders",
+    "restoreadditionalprojectfallbackfolders",
+}
 # The checksum shape each inventory kind must carry, with the message when it does not.
 DIGEST_SHAPES = {
     "github-release": (ACTION_SHA, "GitHub releases require a raw release commit SHA"),
@@ -739,10 +748,114 @@ def runtime_identifier_values(relative, runtime_identifiers) -> tuple[tuple[str,
     return values, []
 
 
+def central_property_errors(properties: dict[str, list[str | None]]) -> list[str]:
+    errors = []
+    if properties["managepackageversionscentrally"] != ["true"]:
+        errors.append(
+            "Directory.Packages.props: ManagePackageVersionsCentrally must be exactly true"
+        )
+    if properties["centralpackageversionoverrideenabled"] != ["false"]:
+        errors.append(
+            "Directory.Packages.props: CentralPackageVersionOverrideEnabled must be exactly false"
+        )
+    return errors
+
+
+def central_package_errors(central_path: Path, nuget_pins: dict, central: dict) -> list[str]:
+    if not central_path.is_file():
+        return ["Directory.Packages.props is required"]
+    errors = []
+    try:
+        package_root = ElementTree.parse(central_path).getroot()
+        if "}" in package_root.tag or msbuild_name(package_root.tag) != "project":
+            raise ValueError("Project root is not canonical")
+        parents = {child: parent for parent in package_root.iter() for child in parent}
+        properties: dict[str, list[str | None]] = {
+            "managepackageversionscentrally": [],
+            "centralpackageversionoverrideenabled": [],
+        }
+        for element in package_root.iter():
+            if not isinstance(element.tag, str):
+                continue
+            local_tag = msbuild_name(element.tag)
+            errors.extend(central_element_errors(element, local_tag, parents, properties))
+            if local_tag == "packageversion":
+                errors.extend(package_version_errors(element, parents, central, nuget_pins))
+        errors.extend(central_property_errors(properties))
+        errors.extend(
+            f"Directory.Packages.props: {expected['name']} is missing"
+            for key, expected in nuget_pins.items()
+            if key not in central
+        )
+    except (OSError, ValueError, ElementTree.ParseError):
+        errors.append("Directory.Packages.props: unable to parse canonical XML")
+    return errors
+
+
+def scan_project_elements(
+    errors: list[str],
+    relative: Path,
+    project_root,
+    parents: dict,
+    nuget_pins: dict,
+    central: dict,
+    all_references: set,
+    is_project_file: bool,
+) -> tuple[dict, list, list]:
+    """Collect the declarations of one MSBuild file, appending its errors as they are found."""
+    references: dict[str, dict] = {}
+    publish_aot: list = []
+    runtime_identifiers: list = []
+    for element in project_root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        folded_tag = msbuild_name(element.tag)
+        errors.extend(msbuild_tag_errors(relative, folded_tag, FORBIDDEN_MSBUILD_PROPERTIES))
+        if folded_tag == "publishaot":
+            publish_aot.append(element.text)
+        if folded_tag == "runtimeidentifiers":
+            runtime_identifiers.append(element.text)
+        if folded_tag != "packagereference":
+            continue
+        if not is_project_file:
+            errors.append(f"{relative}: PackageReference is only permitted in project files")
+            continue
+        errors.extend(
+            package_reference_errors(
+                relative, element, parents, references, nuget_pins, central, all_references
+            )
+        )
+    return references, publish_aot, runtime_identifiers
+
+
+def project_declaration_errors(
+    root: Path, path: Path, nuget_pins: dict, central: dict, all_references: set
+) -> tuple[list[str], tuple | None]:
+    relative = path.relative_to(root)
+    is_project_file = path.suffix.casefold() == CSPROJ_SUFFIX
+    errors: list[str] = []
+    try:
+        project_root = ElementTree.parse(path).getroot()
+        if "}" in project_root.tag or msbuild_name(project_root.tag) != "project":
+            raise ValueError("Project root is not canonical")
+        parents = {child: parent for parent in project_root.iter() for child in parent}
+        references, publish_aot, runtime_identifiers = scan_project_elements(
+            errors, relative, project_root, parents, nuget_pins, central, all_references, is_project_file
+        )
+        aot = publish_aot == ["true"]
+        if publish_aot and publish_aot not in (["true"], ["false"]):
+            errors.append(f"{relative}: PublishAot must be a single canonical boolean")
+        rids, rid_errors = runtime_identifier_values(relative, runtime_identifiers)
+        errors.extend(rid_errors)
+        return errors, ((references, aot, rids) if is_project_file else None)
+    except (OSError, ValueError, ElementTree.ParseError):
+        errors.append(f"{relative}: unable to parse canonical project XML")
+        return errors, None
+
+
 def validate_package_declarations(
     root: Path, files: list[Path], inventory: list[dict]
 ) -> tuple[list[str], dict[Path, tuple[dict[str, dict], bool, tuple[str, ...]]]]:
-    errors = []
     nuget_pins = {
         item["name"].casefold(): item
         for item in inventory
@@ -752,55 +865,11 @@ def validate_package_declarations(
         and isinstance(item.get("name"), str)
     }
     central_path = root / "Directory.Packages.props"
-    central = {}
-    if not central_path.is_file():
-        errors.append("Directory.Packages.props is required")
-    else:
-        try:
-            package_root = ElementTree.parse(central_path).getroot()
-            if "}" in package_root.tag or msbuild_name(package_root.tag) != "project":
-                raise ValueError("Project root is not canonical")
-            parents = {
-                child: parent for parent in package_root.iter() for child in parent
-            }
-            properties: dict[str, list[str | None]] = {
-                "managepackageversionscentrally": [],
-                "centralpackageversionoverrideenabled": [],
-            }
-            for element in package_root.iter():
-                if not isinstance(element.tag, str):
-                    continue
-                local_tag = msbuild_name(element.tag)
-                errors.extend(central_element_errors(element, local_tag, parents, properties))
-                if local_tag == "packageversion":
-                    errors.extend(package_version_errors(element, parents, central, nuget_pins))
-            if properties["managepackageversionscentrally"] != ["true"]:
-                errors.append(
-                    "Directory.Packages.props: ManagePackageVersionsCentrally must be exactly true"
-                )
-            if properties["centralpackageversionoverrideenabled"] != ["false"]:
-                errors.append(
-                    "Directory.Packages.props: CentralPackageVersionOverrideEnabled must be exactly false"
-                )
-            for key, expected in nuget_pins.items():
-                if key not in central:
-                    errors.append(
-                        f"Directory.Packages.props: {expected['name']} is missing"
-                    )
-        except (OSError, ValueError, ElementTree.ParseError):
-            errors.append("Directory.Packages.props: unable to parse canonical XML")
+    central: dict = {}
+    errors = central_package_errors(central_path, nuget_pins, central)
 
     projects = {}
     all_references = set()
-    forbidden_msbuild_properties = {
-        "centralpackageversionoverrideenabled",
-        "managepackageversionscentrally",
-        "restoreconfigfile",
-        "restoresources",
-        "restoreadditionalprojectsources",
-        "restorefallbackfolders",
-        "restoreadditionalprojectfallbackfolders",
-    }
     xml_files = [
         path
         for path in files
@@ -808,47 +877,12 @@ def validate_package_declarations(
         and path != central_path
     ]
     for path in xml_files:
-        relative = path.relative_to(root)
-        try:
-            project_root = ElementTree.parse(path).getroot()
-            if "}" in project_root.tag or msbuild_name(project_root.tag) != "project":
-                raise ValueError("Project root is not canonical")
-            parents = {
-                child: parent for parent in project_root.iter() for child in parent
-            }
-            references = {}
-            publish_aot = []
-            runtime_identifiers = []
-            for element in project_root.iter():
-                if not isinstance(element.tag, str):
-                    continue
-                folded_tag = msbuild_name(element.tag)
-                errors.extend(msbuild_tag_errors(relative, folded_tag, forbidden_msbuild_properties))
-                if folded_tag == "publishaot":
-                    publish_aot.append(element.text)
-                if folded_tag == "runtimeidentifiers":
-                    runtime_identifiers.append(element.text)
-                if folded_tag != "packagereference":
-                    continue
-                if path.suffix.casefold() != CSPROJ_SUFFIX:
-                    errors.append(
-                        f"{relative}: PackageReference is only permitted in project files"
-                    )
-                    continue
-                errors.extend(
-                    package_reference_errors(
-                        relative, element, parents, references, nuget_pins, central, all_references
-                    )
-                )
-            aot = publish_aot == ["true"]
-            if publish_aot and publish_aot not in (["true"], ["false"]):
-                errors.append(f"{relative}: PublishAot must be a single canonical boolean")
-            rids, rid_errors = runtime_identifier_values(relative, runtime_identifiers)
-            errors.extend(rid_errors)
-            if path.suffix.casefold() == CSPROJ_SUFFIX:
-                projects[path] = (references, aot, rids)
-        except (OSError, ValueError, ElementTree.ParseError):
-            errors.append(f"{relative}: unable to parse canonical project XML")
+        file_errors, project = project_declaration_errors(
+            root, path, nuget_pins, central, all_references
+        )
+        errors.extend(file_errors)
+        if project is not None:
+            projects[path] = project
     if all_references != set(nuget_pins):
         errors.append(
             "PackageReference declarations must use every NuGet inventory package exactly through central management"

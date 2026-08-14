@@ -41,9 +41,7 @@ def parse_project(path: Path, description: str):
     return project
 
 
-def project_version(root: Path) -> str:
-    project_path = root / "PerfSentinelHub/PerfSentinelHub.csproj"
-    project = parse_project(project_path, "project version")
+def canonical_version_element(project):
     elements = list(project.iter())
     if any(element.tag.casefold() == "import" for element in elements):
         fail("project version cannot depend on an explicit import")
@@ -68,7 +66,10 @@ def project_version(root: Path) -> str:
         or version.text is None
     ):
         fail("project version must be one unconditional canonical property")
+    return version
 
+
+def reject_version_overrides(root: Path, project_path: Path) -> None:
     for directory in (project_path.parent, root):
         for name in ("Directory.Build.props", "Directory.Build.targets"):
             path = directory / name
@@ -81,6 +82,11 @@ def project_version(root: Path) -> str:
             ):
                 fail(f"project version can be overridden by {path.relative_to(root)}")
 
+
+def project_version(root: Path) -> str:
+    project_path = root / "PerfSentinelHub/PerfSentinelHub.csproj"
+    version = canonical_version_element(parse_project(project_path, "project version"))
+    reject_version_overrides(root, project_path)
     value = version.text.strip()
     if STABLE_VERSION.fullmatch(value) is None:
         fail("project version must be canonical 0.MINOR.PATCH")
@@ -149,22 +155,43 @@ def without_html_comments(line: str, inside_comment: bool) -> tuple[str, bool]:
     return "".join(visible), inside_comment
 
 
+def reject_ambiguous_comment_marker(line: str) -> None:
+    if "<!--" not in line and "-->" not in line:
+        return
+    indentation = line[: len(line) - len(line.lstrip(" \t"))]
+    if (
+        "`" in line
+        or "\t" in indentation
+        or len(indentation) >= 4
+        or "\\<!--" in line
+        or "\\-->" in line
+    ):
+        fail("changelog heading contains an ambiguous HTML comment marker")
+
+
+def heading_version(visible: str) -> str | None:
+    heading_candidate = visible.lstrip(" \t")
+    if not heading_candidate.startswith("## ["):
+        return None
+    if heading_candidate != visible:
+        fail("changelog heading must not be indented")
+    heading = CHANGELOG_HEADING.fullmatch(visible)
+    if heading is None:
+        fail("changelog heading must use canonical ## [VERSION] - YYYY-MM-DD syntax")
+    try:
+        date.fromisoformat(heading.group("date"))
+    except ValueError:
+        fail("changelog heading date must be a valid ISO calendar date")
+    return heading.group("version")
+
+
 def changelog_versions(root: Path) -> list[str]:
     changelog = read(root / "CHANGELOG.md", "changelog heading")
     inside_comment = False
     fence = None
     versions = []
     for line in changelog.splitlines():
-        if "<!--" in line or "-->" in line:
-            indentation = line[: len(line) - len(line.lstrip(" \t"))]
-            if (
-                "`" in line
-                or "\t" in indentation
-                or len(indentation) >= 4
-                or "\\<!--" in line
-                or "\\-->" in line
-            ):
-                fail("changelog heading contains an ambiguous HTML comment marker")
+        reject_ambiguous_comment_marker(line)
         if fence is not None:
             marker, length = fence
             if re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line):
@@ -179,19 +206,9 @@ def changelog_versions(root: Path) -> list[str]:
                 fail("changelog heading cannot be hidden by invalid backtick fence info")
             fence = (marker[0], len(marker))
             continue
-        heading_candidate = visible.lstrip(" \t")
-        if not heading_candidate.startswith("## ["):
-            continue
-        if heading_candidate != visible:
-            fail("changelog heading must not be indented")
-        heading = CHANGELOG_HEADING.fullmatch(visible)
-        if heading is None:
-            fail("changelog heading must use canonical ## [VERSION] - YYYY-MM-DD syntax")
-        try:
-            date.fromisoformat(heading.group("date"))
-        except ValueError:
-            fail("changelog heading date must be a valid ISO calendar date")
-        versions.append(heading.group("version"))
+        version = heading_version(visible)
+        if version is not None:
+            versions.append(version)
 
     if inside_comment:
         fail("changelog heading is inside an unclosed HTML comment")
@@ -200,15 +217,19 @@ def changelog_versions(root: Path) -> list[str]:
     return versions
 
 
+def reject_noncanonical_escape(stripped: str) -> None:
+    directive = re.fullmatch(r"# *escape *= *(\S*) *", stripped, re.IGNORECASE)
+    if directive and directive.group(1) != "\\":
+        fail("image version label requires the canonical Dockerfile escape character")
+
+
 def docker_instructions(text: str) -> list[str]:
     instructions = []
     parts = []
     for line in text.splitlines():
         stripped = line.strip()
         if not parts and stripped.startswith("#"):
-            directive = re.fullmatch(r"# *escape *= *(\S*) *", stripped, re.IGNORECASE)
-            if directive and directive.group(1) != "\\":
-                fail("image version label requires the canonical Dockerfile escape character")
+            reject_noncanonical_escape(stripped)
         if not parts and (not stripped or stripped.startswith("#")):
             continue
         end = line.rstrip()
@@ -223,6 +244,31 @@ def docker_instructions(text: str) -> list[str]:
     if parts:
         fail("image version label is inside an unterminated Dockerfile instruction")
     return instructions
+
+
+def label_version_values(body: str) -> list[str]:
+    if body.lstrip().startswith("["):
+        if IMAGE_VERSION_LABEL.casefold() in body.casefold():
+            fail("image version label cannot use a JSON-like LABEL form")
+        return []
+    try:
+        fields = shlex.split(body, comments=False, posix=True)
+    except ValueError:
+        if IMAGE_VERSION_LABEL.casefold() in body.casefold():
+            fail("image version label is not a canonical LABEL field")
+        return []
+    if any("=" not in field for field in fields):
+        if IMAGE_VERSION_LABEL.casefold() in body.casefold():
+            fail("image version label must use key=value LABEL syntax")
+        return []
+    values = []
+    for field in fields:
+        key, value = field.split("=", 1)
+        if key.casefold() == IMAGE_VERSION_LABEL.casefold():
+            if key != IMAGE_VERSION_LABEL:
+                fail("image version label key is not canonical")
+            values.append(value)
+    return values
 
 
 def image_version(root: Path) -> str:
@@ -241,27 +287,8 @@ def image_version(root: Path) -> str:
             continue
         if name != "label":
             continue
-        body = match.group("body") or ""
-        if body.lstrip().startswith("["):
-            if IMAGE_VERSION_LABEL.casefold() in body.casefold():
-                fail("image version label cannot use a JSON-like LABEL form")
-            continue
-        try:
-            fields = shlex.split(body, comments=False, posix=True)
-        except ValueError:
-            if IMAGE_VERSION_LABEL.casefold() in body.casefold():
-                fail("image version label is not a canonical LABEL field")
-            continue
-        if any("=" not in field for field in fields):
-            if IMAGE_VERSION_LABEL.casefold() in body.casefold():
-                fail("image version label must use key=value LABEL syntax")
-            continue
-        for field in fields:
-            key, value = field.split("=", 1)
-            if key.casefold() == IMAGE_VERSION_LABEL.casefold():
-                if key != IMAGE_VERSION_LABEL:
-                    fail("image version label key is not canonical")
-                values.append((stage, value))
+        for value in label_version_values(match.group("body") or ""):
+            values.append((stage, value))
     if stage < 0 or len(values) != 1 or values[0][0] != stage:
         fail("image version label must have exactly one declaration in the final Docker stage")
     return values[0][1]

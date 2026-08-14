@@ -19,7 +19,7 @@ SCANNER = (
     "/d:sonar.python.version=3.12 "
     '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**" '
     '"/d:sonar.coverage.exclusions=scripts/**" '
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder "
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin "
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338 "
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json "
     "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707 "
@@ -29,7 +29,11 @@ SCANNER = (
     "/d:sonar.issue.ignore.multicriteria.cliargs.ruleKey=pythonsecurity:S6350 "
     '"/d:sonar.issue.ignore.multicriteria.cliargs.resourceKey=scripts/**" '
     "/d:sonar.issue.ignore.multicriteria.sqlbuilder.ruleKey=csharpsquid:S2077 "
-    "/d:sonar.issue.ignore.multicriteria.sqlbuilder.resourceKey=PerfSentinelHub/Storage/HubDatabase.cs\n"
+    "/d:sonar.issue.ignore.multicriteria.sqlbuilder.resourceKey=PerfSentinelHub/Storage/HubDatabase.cs "
+    "/d:sonar.issue.ignore.multicriteria.asciiclass.ruleKey=python:S6353 "
+    '"/d:sonar.issue.ignore.multicriteria.asciiclass.resourceKey=scripts/**" '
+    "/d:sonar.issue.ignore.multicriteria.imagepin.ruleKey=docker:S8431 "
+    "/d:sonar.issue.ignore.multicriteria.imagepin.resourceKey=Dockerfile\n"
 )
 SONAR = SCANNER
 

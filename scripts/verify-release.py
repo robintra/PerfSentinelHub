@@ -476,7 +476,7 @@ def latest_stable(content: bytes) -> str:
         versions[tag] = (int(match.group(1)), int(match.group(2)))
     if not versions:
         raise ValueError("no canonical stable v0 release exists")
-    return max(versions, key=versions.get)
+    return max(versions, key=lambda name: versions[name])
 
 
 def verify_published(root: Path):

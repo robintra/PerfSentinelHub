@@ -40,7 +40,7 @@ UNSTABLE_CONTAINER_TAG = re.compile(
     r"(?:^|[._-])(?:alpha|beta|rc|preview|pre|eap|nightly|snapshot|canary|unstable|dev)[0-9]*(?:[._-]|$)",
     re.IGNORECASE,
 )
-FROM_LINE = re.compile(r"^\s*FROM\s+(?:--platform=\S+\s+)?([^\s]+)", re.IGNORECASE)
+FROM_LINE = re.compile(r"^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)", re.IGNORECASE)
 SAFE_NAME = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 SAFE_RELATIVE_PATH = rf"{SAFE_NAME}(?:/{SAFE_NAME})*"
 SAFE_VERSION = r"[A-Za-z0-9][A-Za-z0-9._+-]*"
@@ -107,7 +107,7 @@ def parse_timestamp(value: object) -> Decimal:
     if match is None:
         raise ValueError("timestamp is not canonical RFC3339")
     try:
-        release_time = timestamp_from_datetime(
+        seconds = timestamp_from_datetime(
             datetime(
                 *(int(match.group(name)) for name in ("year", "month", "day", "hour", "minute", "second")),
                 tzinfo=timezone.utc,
@@ -117,9 +117,9 @@ def parse_timestamp(value: object) -> Decimal:
         raise ValueError("timestamp is not canonical RFC3339") from error
     if match.group("offset_sign"):
         offset = int(match.group("offset_hour")) * 3600 + int(match.group("offset_minute")) * 60
-        release_time += offset if match.group("offset_sign") == "-" else -offset
+        seconds += offset if match.group("offset_sign") == "-" else -offset
     fraction = match.group("fraction")
-    return release_time + (Decimal(f"0.{fraction}") if fraction else 0)
+    return seconds + (Decimal(f"0.{fraction}") if fraction else 0)
 
 
 def release_time(value: object) -> Decimal:
@@ -719,7 +719,7 @@ def canonical_package_reference(element, parent, attributes, child_names, condit
 def package_reference_errors(relative, element, parents, references, nuget_pins, central, all_references) -> list[str]:
     attributes = msbuild_attributes(element)
     child_names = {msbuild_name(child.tag) for child in element if isinstance(child.tag, str)}
-    name = attributes.get("include")
+    name: str = attributes.get("include", "")
     if not canonical_package_reference(
         element, parents.get(element), attributes, child_names, has_conditional_ancestor(element, parents), name
     ):
@@ -1059,8 +1059,9 @@ def source_line_errors(
                 errors.append(f"{location}: YAML mapping key is not canonical")
             if YAML_USES_WORD.search(content):
                 errors.extend(workflow_uses_errors(location, line, pins))
-        if is_dockerfile and FROM_LINE.match(line):
-            errors.extend(dockerfile_from_errors(location, FROM_LINE.match(line), pins))
+        from_line = FROM_LINE.match(line) if is_dockerfile else None
+        if from_line is not None:
+            errors.extend(dockerfile_from_errors(location, from_line, pins))
     return errors
 
 
@@ -1116,11 +1117,9 @@ def global_json_errors(root: Path, pins: dict) -> list[str]:
     try:
         sdk = canonical_sdk_policy(load_json(global_json.read_text(encoding="utf-8")))
         expected = pins.get("dotnet-sdk")
-        if (
-            expected is None
-            or expected.get("kind") != "dotnet-sdk"
-            or expected["version"] != sdk["version"]
-        ):
+        if expected is None or expected.get("kind") != "dotnet-sdk":
+            return ["global.json: SDK version differs from the inventory"]
+        if expected["version"] != sdk["version"]:
             return ["global.json: SDK version differs from the inventory"]
     except (OSError, ValueError, KeyError, TypeError):
         return ["global.json: SDK version, rollForward, and allowPrerelease policy must be pinned"]

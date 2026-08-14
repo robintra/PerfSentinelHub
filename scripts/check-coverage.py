@@ -147,15 +147,15 @@ def display(value: Decimal) -> str:
 
 
 def load_numeric_baseline(path: Path) -> Decimal:
-    def reject_constant(value: str):
-        raise ValueError(f"non-finite number {value}")
+    def reject_constant(constant: str):
+        raise ValueError(f"non-finite number {constant}")
 
     def unique_object(pairs: list[tuple[str, object]]) -> dict:
         result = {}
-        for key, value in pairs:
+        for key, entry in pairs:
             if key in result:
                 raise ValueError(f"duplicate JSON key: {key}")
-            result[key] = value
+            result[key] = entry
         return result
 
     try:

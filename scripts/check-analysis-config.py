@@ -62,7 +62,7 @@ REQUIRED_SECRETS = {
     "SONAR_TOKEN",
 }
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
-WORKFLOW_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)\}\}")
+WORKFLOW_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)}}")
 CANONICAL_SECRET_REFERENCE = re.compile(r"\s*secrets\.([A-Z][A-Z0-9_]*)\s*")
 # "secrets:S6338" is a Sonar rule key, not a GitHub secret reference.
 SECRET_TOKEN = re.compile(r"(?<![a-z0-9_])secrets(?![a-z0-9_])(?!:S\d)", re.IGNORECASE)

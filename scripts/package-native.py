@@ -108,7 +108,7 @@ def scan_staging(root: Path):
             entry = staging_entry(current_path / name, root, name in directories, names)
             if entry is not None:
                 entries.append(entry)
-    entries.sort(key=lambda entry: entry[1])
+    entries.sort(key=lambda item: item[1])
     return entries
 
 
@@ -219,7 +219,8 @@ def write_tar(path: Path, entries, commit_time: int) -> None:
 
 
 def write_zip(path: Path, entries, commit_time: int) -> None:
-    timestamp = datetime.datetime.fromtimestamp(commit_time, datetime.timezone.utc).timetuple()[:6]
+    moment = datetime.datetime.fromtimestamp(commit_time, datetime.timezone.utc)
+    timestamp = (moment.year, moment.month, moment.day, moment.hour, moment.minute, moment.second)
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for entry in entries:
             _, relative, metadata, _, _ = entry

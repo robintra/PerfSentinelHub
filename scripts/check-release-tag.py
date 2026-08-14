@@ -64,22 +64,7 @@ def ssh_string(blob: bytes, offset: int) -> tuple[bytes, int]:
     return blob[start:end], end
 
 
-def signing_identity(path: Path) -> dict[str, str]:
-    payload = load_json(path)
-    if (
-        not isinstance(payload, dict)
-        or set(payload) != CONFIG_FIELDS
-        or type(payload.get("schema_version")) is not int
-        or payload["schema_version"] != 1
-    ):
-        raise ValueError("top-level schema is not closed version 1")
-    release_tag = payload.get("release_tag")
-    github = payload.get("github")
-    if not isinstance(release_tag, dict) or set(release_tag) != TAG_IDENTITY_FIELDS:
-        raise ValueError("release_tag schema is not closed")
-    if not isinstance(github, dict) or set(github) != GITHUB_FIELDS:
-        raise ValueError("github schema is not closed")
-
+def validate_tag_key(release_tag: dict) -> None:
     principal = release_tag.get("principal")
     key_type = release_tag.get("key_type")
     public_key = release_tag.get("public_key")
@@ -105,6 +90,8 @@ def signing_identity(path: Path) -> dict[str, str]:
     if fingerprint != actual_fingerprint:
         raise ValueError("public key fingerprint differs from the exact key")
 
+
+def validate_github_identity(github: dict) -> None:
     expected_github = {
         "oidc_issuer": "https://token.actions.githubusercontent.com",
         "repository": REPOSITORY,
@@ -118,6 +105,26 @@ def signing_identity(path: Path) -> dict[str, str]:
     runtime_repository = os.environ.get("GITHUB_REPOSITORY")
     if runtime_repository is not None and runtime_repository != REPOSITORY:
         raise ValueError("runtime GitHub repository differs from the approved repository")
+
+
+def signing_identity(path: Path) -> dict[str, str]:
+    payload = load_json(path)
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != CONFIG_FIELDS
+        or type(payload.get("schema_version")) is not int
+        or payload["schema_version"] != 1
+    ):
+        raise ValueError("top-level schema is not closed version 1")
+    release_tag = payload.get("release_tag")
+    github = payload.get("github")
+    if not isinstance(release_tag, dict) or set(release_tag) != TAG_IDENTITY_FIELDS:
+        raise ValueError("release_tag schema is not closed")
+    if not isinstance(github, dict) or set(github) != GITHUB_FIELDS:
+        raise ValueError("github schema is not closed")
+
+    validate_tag_key(release_tag)
+    validate_github_identity(github)
     return release_tag
 
 

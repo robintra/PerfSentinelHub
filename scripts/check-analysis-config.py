@@ -106,7 +106,7 @@ def resembles_secret(value: str) -> bool:
     return bool(
         SECRET_VALUE.search(compact)
         or re.fullmatch(r"[A-Za-z0-9+/=_-]{40,}", compact)
-        or re.search(r"https://[^/\s]+:[^@\s]+@", compact)
+        or re.search(r"https://[^/\s:]*:[^@\s]+@", compact)
     )
 
 

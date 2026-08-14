@@ -13,9 +13,9 @@ from pathlib import Path
 
 STABLE_TAG = re.compile(r"^v0\.[0-9]+\.[0-9]+$")
 STABLE_VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
-CHART_ENTRY = re.compile(r"^(?P<key>[A-Za-z][A-Za-z0-9_-]*)[ ]*:[ ]*(?P<value>.*?)[ ]*$")
+CHART_ENTRY = re.compile(r"(?P<key>[A-Za-z][A-Za-z0-9_-]*)[ ]*:[ ]*(?P<value>.*)")
 CHANGELOG_HEADING = re.compile(r"^## \[(?P<version>[^]]+)] - (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})$")
-FENCE_OPENING = re.compile(r"^ {0,3}(?P<marker>`{3,}|~{3,})(?P<info>.*)$")
+FENCE_OPENING = re.compile(r"^ {0,3}(?P<marker>`{3,}+|~{3,}+)(?P<info>.*)$")
 IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
 VERSION_PROPERTIES = frozenset(("version", "versionprefix", "versionsuffix"))
 
@@ -98,7 +98,7 @@ def chart_scalar(value: str) -> str:
         if match is None:
             fail("chart structure contains a noncanonical double-quoted scalar")
         return match.group(1)
-    scalar = re.split(r"[ ]+#", value, maxsplit=1)[0].rstrip()
+    scalar = re.split(r"[ ]++#", value, maxsplit=1)[0].rstrip()
     if not scalar or scalar[0] in "[{&*!|>@`" or "\t" in scalar:
         fail("chart structure contains a noncanonical scalar")
     return scalar
@@ -119,7 +119,7 @@ def chart_values(root: Path) -> dict[str, str]:
         if key in values:
             description = f"chart {key}" if key in {"version", "appVersion"} else "chart structure"
             fail(f"{description} must have exactly one declaration")
-        values[key] = chart_scalar(match.group("value"))
+        values[key] = chart_scalar(match.group("value").rstrip(" "))
     if values.get("apiVersion") != "v2" or values.get("name") != "perf-sentinel-hub" or values.get("type") != "application":
         fail("chart structure must identify the v2 perf-sentinel-hub application")
     return values
@@ -206,7 +206,7 @@ def docker_instructions(text: str) -> list[str]:
     for line in text.splitlines():
         stripped = line.strip()
         if not parts and stripped.startswith("#"):
-            directive = re.fullmatch(r"#[ ]*escape[ ]*=[ ]*(.)[ ]*", stripped, re.IGNORECASE)
+            directive = re.fullmatch(r"#[ ]*escape[ ]*=[ ]*(\S*)[ ]*", stripped, re.IGNORECASE)
             if directive and directive.group(1) != "\\":
                 fail("image version label requires the canonical Dockerfile escape character")
         if not parts and (not stripped or stripped.startswith("#")):
@@ -232,7 +232,7 @@ def image_version(root: Path) -> str:
     stage = -1
     values = []
     for instruction in docker_instructions(dockerfile):
-        match = re.match(r"^(?P<name>[A-Za-z]+)(?:[ \t]+(?P<body>.*))?$", instruction)
+        match = re.match(r"^(?P<name>[A-Za-z]++)(?:[ \t]+(?P<body>.*))?$", instruction)
         if match is None:
             continue
         name = match.group("name").casefold()

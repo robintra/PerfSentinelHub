@@ -40,6 +40,23 @@ def load_json(content: bytes, description: str):
         raise ValueError(f"{description} is not valid JSON: {error}") from error
 
 
+def archive_member_content(archive, member, entries):
+    pure = PurePosixPath(member.name)
+    if member.name != pure.as_posix() or pure.is_absolute() or ".." in pure.parts:
+        raise ValueError("OCI tar archive contains an unsafe path")
+    if member.isdir():
+        return None
+    if not member.isfile() or member.name in entries:
+        raise ValueError("OCI tar archive entries must be unique regular files")
+    stream = archive.extractfile(member)
+    if stream is None:
+        raise ValueError("OCI tar archive entry cannot be read")
+    content = stream.read()
+    if len(content) != member.size:
+        raise ValueError("OCI tar archive entry is truncated")
+    return content
+
+
 class Layout:
     def __init__(self, path: Path):
         self.path = path
@@ -48,15 +65,21 @@ class Layout:
 
     def _read(self):
         if self.path.is_dir() and not self.path.is_symlink():
-            entries = {}
-            for candidate in self.path.rglob("*"):
-                if candidate.is_symlink() or (candidate.exists() and not candidate.is_file() and not candidate.is_dir()):
-                    raise ValueError("OCI layout contains a non-regular entry")
-                if candidate.is_file():
-                    entries[candidate.relative_to(self.path).as_posix()] = candidate.read_bytes()
-            return entries
+            return self._read_directory()
         if not self.path.is_file() or self.path.is_symlink():
             raise ValueError("OCI layout must be a regular directory or tar archive")
+        return self._read_archive()
+
+    def _read_directory(self):
+        entries = {}
+        for candidate in self.path.rglob("*"):
+            if candidate.is_symlink() or (candidate.exists() and not candidate.is_file() and not candidate.is_dir()):
+                raise ValueError("OCI layout contains a non-regular entry")
+            if candidate.is_file():
+                entries[candidate.relative_to(self.path).as_posix()] = candidate.read_bytes()
+        return entries
+
+    def _read_archive(self):
         raw = self.path.read_bytes()
         if len(raw) < 1024 or raw[-1024:] != bytes(1024):
             raise ValueError("OCI tar archive has noncanonical trailing data")
@@ -64,20 +87,9 @@ class Layout:
         try:
             with tarfile.open(self.path, "r:*") as archive:
                 for member in archive:
-                    pure = PurePosixPath(member.name)
-                    if member.name != pure.as_posix() or pure.is_absolute() or ".." in pure.parts:
-                        raise ValueError("OCI tar archive contains an unsafe path")
-                    if member.isdir():
-                        continue
-                    if not member.isfile() or member.name in entries:
-                        raise ValueError("OCI tar archive entries must be unique regular files")
-                    stream = archive.extractfile(member)
-                    if stream is None:
-                        raise ValueError("OCI tar archive entry cannot be read")
-                    content = stream.read()
-                    if len(content) != member.size:
-                        raise ValueError("OCI tar archive entry is truncated")
-                    entries[member.name] = content
+                    content = archive_member_content(archive, member, entries)
+                    if content is not None:
+                        entries[member.name] = content
         except tarfile.TarError as error:
             raise ValueError(f"OCI tar archive is invalid: {error}") from error
         return entries
@@ -114,6 +126,14 @@ def validated_layout(
     expected_manifests: dict[tuple[str, str], str] | None = None,
 ):
     layout = Layout(path)
+    manifests, root_digest = root_manifests(layout)
+    reject_unexpected_platforms(layout, manifests, expected_platforms, expected_manifests)
+    walk_manifest_blobs(layout, manifests)
+    layout.reject_unreferenced_blobs()
+    return root_digest, layout, manifests
+
+
+def root_manifests(layout):
     marker = load_json(layout.required("oci-layout"), "oci-layout")
     if marker != {"imageLayoutVersion": "1.0.0"}:
         raise ValueError("OCI layout version must be exactly 1.0.0")
@@ -124,33 +144,37 @@ def validated_layout(
 
     manifests = index["manifests"]
     root_digest = f"sha256:{hashlib.sha256(index_content).hexdigest()}"
-    if len(manifests) == 1 and manifests[0].get("mediaType") in INDEX_MEDIA_TYPES and "platform" not in manifests[0]:
-        descriptor = manifests[0]
-        nested_content = layout.blob(descriptor)
-        nested = load_json(nested_content, "OCI nested index")
-        if not isinstance(nested, dict) or nested.get("schemaVersion") != 2 or not isinstance(nested.get("manifests"), list):
-            raise ValueError("OCI nested index structure is invalid")
-        manifests = nested["manifests"]
-        root_digest = descriptor["digest"]
+    if len(manifests) != 1 or manifests[0].get("mediaType") not in INDEX_MEDIA_TYPES or "platform" in manifests[0]:
+        return manifests, root_digest
+    descriptor = manifests[0]
+    nested = load_json(layout.blob(descriptor), "OCI nested index")
+    if not isinstance(nested, dict) or nested.get("schemaVersion") != 2 or not isinstance(nested.get("manifests"), list):
+        raise ValueError("OCI nested index structure is invalid")
+    return nested["manifests"], descriptor["digest"]
 
+
+def reject_unexpected_platforms(layout, manifests, expected_platforms, expected_manifests):
     actual_platforms = []
-    actual_manifests = {}
     for descriptor in manifests:
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("platform"), dict):
             raise ValueError("OCI manifest platform is required")
         platform = descriptor["platform"]
         if set(platform) != {"os", "architecture"}:
             raise ValueError("OCI manifest platform must contain only os and architecture")
-        identity = (platform["os"], platform["architecture"])
-        actual_platforms.append(identity)
+        actual_platforms.append((platform["os"], platform["architecture"]))
         layout.blob(descriptor)
     if len(actual_platforms) != len(set(actual_platforms)) or frozenset(actual_platforms) != expected_platforms:
         rendered = ", ".join(f"{os_name}/{architecture}" for os_name, architecture in sorted(actual_platforms))
         raise ValueError(f"OCI platforms differ from the exact expected set: {rendered}")
-    for identity, descriptor in zip(actual_platforms, manifests, strict=True):
-        actual_manifests[identity] = descriptor["digest"]
+    actual_manifests = {
+        identity: descriptor["digest"]
+        for identity, descriptor in zip(actual_platforms, manifests, strict=True)
+    }
     if expected_manifests is not None and actual_manifests != expected_manifests:
         raise ValueError("OCI manifest digest differs from the exact verified platform subjects")
+
+
+def walk_manifest_blobs(layout, manifests):
     for descriptor in manifests:
         manifest = load_json(layout.blob(descriptor), "OCI image manifest")
         if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 2:
@@ -162,8 +186,6 @@ def validated_layout(
         layout.blob(config)
         for layer in layers:
             layout.blob(layer)
-    layout.reject_unreferenced_blobs()
-    return root_digest, layout, manifests
 
 
 def validated_digest(
@@ -289,6 +311,34 @@ def unique_bindings(bindings, description: str):
     return result
 
 
+def requested_digest(arguments) -> str:
+    if arguments.source_date_epoch < 0:
+        raise ValueError("source date epoch must be nonnegative")
+    if arguments.layout is None:
+        if arguments.expected_manifest:
+            raise ValueError("expected-manifest is valid only with layout")
+        return compose_layout(
+            arguments.compose_output,
+            unique_bindings(arguments.source, "source"),
+            arguments.source_date_epoch,
+        )
+    if arguments.source:
+        raise ValueError("source is valid only with compose-output")
+    expected = unique_bindings(arguments.expected_manifest, "expected manifest")
+    if expected and set(expected) != set(arguments.platforms):
+        raise ValueError("expected manifests must cover every requested platform exactly")
+    return validated_digest(arguments.layout, arguments.platforms, expected or None)
+
+
+def emit_digest(arguments, digest: str) -> None:
+    if arguments.write_digest is None:
+        print(digest)
+        return
+    if arguments.write_digest.exists() and (arguments.write_digest.is_symlink() or not arguments.write_digest.is_file()):
+        raise ValueError("digest output must be a regular file")
+    arguments.write_digest.write_text(f"{digest}\n", encoding="ascii")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -301,29 +351,7 @@ def main(argv=None):
     parser.add_argument("--write-digest", type=Path)
     arguments = parser.parse_args(argv)
     try:
-        if arguments.source_date_epoch < 0:
-            raise ValueError("source date epoch must be nonnegative")
-        if arguments.layout is not None:
-            if arguments.source:
-                raise ValueError("source is valid only with compose-output")
-            expected = unique_bindings(arguments.expected_manifest, "expected manifest")
-            if expected and set(expected) != set(arguments.platforms):
-                raise ValueError("expected manifests must cover every requested platform exactly")
-            digest = validated_digest(arguments.layout, arguments.platforms, expected or None)
-        else:
-            if arguments.expected_manifest:
-                raise ValueError("expected-manifest is valid only with layout")
-            digest = compose_layout(
-                arguments.compose_output,
-                unique_bindings(arguments.source, "source"),
-                arguments.source_date_epoch,
-            )
-        if arguments.write_digest is not None:
-            if arguments.write_digest.exists() and (arguments.write_digest.is_symlink() or not arguments.write_digest.is_file()):
-                raise ValueError("digest output must be a regular file")
-            arguments.write_digest.write_text(f"{digest}\n", encoding="ascii")
-        else:
-            print(digest)
+        emit_digest(arguments, requested_digest(arguments))
         return 0
     except (OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)

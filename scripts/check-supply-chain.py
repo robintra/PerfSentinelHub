@@ -761,6 +761,20 @@ def central_property_errors(properties: dict[str, list[str | None]]) -> list[str
     return errors
 
 
+def central_element_scan(
+    package_root, parents: dict, central: dict, nuget_pins: dict, properties: dict
+) -> list[str]:
+    errors = []
+    for element in package_root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        local_tag = msbuild_name(element.tag)
+        errors.extend(central_element_errors(element, local_tag, parents, properties))
+        if local_tag == "packageversion":
+            errors.extend(package_version_errors(element, parents, central, nuget_pins))
+    return errors
+
+
 def central_package_errors(central_path: Path, nuget_pins: dict, central: dict) -> list[str]:
     if not central_path.is_file():
         return ["Directory.Packages.props is required"]
@@ -774,13 +788,9 @@ def central_package_errors(central_path: Path, nuget_pins: dict, central: dict) 
             "managepackageversionscentrally": [],
             "centralpackageversionoverrideenabled": [],
         }
-        for element in package_root.iter():
-            if not isinstance(element.tag, str):
-                continue
-            local_tag = msbuild_name(element.tag)
-            errors.extend(central_element_errors(element, local_tag, parents, properties))
-            if local_tag == "packageversion":
-                errors.extend(package_version_errors(element, parents, central, nuget_pins))
+        errors.extend(
+            central_element_scan(package_root, parents, central, nuget_pins, properties)
+        )
         errors.extend(central_property_errors(properties))
         errors.extend(
             f"Directory.Packages.props: {expected['name']} is missing"
@@ -1025,6 +1035,98 @@ def validate_package_locks(
     return errors
 
 
+def download_declaration_lines(lines: list[str], artifact_urls: set) -> list[tuple[int, str]]:
+    return [
+        (number, content)
+        for number, line in enumerate(lines, start=1)
+        if not (content := line.lstrip(" \t")).startswith("#")
+        and (
+            DOWNLOAD_COMMAND.search(content)
+            or any(artifact_url in content for artifact_url in artifact_urls)
+        )
+    ]
+
+
+def source_line_errors(
+    relative: Path, lines: list[str], pins: dict, is_workflow: bool, is_dockerfile: bool
+) -> list[str]:
+    errors = []
+    for number, line in enumerate(lines, start=1):
+        content = line.lstrip(" \t")
+        location = f"{relative}:{number}"
+        if is_workflow and not content.startswith("#"):
+            if content.startswith("?") or "\\" in content or YAML_QUOTED_KEY.search(content):
+                errors.append(f"{location}: YAML mapping key is not canonical")
+            if YAML_USES_WORD.search(content):
+                errors.extend(workflow_uses_errors(location, line, pins))
+        if is_dockerfile and FROM_LINE.match(line):
+            errors.extend(dockerfile_from_errors(location, FROM_LINE.match(line), pins))
+    return errors
+
+
+def source_file_errors(
+    root: Path, path: Path, pins: dict, artifact_urls: set, inventory: list[dict]
+) -> list[str]:
+    suffix = path.suffix.casefold()
+    filename = path.name.casefold()
+    is_dockerfile = (
+        filename == "dockerfile"
+        or filename.startswith("dockerfile.")
+        or filename.endswith(".dockerfile")
+    )
+    if suffix not in {".yml", ".yaml", ".sh"} and not is_dockerfile:
+        return []
+    with path.open(encoding="utf-8", errors="replace", newline="") as source_file:
+        text = source_file.read()
+    lines = text.split("\n")
+    relative = path.relative_to(root)
+    download_declarations = download_declaration_lines(lines, artifact_urls)
+    errors = source_line_errors(
+        relative, lines, pins, suffix in {".yml", ".yaml"}, is_dockerfile
+    )
+    if suffix == ".sh" and download_declarations:
+        errors.extend(validate_download_script(path, root, text, inventory))
+    elif suffix != ".sh":
+        errors.extend(
+            f"{relative}:{number}: download declarations are only permitted in canonical .sh shell scripts"
+            for number, _ in download_declarations
+        )
+    return errors
+
+
+def canonical_sdk_policy(payload) -> dict:
+    if not isinstance(payload, dict) or set(payload) != {"sdk"}:
+        raise ValueError("global root is not canonical")
+    sdk = payload["sdk"]
+    if (
+        not isinstance(sdk, dict)
+        or set(sdk) != {"version", "rollForward", "allowPrerelease"}
+        or not isinstance(sdk["version"], str)
+        or sdk["rollForward"] != "disable"
+        or sdk["allowPrerelease"] is not False
+    ):
+        raise ValueError("SDK policy is not stable")
+    return sdk
+
+
+def global_json_errors(root: Path, pins: dict) -> list[str]:
+    global_json = root / "global.json"
+    if not global_json.is_file():
+        return ["global.json is required"]
+    try:
+        sdk = canonical_sdk_policy(load_json(global_json.read_text(encoding="utf-8")))
+        expected = pins.get("dotnet-sdk")
+        if (
+            expected is None
+            or expected.get("kind") != "dotnet-sdk"
+            or expected["version"] != sdk["version"]
+        ):
+            return ["global.json: SDK version differs from the inventory"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return ["global.json: SDK version, rollForward, and allowPrerelease policy must be pinned"]
+    return []
+
+
 def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
     errors = []
     pins = inventory_by_name(inventory)
@@ -1037,76 +1139,8 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
         and isinstance(item.get("artifact_url"), str)
     }
     for path in files:
-        suffix = path.suffix.casefold()
-        filename = path.name.casefold()
-        is_dockerfile = (
-            filename == "dockerfile"
-            or filename.startswith("dockerfile.")
-            or filename.endswith(".dockerfile")
-        )
-        if suffix not in {".yml", ".yaml", ".sh"} and not is_dockerfile:
-            continue
-        with path.open(encoding="utf-8", errors="replace", newline="") as source_file:
-            text = source_file.read()
-        lines = text.split("\n")
-        is_workflow = suffix in {".yml", ".yaml"}
-        download_declarations = [
-            (number, content)
-            for number, line in enumerate(lines, start=1)
-            if not (content := line.lstrip(" \t")).startswith("#")
-            and (
-                DOWNLOAD_COMMAND.search(content)
-                or any(artifact_url in content for artifact_url in artifact_urls)
-            )
-        ]
-        for number, line in enumerate(lines, start=1):
-            content = line.lstrip(" \t")
-            location = f"{path.relative_to(root)}:{number}"
-            if is_workflow and not content.startswith("#"):
-                if content.startswith("?") or "\\" in content or YAML_QUOTED_KEY.search(content):
-                    errors.append(f"{location}: YAML mapping key is not canonical")
-                if YAML_USES_WORD.search(content):
-                    errors.extend(workflow_uses_errors(location, line, pins))
-            if is_dockerfile and FROM_LINE.match(line):
-                errors.extend(dockerfile_from_errors(location, FROM_LINE.match(line), pins))
-
-        if suffix == ".sh" and download_declarations:
-            errors.extend(validate_download_script(path, root, text, inventory))
-        elif suffix != ".sh":
-            for number, _ in download_declarations:
-                errors.append(
-                    f"{path.relative_to(root)}:{number}: download declarations are only permitted in canonical .sh shell scripts"
-                )
-
-    global_json = root / "global.json"
-    if not global_json.is_file():
-        errors.append("global.json is required")
-    else:
-        try:
-            payload = load_json(global_json.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict) or set(payload) != {"sdk"}:
-                raise ValueError("global root is not canonical")
-            sdk = payload["sdk"]
-            if (
-                not isinstance(sdk, dict)
-                or set(sdk) != {"version", "rollForward", "allowPrerelease"}
-                or not isinstance(sdk["version"], str)
-                or sdk["rollForward"] != "disable"
-                or sdk["allowPrerelease"] is not False
-            ):
-                raise ValueError("SDK policy is not stable")
-            expected = pins.get("dotnet-sdk")
-            if (
-                expected is None
-                or expected.get("kind") != "dotnet-sdk"
-                or expected["version"] != sdk["version"]
-            ):
-                errors.append("global.json: SDK version differs from the inventory")
-        except (OSError, ValueError, KeyError, TypeError):
-            errors.append(
-                "global.json: SDK version, rollForward, and allowPrerelease policy must be pinned"
-            )
-
+        errors.extend(source_file_errors(root, path, pins, artifact_urls, inventory))
+    errors.extend(global_json_errors(root, pins))
     errors.extend(validate_nuget_config(root, files))
     errors.extend(validate_dotnet_tools(root, files, inventory))
     package_errors, projects = validate_package_declarations(root, files, inventory)
@@ -1196,9 +1230,7 @@ def dotnet_container_release(item: dict, payload: dict) -> dict | None:
     return None
 
 
-def github_release_errors(item: dict, match, cached_json) -> list[str]:
-    owner, repository, tag = match.groups()
-    release, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
+def release_metadata_errors(item: dict, release: dict) -> list[str]:
     errors = []
     prerelease = release.get("prerelease")
     draft = release.get("draft")
@@ -1218,25 +1250,37 @@ def github_release_errors(item: dict, match, cached_json) -> list[str]:
         errors.append(f"{item['name']}: official release published_at is required")
     elif not same_timestamp(published_at, item["released_at"]):
         errors.append(f"{item['name']}: official release timestamp differs from inventory")
+    return errors
+
+
+def release_asset_errors(item: dict, release: dict) -> list[str]:
+    assets = release.get("assets")
+    artifact = next(
+        (
+            asset
+            for asset in assets
+            if isinstance(asset, dict)
+            and asset.get("browser_download_url") == item["artifact_url"]
+        ),
+        None,
+    ) if isinstance(assets, list) else None
+    if artifact is None or not isinstance(artifact.get("digest"), str):
+        return [f"{item['name']}: publisher did not provide the recorded download artifact checksum"]
+    if artifact["digest"].lower() != item["digest_or_sha"].lower():
+        return [f"{item['name']}: publisher checksum differs from inventory"]
+    return []
+
+
+def github_release_errors(item: dict, match, cached_json) -> list[str]:
+    owner, repository, tag = match.groups()
+    release, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
+    errors = release_metadata_errors(item, release)
     if item["kind"] in {"github-action", "github-release"}:
         commit, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
         if commit.get("sha", "").lower() != item["digest_or_sha"].lower():
             errors.append(f"{item['name']}: official release commit moved")
     if item["kind"] == "download":
-        assets = release.get("assets")
-        artifact = next(
-            (
-                asset
-                for asset in assets
-                if isinstance(asset, dict)
-                and asset.get("browser_download_url") == item["artifact_url"]
-            ),
-            None,
-        ) if isinstance(assets, list) else None
-        if artifact is None or not isinstance(artifact.get("digest"), str):
-            errors.append(f"{item['name']}: publisher did not provide the recorded download artifact checksum")
-        elif artifact["digest"].lower() != item["digest_or_sha"].lower():
-            errors.append(f"{item['name']}: publisher checksum differs from inventory")
+        errors.extend(release_asset_errors(item, release))
     return errors
 
 

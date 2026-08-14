@@ -199,7 +199,7 @@ def opened_fence(visible: str):
     marker = opening.group("marker")
     if marker[0] == "`" and "`" in opening.group("info"):
         fail("changelog heading cannot be hidden by invalid backtick fence info")
-    return (marker[0], len(marker))
+    return marker[0], len(marker)
 
 
 def changelog_versions(root: Path) -> list[str]:

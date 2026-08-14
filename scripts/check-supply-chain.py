@@ -904,6 +904,84 @@ def validate_lock_entry(
     return []
 
 
+def implicit_pins_for_group(
+    group_name: str, is_base: bool, aot: bool, expected_rid_groups: set, sdk_pins: dict, rid_sdk_pins: dict
+) -> dict:
+    if not aot:
+        return {}
+    if is_base:
+        return sdk_pins
+    return rid_sdk_pins if group_name in expected_rid_groups else {}
+
+
+def lock_group_errors(
+    relative: Path,
+    group_name: str,
+    entries: dict,
+    references: dict,
+    implicit: dict,
+) -> list[str]:
+    folded_entries, errors = folded_lock_entries(relative, entries)
+    expected_direct = references if "/" not in group_name else {}
+    errors.extend(expected_lock_errors(relative, group_name, expected_direct, folded_entries))
+    errors.extend(expected_lock_errors(relative, group_name, implicit, folded_entries))
+    permitted_direct = set(expected_direct) | set(implicit)
+    errors.extend(
+        f"{relative}: unexpected direct dependency {name}"
+        for key, (name, record) in folded_entries.items()
+        if isinstance(record, dict) and record.get("type") == "Direct" and key not in permitted_direct
+    )
+    return errors
+
+
+def canonical_lock_groups(lock_path: Path) -> dict:
+    payload = load_json(lock_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"version", "dependencies"}
+        or type(payload["version"]) is not int
+        or payload["version"] != 2
+        or not isinstance(payload["dependencies"], dict)
+    ):
+        raise ValueError("lock root is not canonical")
+    return payload["dependencies"]
+
+
+def project_lock_errors(
+    relative: Path,
+    lock_path: Path,
+    references: dict,
+    aot: bool,
+    rids: tuple[str, ...],
+    sdk_pins: dict,
+    rid_sdk_pins: dict,
+    consumed_sdk_pins: set,
+) -> list[str]:
+    errors: list[str] = []
+    try:
+        groups = canonical_lock_groups(lock_path)
+        base_groups = [name for name in groups if isinstance(name, str) and "/" not in name]
+        if not base_groups:
+            raise ValueError("lock has no base target framework")
+        expected_rid_groups = {
+            f"{base}/{rid}" for base in base_groups for rid in rids
+        } if aot else set()
+        actual_rid_groups = {name for name in groups if isinstance(name, str) and "/" in name}
+        if aot and actual_rid_groups != expected_rid_groups:
+            errors.append(f"{relative}: runtime-specific lock groups differ from RuntimeIdentifiers")
+        for group_name, entries in groups.items():
+            if not isinstance(group_name, str) or not isinstance(entries, dict):
+                raise ValueError("lock dependency group is not canonical")
+            implicit = implicit_pins_for_group(
+                group_name, "/" not in group_name, aot, expected_rid_groups, sdk_pins, rid_sdk_pins
+            )
+            consumed_sdk_pins.update(implicit)
+            errors.extend(lock_group_errors(relative, group_name, entries, references, implicit))
+    except (OSError, KeyError, TypeError, ValueError, ElementTree.ParseError):
+        errors.append(f"{relative}: unable to parse canonical packages.lock.json")
+    return errors
+
+
 def validate_package_locks(
     root: Path,
     files: list[Path],
@@ -936,53 +1014,12 @@ def validate_package_locks(
         lock_path = project.parent / NUGET_LOCK_FILE
         if lock_path not in actual_locks:
             continue
-        relative = lock_path.relative_to(root)
-        try:
-            payload = load_json(lock_path.read_text(encoding="utf-8"))
-            if (
-                not isinstance(payload, dict)
-                or set(payload) != {"version", "dependencies"}
-                or type(payload["version"]) is not int
-                or payload["version"] != 2
-                or not isinstance(payload["dependencies"], dict)
-            ):
-                raise ValueError("lock root is not canonical")
-            groups = payload["dependencies"]
-            base_groups = [name for name in groups if isinstance(name, str) and "/" not in name]
-            if not base_groups:
-                raise ValueError("lock has no base target framework")
-            expected_rid_groups = {
-                f"{base}/{rid}" for base in base_groups for rid in rids
-            } if aot else set()
-            actual_rid_groups = {
-                name for name in groups if isinstance(name, str) and "/" in name
-            }
-            if aot and actual_rid_groups != expected_rid_groups:
-                errors.append(f"{relative}: runtime-specific lock groups differ from RuntimeIdentifiers")
-            for group_name, entries in groups.items():
-                if not isinstance(group_name, str) or not isinstance(entries, dict):
-                    raise ValueError("lock dependency group is not canonical")
-                folded_entries, entry_errors = folded_lock_entries(relative, entries)
-                errors.extend(entry_errors)
-
-                is_base = "/" not in group_name
-                expected_direct = references if is_base else {}
-                errors.extend(expected_lock_errors(relative, group_name, expected_direct, folded_entries))
-
-                implicit = {}
-                if aot and is_base:
-                    implicit = sdk_pins
-                elif aot and group_name in expected_rid_groups:
-                    implicit = rid_sdk_pins
-                consumed_sdk_pins.update(implicit)
-                errors.extend(expected_lock_errors(relative, group_name, implicit, folded_entries))
-
-                permitted_direct = set(expected_direct) | set(implicit)
-                for key, (name, record) in folded_entries.items():
-                    if isinstance(record, dict) and record.get("type") == "Direct" and key not in permitted_direct:
-                        errors.append(f"{relative}: unexpected direct dependency {name}")
-        except (OSError, KeyError, TypeError, ValueError, ElementTree.ParseError):
-            errors.append(f"{relative}: unable to parse canonical packages.lock.json")
+        errors.extend(
+            project_lock_errors(
+                lock_path.relative_to(root), lock_path, references, aot, rids,
+                sdk_pins, rid_sdk_pins, consumed_sdk_pins,
+            )
+        )
     for key in set(sdk_pins) - consumed_sdk_pins:
         errors.append(f"{sdk_pins[key]['name']}: SDK NuGet role is unused by any AOT lock")
     return errors

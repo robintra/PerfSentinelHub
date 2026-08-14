@@ -41,5 +41,10 @@ await app.RunAsync();
 // Exposed for WebApplicationFactory<Program> integration tests.
 // ReSharper disable once ClassNeverInstantiated.Global
 #pragma warning disable ASP0027
-public partial class Program;
+public partial class Program
+{
+    protected Program()
+    {
+    }
+}
 #pragma warning restore ASP0027

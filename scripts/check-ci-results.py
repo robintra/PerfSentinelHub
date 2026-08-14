@@ -57,6 +57,25 @@ def expected_outputs(job: str, mode: str) -> set[str]:
     return set()
 
 
+def job_entry_errors(job: str, value: object, allowed: set[str], mode: str, decision: str) -> list[str]:
+    if not isinstance(value, dict) or set(value) != {"outputs", "result"}:
+        return [f"{job}: exactly outputs and result are required"]
+    result = value["result"]
+    outputs = value["outputs"]
+    errors = []
+    if not isinstance(result, str) or result not in RESULTS:
+        errors.append(f"{job}: invalid result")
+    elif result not in allowed:
+        errors.append(f"{job}: result {result} is not allowed for {mode}/{decision}")
+    if not isinstance(outputs, dict):
+        errors.append(f"{job}: outputs must be an object")
+    elif set(outputs) != expected_outputs(job, mode):
+        errors.append(f"{job}: missing or unexpected outputs")
+    elif any(not isinstance(key, str) or not isinstance(item, str) for key, item in outputs.items()):
+        errors.append(f"{job}: output names and values must be strings")
+    return errors
+
+
 def validate_needs(payload: object, mode: str, decision: str) -> list[str]:
     expected = expected_results(mode, decision)
     if not isinstance(payload, dict):
@@ -69,26 +88,7 @@ def validate_needs(payload: object, mode: str, decision: str) -> list[str]:
     errors.extend(f"unexpected job: {job}" for job in sorted(unexpected))
 
     for job in sorted(set(expected) & set(payload)):
-        value = payload[job]
-        if not isinstance(value, dict) or set(value) != {"outputs", "result"}:
-            errors.append(f"{job}: exactly outputs and result are required")
-            continue
-        result = value["result"]
-        outputs = value["outputs"]
-        if not isinstance(result, str) or result not in RESULTS:
-            errors.append(f"{job}: invalid result")
-        elif result not in expected[job]:
-            errors.append(
-                f"{job}: result {result} is not allowed for {mode}/{decision}"
-            )
-        if not isinstance(outputs, dict):
-            errors.append(f"{job}: outputs must be an object")
-            continue
-        if set(outputs) != expected_outputs(job, mode):
-            errors.append(f"{job}: missing or unexpected outputs")
-            continue
-        if any(not isinstance(key, str) or not isinstance(item, str) for key, item in outputs.items()):
-            errors.append(f"{job}: output names and values must be strings")
+        errors.extend(job_entry_errors(job, payload[job], expected[job], mode, decision))
 
     changes = payload.get("changes")
     if (

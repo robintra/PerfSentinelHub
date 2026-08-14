@@ -366,8 +366,7 @@ def write_manifest(path: Path, payload):
         raise
 
 
-def verify_manifest(root: Path, path: Path):
-    manifest = load_json(path, "release manifest")
+def validated_manifest_shape(manifest: object):
     if not isinstance(manifest, dict) or set(manifest) != {"schema_version", "version", "source", "image", "files", "subjects", "claims"}:
         raise ValueError("release manifest root is not closed")
     if manifest["schema_version"] != 1 or manifest["claims"] != {
@@ -384,10 +383,10 @@ def verify_manifest(root: Path, path: Path):
     if not isinstance(image, dict) or image.get("platforms") != ["linux/amd64", "linux/arm64"] or set(image) != {"digest", "platforms"}:
         raise ValueError("release manifest image is invalid")
     validate_inputs(manifest["version"], source["commit"], source["repository"], image["digest"])
+    return source, image
 
-    files = regular_files(root)
-    ensure_closed(files, manifest["version"])
-    listed = manifest["files"]
+
+def verified_file_hashes(files: dict, listed: object) -> dict:
     if not isinstance(listed, list):
         raise ValueError("release manifest files must be an array")
     expected_hashes = {}
@@ -406,28 +405,39 @@ def verify_manifest(root: Path, path: Path):
     for name, expected in expected_hashes.items():
         if sha256(files[name]) != expected:
             raise ValueError(f"{name}: sha256 mismatch")
+    return expected_hashes
 
-    expected_subjects = subject_names(manifest["version"])
+
+def validate_manifest_subjects(manifest: dict, source: dict, expected_hashes: dict, expected_subjects) -> None:
     subjects = manifest["subjects"]
     if not isinstance(subjects, list) or len(subjects) != len(expected_subjects):
         raise ValueError("release manifest subject set is incomplete")
-    expected_entries = []
-    for name, kind, target in expected_subjects:
-        expected_entries.append(
-            {
-                "name": name,
-                "kind": kind,
-                "target": target,
-                "sha256": expected_hashes[name],
-                "sbom": f"{name}.spdx.json",
-                "signature_bundle": f"{name}.sigstore.json",
-                "sbom_attestation": f"{name}.sbom.sigstore.json",
-                "provenance": PROVENANCE_FILE,
-                "source_commit": source["commit"],
-            }
-        )
+    expected_entries = [
+        {
+            "name": name,
+            "kind": kind,
+            "target": target,
+            "sha256": expected_hashes[name],
+            "sbom": f"{name}.spdx.json",
+            "signature_bundle": f"{name}.sigstore.json",
+            "sbom_attestation": f"{name}.sbom.sigstore.json",
+            "provenance": PROVENANCE_FILE,
+            "source_commit": source["commit"],
+        }
+        for name, kind, target in expected_subjects
+    ]
     if subjects != expected_entries or any(not isinstance(entry, dict) or set(entry) != SUBJECT_FIELDS for entry in subjects):
         raise ValueError("release manifest subjects do not match the closed release contract")
+
+
+def verify_manifest(root: Path, path: Path):
+    manifest = load_json(path, "release manifest")
+    source, image = validated_manifest_shape(manifest)
+    files = regular_files(root)
+    ensure_closed(files, manifest["version"])
+    expected_hashes = verified_file_hashes(files, manifest["files"])
+    expected_subjects = subject_names(manifest["version"])
+    validate_manifest_subjects(manifest, source, expected_hashes, expected_subjects)
     validate_evidence(files, expected_subjects, image["digest"], manifest["version"])
 
 

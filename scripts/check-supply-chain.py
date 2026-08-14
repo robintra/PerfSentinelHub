@@ -511,6 +511,79 @@ def msbuild_attributes(element: ElementTree.Element) -> dict[str, str]:
     return attributes
 
 
+def msbuild_tag_errors(relative, folded_tag: str, forbidden_msbuild_properties) -> list[str]:
+    errors = []
+    if folded_tag in forbidden_msbuild_properties:
+        errors.append(f"{relative}: central package and restore policy overrides are not permitted")
+    if folded_tag == "import":
+        errors.append(f"{relative}: explicit Import declarations are not permitted")
+    if folded_tag == "packageversion":
+        errors.append(f"{relative}: PackageVersion is only permitted in Directory.Packages.props")
+    if folded_tag in {"packagedownload", "globalpackagereference"}:
+        errors.append(f"{relative}: {folded_tag} is not permitted")
+    return errors
+
+
+def has_conditional_ancestor(element, parents) -> bool:
+    ancestor = element
+    while ancestor is not None:
+        if any(msbuild_name(attribute) == "condition" for attribute in ancestor.attrib):
+            return True
+        ancestor = parents.get(ancestor)
+    return False
+
+
+def canonical_package_reference(element, parent, attributes, child_names, conditional, name) -> bool:
+    attribute_names = set(attributes)
+    return not (
+        "}" in element.tag
+        or parent is None
+        or "}" in parent.tag
+        or msbuild_name(parent.tag) != "itemgroup"
+        or conditional
+        or not isinstance(name, str)
+        or re.fullmatch(SAFE_NAME, name) is None
+        or "update" in attribute_names
+        or "remove" in attribute_names
+        or "version" in attribute_names
+        or "versionoverride" in attribute_names
+        or "version" in child_names
+        or "versionoverride" in child_names
+    )
+
+
+def package_reference_errors(relative, element, parents, references, nuget_pins, central, all_references) -> list[str]:
+    attributes = msbuild_attributes(element)
+    child_names = {msbuild_name(child.tag) for child in element if isinstance(child.tag, str)}
+    name = attributes.get("include")
+    if not canonical_package_reference(
+        element, parents.get(element), attributes, child_names, has_conditional_ancestor(element, parents), name
+    ):
+        return [f"{relative}: PackageReference must be versionless, unconditional, and canonical"]
+    key = name.casefold()
+    if key in references:
+        return [f"{relative}: PackageReference {name} is duplicated"]
+    expected = nuget_pins.get(key)
+    if expected is None or expected["name"] != name or key not in central:
+        return [f"{relative}: PackageReference {name} differs from the central inventory"]
+    references[key] = expected
+    all_references.add(key)
+    return []
+
+
+def runtime_identifier_values(relative, runtime_identifiers) -> tuple[tuple[str, ...], list[str]]:
+    if not runtime_identifiers:
+        return (), []
+    if len(runtime_identifiers) != 1 or not isinstance(runtime_identifiers[0], str):
+        return (), [f"{relative}: RuntimeIdentifiers must be a single canonical value"]
+    values = tuple(runtime_identifiers[0].split(";"))
+    if not values or len(set(values)) != len(values) or any(
+        re.fullmatch(SAFE_NAME, value) is None for value in values
+    ):
+        return (), [f"{relative}: RuntimeIdentifiers is not canonical"]
+    return values, []
+
+
 def validate_package_declarations(
     root: Path, files: list[Path], inventory: list[dict]
 ) -> tuple[list[str], dict[Path, tuple[dict[str, dict], bool, tuple[str, ...]]]]:
@@ -650,18 +723,7 @@ def validate_package_declarations(
                 if not isinstance(element.tag, str):
                     continue
                 folded_tag = msbuild_name(element.tag)
-                if folded_tag in forbidden_msbuild_properties:
-                    errors.append(
-                        f"{relative}: central package and restore policy overrides are not permitted"
-                    )
-                if folded_tag == "import":
-                    errors.append(f"{relative}: explicit Import declarations are not permitted")
-                if folded_tag == "packageversion":
-                    errors.append(
-                        f"{relative}: PackageVersion is only permitted in Directory.Packages.props"
-                    )
-                if folded_tag in {"packagedownload", "globalpackagereference"}:
-                    errors.append(f"{relative}: {folded_tag} is not permitted")
+                errors.extend(msbuild_tag_errors(relative, folded_tag, forbidden_msbuild_properties))
                 if folded_tag == "publishaot":
                     publish_aot.append(element.text)
                 if folded_tag == "runtimeidentifiers":
@@ -673,70 +735,16 @@ def validate_package_declarations(
                         f"{relative}: PackageReference is only permitted in project files"
                     )
                     continue
-                parent = parents.get(element)
-                attributes = msbuild_attributes(element)
-                attribute_names = set(attributes)
-                child_names = {
-                    msbuild_name(child.tag)
-                    for child in element
-                    if isinstance(child.tag, str)
-                }
-                ancestor = element
-                conditional = False
-                while ancestor is not None:
-                    if any(
-                        msbuild_name(attribute) == "condition"
-                        for attribute in ancestor.attrib
-                    ):
-                        conditional = True
-                    ancestor = parents.get(ancestor)
-                name = attributes.get("include")
-                if (
-                    "}" in element.tag
-                    or parent is None
-                    or "}" in parent.tag
-                    or msbuild_name(parent.tag) != "itemgroup"
-                    or conditional
-                    or not isinstance(name, str)
-                    or re.fullmatch(SAFE_NAME, name) is None
-                    or "update" in attribute_names
-                    or "remove" in attribute_names
-                    or "version" in attribute_names
-                    or "versionoverride" in attribute_names
-                    or "version" in child_names
-                    or "versionoverride" in child_names
-                ):
-                    errors.append(
-                        f"{relative}: PackageReference must be versionless, unconditional, and canonical"
+                errors.extend(
+                    package_reference_errors(
+                        relative, element, parents, references, nuget_pins, central, all_references
                     )
-                    continue
-                key = name.casefold()
-                if key in references:
-                    errors.append(f"{relative}: PackageReference {name} is duplicated")
-                    continue
-                expected = nuget_pins.get(key)
-                if expected is None or expected["name"] != name or key not in central:
-                    errors.append(
-                        f"{relative}: PackageReference {name} differs from the central inventory"
-                    )
-                    continue
-                references[key] = expected
-                all_references.add(key)
+                )
             aot = publish_aot == ["true"]
             if publish_aot and publish_aot not in (["true"], ["false"]):
                 errors.append(f"{relative}: PublishAot must be a single canonical boolean")
-            rids: tuple[str, ...] = ()
-            if runtime_identifiers:
-                if len(runtime_identifiers) != 1 or not isinstance(runtime_identifiers[0], str):
-                    errors.append(f"{relative}: RuntimeIdentifiers must be a single canonical value")
-                else:
-                    values = tuple(runtime_identifiers[0].split(";"))
-                    if not values or len(set(values)) != len(values) or any(
-                        re.fullmatch(SAFE_NAME, value) is None for value in values
-                    ):
-                        errors.append(f"{relative}: RuntimeIdentifiers is not canonical")
-                    else:
-                        rids = values
+            rids, rid_errors = runtime_identifier_values(relative, runtime_identifiers)
+            errors.extend(rid_errors)
             if path.suffix.casefold() == CSPROJ_SUFFIX:
                 projects[path] = (references, aot, rids)
         except (OSError, ValueError, ElementTree.ParseError):

@@ -38,7 +38,19 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
     public ValidateOptionsResult Validate(string? name, HubOptions options)
     {
         var errors = new List<string>();
+        ValidateHubSettings(options, errors);
 
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var source in options.Sources)
+            ValidateSource(source, ids, errors);
+
+        return errors.Count == 0
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail(errors);
+    }
+
+    private static void ValidateHubSettings(HubOptions options, List<string> errors)
+    {
         if (!Path.IsPathFullyQualified(options.DatabasePath))
             errors.Add("Hub:DatabasePath must be absolute.");
         if (options.PollInterval <= TimeSpan.Zero)
@@ -55,37 +67,36 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:DefaultReadLimit must be between 1 and MaxReadLimit.");
         if (options.Sources.Count == 0)
             errors.Add("Hub:Sources must contain at least one source.");
+    }
 
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var source in options.Sources)
-        {
-            if (string.IsNullOrWhiteSpace(source.Id) ||
-                source.Id.Length > 64 ||
-                source.Id.Any(character =>
-                    !char.IsAsciiLetterOrDigit(character) && character != '.' && character != '_' && character != '-') ||
-                !ids.Add(source.Id))
-                errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
-            if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
-                errors.Add($"Source '{source.Id}' requires a name and environment.");
-            var baseUrl = source.BaseUrl;
-            if (baseUrl is null ||
-                !baseUrl.IsAbsoluteUri ||
-                baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps ||
-                !string.IsNullOrEmpty(baseUrl.UserInfo) ||
-                !string.IsNullOrEmpty(baseUrl.Query) ||
-                !string.IsNullOrEmpty(baseUrl.Fragment))
-                errors.Add(
-                    $"Source '{source.Id}' requires an absolute HTTP(S) URL " +
-                    "without credentials, query, or fragment.");
+    private static void ValidateSource(SourceOptions source, HashSet<string> ids, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(source.Id) ||
+            source.Id.Length > 64 ||
+            source.Id.Any(character =>
+                !char.IsAsciiLetterOrDigit(character) && character != '.' && character != '_' && character != '-') ||
+            !ids.Add(source.Id))
+            errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
+        if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
+            errors.Add($"Source '{source.Id}' requires a name and environment.");
+        ValidateBaseUrl(source, errors);
+        ValidateAuthHeader(source, errors);
+        if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
+            errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
+    }
 
-            ValidateAuthHeader(source, errors);
-            if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
-                errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
-        }
-
-        return errors.Count == 0
-            ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(errors);
+    private static void ValidateBaseUrl(SourceOptions source, List<string> errors)
+    {
+        var baseUrl = source.BaseUrl;
+        if (baseUrl is null ||
+            !baseUrl.IsAbsoluteUri ||
+            baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(baseUrl.UserInfo) ||
+            !string.IsNullOrEmpty(baseUrl.Query) ||
+            !string.IsNullOrEmpty(baseUrl.Fragment))
+            errors.Add(
+                $"Source '{source.Id}' requires an absolute HTTP(S) URL " +
+                "without credentials, query, or fragment.");
     }
 
     private static void ValidateAuthHeader(SourceOptions source, List<string> errors)

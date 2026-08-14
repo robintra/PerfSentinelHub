@@ -11,7 +11,7 @@
 [![.NET](https://img.shields.io/badge/.NET-10.0.400-512BD4)](https://github.com/robintra/PerfSentinelHub/blob/main/global.json)
 
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
-[perf-sentinel 0.11.2](https://github.com/robintra/perf-sentinel/releases/tag/v0.11.2) daemons.
+[perf-sentinel](https://github.com/robintra/perf-sentinel) instances.
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 

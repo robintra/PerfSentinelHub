@@ -856,9 +856,9 @@ jobs:
     timeout-minutes: 20
     environment: hub-release
     permissions:
-      actions: read
-      contents: write
-      packages: write
+      actions: read  # Reads the workflow artifact digest so the promoted bundle is the verified one.
+      contents: write  # Publishes the release assets and the GitHub release.
+      packages: write  # Pushes the release container image to the registry.
     steps:
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:

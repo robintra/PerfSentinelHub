@@ -13,7 +13,7 @@ from pathlib import Path
 
 STABLE_TAG = re.compile(r"^v0\.[0-9]+\.[0-9]+$")
 STABLE_VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
-CHART_ENTRY = re.compile(r"(?P<key>[A-Za-z][A-Za-z0-9_-]*) *: *(?P<value>.*)")
+CHART_ENTRY = re.compile(r"(?P<key>[A-Za-z][A-Za-z0-9_-]*+) *+: *+(?P<value>.*)")
 CHANGELOG_HEADING = re.compile(r"^## \[(?P<version>[^]]+)] - (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})$")
 FENCE_OPENING = re.compile(r"^ {0,3}(?P<marker>`{3,}+|~{3,}+)(?P<info>.*)$")
 IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
@@ -104,7 +104,9 @@ def chart_scalar(value: str) -> str:
         if match is None:
             fail("chart structure contains a noncanonical double-quoted scalar")
         return match.group(1)
-    scalar = re.split(r" ++#", value, maxsplit=1)[0].rstrip()
+    # Splitting on a regex here scans every position, which is quadratic on a run of spaces.
+    # The run between the cut and the comment marker is stripped either way.
+    scalar = value.split(" #", 1)[0].rstrip()
     if not scalar or scalar[0] in "[{&*!|>@`" or "\t" in scalar:
         fail("chart structure contains a noncanonical scalar")
     return scalar
@@ -185,6 +187,21 @@ def heading_version(visible: str) -> str | None:
     return heading.group("version")
 
 
+def fence_closes(fence, line: str) -> bool:
+    marker, length = fence
+    return re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line) is not None
+
+
+def opened_fence(visible: str):
+    opening = FENCE_OPENING.fullmatch(visible)
+    if opening is None:
+        return None
+    marker = opening.group("marker")
+    if marker[0] == "`" and "`" in opening.group("info"):
+        fail("changelog heading cannot be hidden by invalid backtick fence info")
+    return (marker[0], len(marker))
+
+
 def changelog_versions(root: Path) -> list[str]:
     changelog = read(root / "CHANGELOG.md", "changelog heading")
     inside_comment = False
@@ -193,18 +210,13 @@ def changelog_versions(root: Path) -> list[str]:
     for line in changelog.splitlines():
         reject_ambiguous_comment_marker(line)
         if fence is not None:
-            marker, length = fence
-            if re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{length},}}[ \t]*", line):
+            if fence_closes(fence, line):
                 fence = None
             continue
 
         visible, inside_comment = without_html_comments(line, inside_comment)
-        opening = FENCE_OPENING.fullmatch(visible)
-        if opening is not None:
-            marker = opening.group("marker")
-            if marker[0] == "`" and "`" in opening.group("info"):
-                fail("changelog heading cannot be hidden by invalid backtick fence info")
-            fence = (marker[0], len(marker))
+        fence = opened_fence(visible)
+        if fence is not None:
             continue
         version = heading_version(visible)
         if version is not None:
@@ -218,7 +230,7 @@ def changelog_versions(root: Path) -> list[str]:
 
 
 def reject_noncanonical_escape(stripped: str) -> None:
-    directive = re.fullmatch(r"# *escape *= *(\S*) *", stripped, re.IGNORECASE)
+    directive = re.fullmatch(r"# *+escape *+= *+(\S*+) *+", stripped, re.IGNORECASE)
     if directive and directive.group(1) != "\\":
         fail("image version label requires the canonical Dockerfile escape character")
 
@@ -278,7 +290,7 @@ def image_version(root: Path) -> str:
     stage = -1
     values = []
     for instruction in docker_instructions(dockerfile):
-        match = re.match(r"^(?P<name>[A-Za-z]++)(?:[ \t]+(?P<body>.*))?$", instruction)
+        match = re.match(r"^(?P<name>[A-Za-z]++)(?:[ \t]++(?P<body>.*))?$", instruction)
         if match is None:
             continue
         name = match.group("name").casefold()

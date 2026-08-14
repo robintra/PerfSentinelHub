@@ -394,8 +394,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
         )
 
         errors = checker.validate_inventory(
-            [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-        )
+            [item]
+)
 
         self.assertTrue(any("source" in error for error in errors))
 
@@ -413,8 +413,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
         )
 
         errors = checker.validate_inventory(
-            [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-        )
+            [item]
+)
 
         self.assertEqual([], errors)
 
@@ -439,8 +439,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         with patch.object(checker, "fetch_json", return_value=(payload, {})):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertEqual([], errors)
 
@@ -465,8 +465,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         with patch.object(checker, "fetch_json", return_value=(payload, {})):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("Docker Hub" in error for error in errors), errors)
 
@@ -504,7 +504,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
                     ),
                 )
 
-                errors = checker.validate_inventory([item], now)
+                errors = checker.validate_inventory([item])
 
                 self.assertTrue(any("prerelease" in error for error in errors), errors)
 
@@ -855,9 +855,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
                     source="https://github.com/Example/Tool/releases/tag/v1.2.3",
                     artifact_url=alias_url,
                 ),
-            ],
-            datetime(2026, 8, 11, tzinfo=timezone.utc),
-        )
+            ]
+)
 
         self.assertTrue(any("ambiguous download artifact_url" in error for error in errors))
 
@@ -876,9 +875,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
                             digest_or_sha=f"sha256:{CHECKSUM}",
                             artifact_url=artifact_url,
                         )
-                    ],
-                    datetime(2026, 8, 11, tzinfo=timezone.utc),
-                )
+                    ]
+)
 
                 self.assertTrue(any("source release" in error for error in errors))
 
@@ -897,7 +895,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
         commit = {"sha": "b" * 40}
 
         with patch.object(checker, "fetch_json", side_effect=[(release, {}), (commit, {})]):
-            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+            errors = checker.validate_online([item])
 
         self.assertTrue(any("release commit moved" in error for error in errors))
 
@@ -911,16 +909,14 @@ class SupplyChainCheckerTests(unittest.TestCase):
         for suffix in ("pre", "eap", "m1", "anything"):
             with self.subTest(suffix=suffix):
                 errors = checker.validate_inventory(
-                    [inventory_item(version=f"1.2.3-{suffix}")],
-                    datetime(2026, 8, 11, tzinfo=timezone.utc),
-                )
+                    [inventory_item(version=f"1.2.3-{suffix}")]
+)
                 self.assertTrue(any("prerelease" in error for error in errors))
 
     def test_rejects_unsupported_source_host(self):
         errors = checker.validate_inventory(
-            [inventory_item(source="https://mirror.example.invalid/tool")],
-            datetime(2026, 8, 11, tzinfo=timezone.utc),
-        )
+            [inventory_item(source="https://mirror.example.invalid/tool")]
+)
 
         self.assertTrue(any("unsupported official source" in error for error in errors))
 
@@ -940,9 +936,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
                             digest_or_sha=NUGET_DIGEST,
                             source=source,
                         )
-                    ],
-                    datetime(2026, 8, 11, tzinfo=timezone.utc),
-                )
+                    ]
+)
 
                 self.assertTrue(any("source" in error for error in errors))
 
@@ -962,9 +957,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
                             digest_or_sha=digest,
                             source="https://api.nuget.org/v3/registration5-gz-semver2/example.package/1.2.3.json",
                         )
-                    ],
-                    datetime(2026, 8, 11, tzinfo=timezone.utc),
-                )
+                    ]
+)
 
                 self.assertTrue(any("sha512-base64" in error for error in errors))
 
@@ -1442,9 +1436,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
     def test_rejects_duplicate_json_keys_and_unknown_inventory_fields(self):
         errors = checker.validate_inventory(
-            [inventory_item(unexpected="value")],
-            datetime(2026, 8, 11, tzinfo=timezone.utc),
-        )
+            [inventory_item(unexpected="value")]
+)
         self.assertTrue(any("unknown inventory fields" in error for error in errors))
 
         with tempfile.TemporaryDirectory() as directory:
@@ -1466,9 +1459,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
         for override in overrides:
             with self.subTest(override=override):
                 errors = checker.validate_inventory(
-                    [inventory_item(**override)],
-                    datetime(2026, 8, 11, tzinfo=timezone.utc),
-                )
+                    [inventory_item(**override)]
+)
 
                 self.assertTrue(errors)
 
@@ -1545,17 +1537,15 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
     def test_rejects_unknown_kind_with_an_official_github_release_url(self):
         errors = checker.validate_inventory(
-            [inventory_item(kind="unknown-kind")],
-            datetime(2026, 8, 11, tzinfo=timezone.utc),
-        )
+            [inventory_item(kind="unknown-kind")]
+)
 
         self.assertTrue(any("unknown inventory kind" in error for error in errors))
 
     def test_rejects_invalid_helm_commit_identifier(self):
         errors = checker.validate_inventory(
-            [inventory_item(name="helm", kind="github-release", digest_or_sha="sha256:" + "a" * 40)],
-            datetime(2026, 8, 11, tzinfo=timezone.utc),
-        )
+            [inventory_item(name="helm", kind="github-release", digest_or_sha="sha256:" + "a" * 40)]
+)
 
         self.assertTrue(any("raw release commit SHA" in error for error in errors))
 
@@ -1833,8 +1823,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
                 side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
             ):
                 errors = checker.validate_online(
-                    [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-                )
+                    [item]
+)
 
                 self.assertTrue(any("required" in error or "boolean" in error for error in errors))
 
@@ -1853,8 +1843,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
         ):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release timestamp" in error for error in errors))
 
@@ -1875,8 +1865,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
         ):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release timestamp" in error for error in errors), errors)
 
@@ -1897,8 +1887,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
         ):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release timestamp" in error for error in errors), errors)
 
@@ -1919,8 +1909,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             side_effect=[(release, {}), ({"sha": item["digest_or_sha"]}, {})],
         ):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertEqual([], errors)
 
@@ -1952,8 +1942,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
         for name, (payload, diagnostic) in variants.items():
             with self.subTest(name=name), patch.object(checker, "fetch_json", return_value=(payload, {})):
                 errors = checker.validate_online(
-                    [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-                )
+                    [item]
+)
 
                 self.assertTrue(any(diagnostic in error for error in errors), errors)
 
@@ -1981,8 +1971,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         with patch.object(checker, "fetch_json", return_value=(payload, {})):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertEqual([], errors)
 
@@ -2010,8 +2000,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         with patch.object(checker, "fetch_json", return_value=(payload, {})):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release timestamp" in error for error in errors), errors)
 
@@ -2039,8 +2029,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             checker, "fetch_json", return_value=(payload, {})
         ):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release date" in error for error in errors))
 
@@ -2067,8 +2057,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
         ), patch.object(checker, "fetch_json", return_value=(payload, {})):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release date" in error for error in errors), errors)
 
@@ -2095,8 +2085,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             checker, "fetch_manifest_digest", return_value=item["digest_or_sha"]
         ), patch.object(checker, "fetch_json", return_value=(payload, {})):
             errors = checker.validate_online(
-                [item], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [item]
+)
 
         self.assertTrue(any("release date" in error for error in errors), errors)
 
@@ -2132,8 +2122,8 @@ class SupplyChainCheckerTests(unittest.TestCase):
             checker, "fetch_manifest_digest", side_effect=[sdk["digest_or_sha"], runtime["digest_or_sha"]]
         ), patch.object(checker, "fetch_json", return_value=(payload, {})) as fetch:
             errors = checker.validate_online(
-                [sdk, runtime], datetime(2026, 8, 11, tzinfo=timezone.utc)
-            )
+                [sdk, runtime]
+)
 
         self.assertEqual([], errors)
         fetch.assert_called_once_with(checker.DOTNET_RELEASES)
@@ -2153,7 +2143,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
         }
 
         with patch.object(checker, "fetch_json", return_value=(payload, {})):
-            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+            errors = checker.validate_online([item])
 
         self.assertTrue(any(".NET metadata digest" in error for error in errors))
 
@@ -2174,7 +2164,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
         }
 
         with patch.object(checker, "fetch_json", return_value=(payload, {})):
-            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+            errors = checker.validate_online([item])
 
         self.assertTrue(any("NuGet version" in error for error in errors))
         self.assertTrue(any("NuGet release timestamp" in error for error in errors))
@@ -2197,7 +2187,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
         }
 
         with patch.object(checker, "fetch_json", return_value=(release, {})):
-            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+            errors = checker.validate_online([item])
 
         self.assertTrue(any("publisher checksum" in error for error in errors))
 
@@ -2212,7 +2202,7 @@ class SupplyChainCheckerTests(unittest.TestCase):
         with patch.object(checker, "fetch_manifest_digest", return_value=None), patch.object(
             checker, "fetch_json", return_value=({"releases": []}, {})
         ):
-            errors = checker.validate_online([item], datetime(2026, 8, 11, tzinfo=timezone.utc))
+            errors = checker.validate_online([item])
 
         self.assertTrue(any("did not provide Docker-Content-Digest" in error for error in errors))
 

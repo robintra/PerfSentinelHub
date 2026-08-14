@@ -74,6 +74,23 @@ RFC3339_TIMESTAMP = re.compile(
     r"(?P<zone>Z|(?P<offset_sign>[+-])(?P<offset_hour>[01][0-9]|2[0-3]):(?P<offset_minute>[0-5][0-9]))$"
 )
 NUGET_ROLES = frozenset({"sdk-aot-base", "sdk-aot-base-rid"})
+FORBIDDEN_MSBUILD_PROPERTIES = {
+    "centralpackageversionoverrideenabled",
+    "managepackageversionscentrally",
+    "restoreconfigfile",
+    "restoresources",
+    "restoreadditionalprojectsources",
+    "restorefallbackfolders",
+    "restoreadditionalprojectfallbackfolders",
+}
+# The checksum shape each inventory kind must carry, with the message when it does not.
+DIGEST_SHAPES = {
+    "github-release": (ACTION_SHA, "GitHub releases require a raw release commit SHA"),
+    "github-action": (ACTION_SHA, "GitHub Actions require a full commit SHA"),
+    "container": (SHA256, "downloaded tools and containers require a sha256 checksum"),
+    "download": (SHA256, "downloaded tools and containers require a sha256 checksum"),
+    "dotnet-sdk": (DOTNET_SHA512, ".NET SDK artifacts require a sha512 checksum"),
+}
 UTC_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
@@ -225,29 +242,31 @@ def is_supported_source(item: dict) -> bool:
     return bool(GITHUB_RELEASE.fullmatch(source))
 
 
-def digest_errors(name, kind, item) -> list[str]:
+def nuget_field_errors(name, kind, item) -> list[str]:
+    if kind != "nuget":
+        return [
+            f"{name}: {field} is only valid for NuGet packages"
+            for field in ("lock_content_hash", "nuget_role")
+            if field in item
+        ]
     errors = []
-    if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: GitHub releases require a raw release commit SHA")
-    if kind == "github-action" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: GitHub Actions require a full commit SHA")
-    if (kind == "container" or kind == "download") and not SHA256.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
-    if kind == "dotnet-sdk" and not DOTNET_SHA512.fullmatch(str(item["digest_or_sha"])):
-        errors.append(f"{name}: .NET SDK artifacts require a sha512 checksum")
-    if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
-        errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
-    if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
+    if not is_canonical_sha512(item.get("lock_content_hash")):
         errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
     role = item.get("nuget_role")
-    if kind == "nuget" and "nuget_role" in item and (
-        not isinstance(role, str) or role not in NUGET_ROLES
-    ):
+    if "nuget_role" in item and (not isinstance(role, str) or role not in NUGET_ROLES):
         errors.append(f"{name}: unknown NuGet role")
-    if kind != "nuget" and "lock_content_hash" in item:
-        errors.append(f"{name}: lock_content_hash is only valid for NuGet packages")
-    if kind != "nuget" and "nuget_role" in item:
-        errors.append(f"{name}: nuget_role is only valid for NuGet packages")
+    return errors
+
+
+def digest_errors(name, kind, item) -> list[str]:
+    errors = []
+    # A malformed inventory can carry an unhashable kind, which must not raise here.
+    expected = DIGEST_SHAPES.get(kind) if isinstance(kind, str) else None
+    if expected is not None and not expected[0].fullmatch(str(item["digest_or_sha"])):
+        errors.append(f"{name}: {expected[1]}")
+    if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
+        errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
+    errors.extend(nuget_field_errors(name, kind, item))
     return errors
 
 
@@ -287,14 +306,7 @@ def artifact_url_errors(name, kind, item, artifact_keys) -> list[str]:
     return errors
 
 
-def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
-    name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
-    if not isinstance(item, dict):
-        return ["inventory contains a non-object item"]
-    missing = REQUIRED_FIELDS - item.keys()
-    if missing:
-        return [f"{name}: missing required fields: {', '.join(sorted(missing))}"]
-
+def inventory_field_errors(item, name, name_keys) -> list[str]:
     errors = []
     unknown = item.keys() - ALLOWED_FIELDS
     if unknown:
@@ -314,6 +326,45 @@ def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
         errors.append(f"{name}: unsupported official source")
     if not isinstance(item["reason"], str) or not item["reason"].strip():
         errors.append(f"{name}: reason must explain the pin")
+    return errors
+
+
+def release_timestamp_errors(item, name, kind) -> list[str]:
+    try:
+        release_value = item["released_at"]
+        date_only = bool(isinstance(release_value, str) and DATE_ONLY.fullmatch(release_value))
+        if date_only and kind not in ("container", "dotnet-sdk"):
+            raise ValueError("this source requires a precise timestamp")
+        release_time(release_value)
+    except (TypeError, ValueError):
+        return [
+            f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
+        ]
+    return []
+
+
+def source_release_errors(item, name, kind) -> list[str]:
+    match = GITHUB_RELEASE.fullmatch(str(item["source"]))
+    if not match:
+        return []
+    errors = []
+    if match.group(3).lstrip("v") != str(item["version"]).lstrip("v"):
+        errors.append(f"{name}: source release tag must match the inventory version")
+    if kind == "github-action" and str(item["name"]).lower() != f"{match.group(1)}/{match.group(2)}".lower():
+        errors.append(f"{name}: action name must match its owner/repository source")
+    return errors
+
+
+def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
+    name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
+    if not isinstance(item, dict):
+        return ["inventory contains a non-object item"]
+    missing = REQUIRED_FIELDS - item.keys()
+    if missing:
+        return [f"{name}: missing required fields: {', '.join(sorted(missing))}"]
+
+    kind = item["kind"]
+    errors = inventory_field_errors(item, name, name_keys)
     prerelease = (
         UNSTABLE_CONTAINER_TAG.search(str(item["version"]))
         if kind == "container"
@@ -321,29 +372,17 @@ def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
     )
     if prerelease:
         errors.append(f"{name}: prerelease versions are not permitted")
-    try:
-        release_value = item["released_at"]
-        date_only = bool(isinstance(release_value, str) and DATE_ONLY.fullmatch(release_value))
-        if date_only and kind != "container" and kind != "dotnet-sdk":
-            raise ValueError("this source requires a precise timestamp")
-        release_time(release_value)
-    except (TypeError, ValueError):
-        errors.append(
-            f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
-        )
-        return errors
+    timestamp_errors = release_timestamp_errors(item, name, kind)
+    if timestamp_errors:
+        return errors + timestamp_errors
 
     errors.extend(digest_errors(name, kind, item))
     errors.extend(artifact_url_errors(name, kind, item, artifact_keys))
-    match = GITHUB_RELEASE.fullmatch(str(item["source"]))
-    if match and match.group(3).lstrip("v") != str(item["version"]).lstrip("v"):
-        errors.append(f"{name}: source release tag must match the inventory version")
-    if kind == "github-action" and match and str(item["name"]).lower() != f"{match.group(1)}/{match.group(2)}".lower():
-        errors.append(f"{name}: action name must match its owner/repository source")
+    errors.extend(source_release_errors(item, name, kind))
     return errors
 
 
-def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
+def validate_inventory(inventory: list[dict]) -> list[str]:
     errors = []
     name_keys = set()
     artifact_keys = set()
@@ -709,10 +748,124 @@ def runtime_identifier_values(relative, runtime_identifiers) -> tuple[tuple[str,
     return values, []
 
 
+def central_property_errors(properties: dict[str, list[str | None]]) -> list[str]:
+    errors = []
+    if properties["managepackageversionscentrally"] != ["true"]:
+        errors.append(
+            "Directory.Packages.props: ManagePackageVersionsCentrally must be exactly true"
+        )
+    if properties["centralpackageversionoverrideenabled"] != ["false"]:
+        errors.append(
+            "Directory.Packages.props: CentralPackageVersionOverrideEnabled must be exactly false"
+        )
+    return errors
+
+
+def central_element_scan(
+    package_root, parents: dict, central: dict, nuget_pins: dict, properties: dict
+) -> list[str]:
+    errors = []
+    for element in package_root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        local_tag = msbuild_name(element.tag)
+        errors.extend(central_element_errors(element, local_tag, parents, properties))
+        if local_tag == "packageversion":
+            errors.extend(package_version_errors(element, parents, central, nuget_pins))
+    return errors
+
+
+def central_package_errors(central_path: Path, nuget_pins: dict, central: dict) -> list[str]:
+    if not central_path.is_file():
+        return ["Directory.Packages.props is required"]
+    errors = []
+    try:
+        package_root = ElementTree.parse(central_path).getroot()
+        if "}" in package_root.tag or msbuild_name(package_root.tag) != "project":
+            raise ValueError("Project root is not canonical")
+        parents = {child: parent for parent in package_root.iter() for child in parent}
+        properties: dict[str, list[str | None]] = {
+            "managepackageversionscentrally": [],
+            "centralpackageversionoverrideenabled": [],
+        }
+        errors.extend(
+            central_element_scan(package_root, parents, central, nuget_pins, properties)
+        )
+        errors.extend(central_property_errors(properties))
+        errors.extend(
+            f"Directory.Packages.props: {expected['name']} is missing"
+            for key, expected in nuget_pins.items()
+            if key not in central
+        )
+    except (OSError, ValueError, ElementTree.ParseError):
+        errors.append("Directory.Packages.props: unable to parse canonical XML")
+    return errors
+
+
+def scan_project_elements(
+    errors: list[str],
+    relative: Path,
+    project_root,
+    parents: dict,
+    nuget_pins: dict,
+    central: dict,
+    all_references: set,
+    is_project_file: bool,
+) -> tuple[dict, list, list]:
+    """Collect the declarations of one MSBuild file, appending its errors as they are found."""
+    references: dict[str, dict] = {}
+    publish_aot: list = []
+    runtime_identifiers: list = []
+    for element in project_root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        folded_tag = msbuild_name(element.tag)
+        errors.extend(msbuild_tag_errors(relative, folded_tag, FORBIDDEN_MSBUILD_PROPERTIES))
+        if folded_tag == "publishaot":
+            publish_aot.append(element.text)
+        if folded_tag == "runtimeidentifiers":
+            runtime_identifiers.append(element.text)
+        if folded_tag != "packagereference":
+            continue
+        if not is_project_file:
+            errors.append(f"{relative}: PackageReference is only permitted in project files")
+            continue
+        errors.extend(
+            package_reference_errors(
+                relative, element, parents, references, nuget_pins, central, all_references
+            )
+        )
+    return references, publish_aot, runtime_identifiers
+
+
+def project_declaration_errors(
+    root: Path, path: Path, nuget_pins: dict, central: dict, all_references: set
+) -> tuple[list[str], tuple | None]:
+    relative = path.relative_to(root)
+    is_project_file = path.suffix.casefold() == CSPROJ_SUFFIX
+    errors: list[str] = []
+    try:
+        project_root = ElementTree.parse(path).getroot()
+        if "}" in project_root.tag or msbuild_name(project_root.tag) != "project":
+            raise ValueError("Project root is not canonical")
+        parents = {child: parent for parent in project_root.iter() for child in parent}
+        references, publish_aot, runtime_identifiers = scan_project_elements(
+            errors, relative, project_root, parents, nuget_pins, central, all_references, is_project_file
+        )
+        aot = publish_aot == ["true"]
+        if publish_aot and publish_aot not in (["true"], ["false"]):
+            errors.append(f"{relative}: PublishAot must be a single canonical boolean")
+        rids, rid_errors = runtime_identifier_values(relative, runtime_identifiers)
+        errors.extend(rid_errors)
+        return errors, ((references, aot, rids) if is_project_file else None)
+    except (OSError, ValueError, ElementTree.ParseError):
+        errors.append(f"{relative}: unable to parse canonical project XML")
+        return errors, None
+
+
 def validate_package_declarations(
     root: Path, files: list[Path], inventory: list[dict]
 ) -> tuple[list[str], dict[Path, tuple[dict[str, dict], bool, tuple[str, ...]]]]:
-    errors = []
     nuget_pins = {
         item["name"].casefold(): item
         for item in inventory
@@ -722,55 +875,11 @@ def validate_package_declarations(
         and isinstance(item.get("name"), str)
     }
     central_path = root / "Directory.Packages.props"
-    central = {}
-    if not central_path.is_file():
-        errors.append("Directory.Packages.props is required")
-    else:
-        try:
-            package_root = ElementTree.parse(central_path).getroot()
-            if "}" in package_root.tag or msbuild_name(package_root.tag) != "project":
-                raise ValueError("Project root is not canonical")
-            parents = {
-                child: parent for parent in package_root.iter() for child in parent
-            }
-            properties: dict[str, list[str | None]] = {
-                "managepackageversionscentrally": [],
-                "centralpackageversionoverrideenabled": [],
-            }
-            for element in package_root.iter():
-                if not isinstance(element.tag, str):
-                    continue
-                local_tag = msbuild_name(element.tag)
-                errors.extend(central_element_errors(element, local_tag, parents, properties))
-                if local_tag == "packageversion":
-                    errors.extend(package_version_errors(element, parents, central, nuget_pins))
-            if properties["managepackageversionscentrally"] != ["true"]:
-                errors.append(
-                    "Directory.Packages.props: ManagePackageVersionsCentrally must be exactly true"
-                )
-            if properties["centralpackageversionoverrideenabled"] != ["false"]:
-                errors.append(
-                    "Directory.Packages.props: CentralPackageVersionOverrideEnabled must be exactly false"
-                )
-            for key, expected in nuget_pins.items():
-                if key not in central:
-                    errors.append(
-                        f"Directory.Packages.props: {expected['name']} is missing"
-                    )
-        except (OSError, ValueError, ElementTree.ParseError):
-            errors.append("Directory.Packages.props: unable to parse canonical XML")
+    central: dict = {}
+    errors = central_package_errors(central_path, nuget_pins, central)
 
     projects = {}
     all_references = set()
-    forbidden_msbuild_properties = {
-        "centralpackageversionoverrideenabled",
-        "managepackageversionscentrally",
-        "restoreconfigfile",
-        "restoresources",
-        "restoreadditionalprojectsources",
-        "restorefallbackfolders",
-        "restoreadditionalprojectfallbackfolders",
-    }
     xml_files = [
         path
         for path in files
@@ -778,47 +887,12 @@ def validate_package_declarations(
         and path != central_path
     ]
     for path in xml_files:
-        relative = path.relative_to(root)
-        try:
-            project_root = ElementTree.parse(path).getroot()
-            if "}" in project_root.tag or msbuild_name(project_root.tag) != "project":
-                raise ValueError("Project root is not canonical")
-            parents = {
-                child: parent for parent in project_root.iter() for child in parent
-            }
-            references = {}
-            publish_aot = []
-            runtime_identifiers = []
-            for element in project_root.iter():
-                if not isinstance(element.tag, str):
-                    continue
-                folded_tag = msbuild_name(element.tag)
-                errors.extend(msbuild_tag_errors(relative, folded_tag, forbidden_msbuild_properties))
-                if folded_tag == "publishaot":
-                    publish_aot.append(element.text)
-                if folded_tag == "runtimeidentifiers":
-                    runtime_identifiers.append(element.text)
-                if folded_tag != "packagereference":
-                    continue
-                if path.suffix.casefold() != CSPROJ_SUFFIX:
-                    errors.append(
-                        f"{relative}: PackageReference is only permitted in project files"
-                    )
-                    continue
-                errors.extend(
-                    package_reference_errors(
-                        relative, element, parents, references, nuget_pins, central, all_references
-                    )
-                )
-            aot = publish_aot == ["true"]
-            if publish_aot and publish_aot not in (["true"], ["false"]):
-                errors.append(f"{relative}: PublishAot must be a single canonical boolean")
-            rids, rid_errors = runtime_identifier_values(relative, runtime_identifiers)
-            errors.extend(rid_errors)
-            if path.suffix.casefold() == CSPROJ_SUFFIX:
-                projects[path] = (references, aot, rids)
-        except (OSError, ValueError, ElementTree.ParseError):
-            errors.append(f"{relative}: unable to parse canonical project XML")
+        file_errors, project = project_declaration_errors(
+            root, path, nuget_pins, central, all_references
+        )
+        errors.extend(file_errors)
+        if project is not None:
+            projects[path] = project
     if all_references != set(nuget_pins):
         errors.append(
             "PackageReference declarations must use every NuGet inventory package exactly through central management"
@@ -838,6 +912,84 @@ def validate_lock_entry(
     ):
         return [f"{relative}: {name} direct lock entry differs from the inventory"]
     return []
+
+
+def implicit_pins_for_group(
+    group_name: str, is_base: bool, aot: bool, expected_rid_groups: set, sdk_pins: dict, rid_sdk_pins: dict
+) -> dict:
+    if not aot:
+        return {}
+    if is_base:
+        return sdk_pins
+    return rid_sdk_pins if group_name in expected_rid_groups else {}
+
+
+def lock_group_errors(
+    relative: Path,
+    group_name: str,
+    entries: dict,
+    references: dict,
+    implicit: dict,
+) -> list[str]:
+    folded_entries, errors = folded_lock_entries(relative, entries)
+    expected_direct = references if "/" not in group_name else {}
+    errors.extend(expected_lock_errors(relative, group_name, expected_direct, folded_entries))
+    errors.extend(expected_lock_errors(relative, group_name, implicit, folded_entries))
+    permitted_direct = set(expected_direct) | set(implicit)
+    errors.extend(
+        f"{relative}: unexpected direct dependency {name}"
+        for key, (name, record) in folded_entries.items()
+        if isinstance(record, dict) and record.get("type") == "Direct" and key not in permitted_direct
+    )
+    return errors
+
+
+def canonical_lock_groups(lock_path: Path) -> dict:
+    payload = load_json(lock_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"version", "dependencies"}
+        or type(payload["version"]) is not int
+        or payload["version"] != 2
+        or not isinstance(payload["dependencies"], dict)
+    ):
+        raise ValueError("lock root is not canonical")
+    return payload["dependencies"]
+
+
+def project_lock_errors(
+    relative: Path,
+    lock_path: Path,
+    references: dict,
+    aot: bool,
+    rids: tuple[str, ...],
+    sdk_pins: dict,
+    rid_sdk_pins: dict,
+    consumed_sdk_pins: set,
+) -> list[str]:
+    errors: list[str] = []
+    try:
+        groups = canonical_lock_groups(lock_path)
+        base_groups = [name for name in groups if isinstance(name, str) and "/" not in name]
+        if not base_groups:
+            raise ValueError("lock has no base target framework")
+        expected_rid_groups = {
+            f"{base}/{rid}" for base in base_groups for rid in rids
+        } if aot else set()
+        actual_rid_groups = {name for name in groups if isinstance(name, str) and "/" in name}
+        if aot and actual_rid_groups != expected_rid_groups:
+            errors.append(f"{relative}: runtime-specific lock groups differ from RuntimeIdentifiers")
+        for group_name, entries in groups.items():
+            if not isinstance(group_name, str) or not isinstance(entries, dict):
+                raise ValueError("lock dependency group is not canonical")
+            implicit = implicit_pins_for_group(
+                group_name, "/" not in group_name, aot, expected_rid_groups, sdk_pins, rid_sdk_pins
+            )
+            consumed_sdk_pins.update(implicit)
+            errors.extend(lock_group_errors(relative, group_name, entries, references, implicit))
+    except (OSError, KeyError, TypeError, ValueError, ElementTree.ParseError):
+        errors.append(f"{relative}: unable to parse canonical packages.lock.json")
+    return errors
 
 
 def validate_package_locks(
@@ -872,56 +1024,107 @@ def validate_package_locks(
         lock_path = project.parent / NUGET_LOCK_FILE
         if lock_path not in actual_locks:
             continue
-        relative = lock_path.relative_to(root)
-        try:
-            payload = load_json(lock_path.read_text(encoding="utf-8"))
-            if (
-                not isinstance(payload, dict)
-                or set(payload) != {"version", "dependencies"}
-                or type(payload["version"]) is not int
-                or payload["version"] != 2
-                or not isinstance(payload["dependencies"], dict)
-            ):
-                raise ValueError("lock root is not canonical")
-            groups = payload["dependencies"]
-            base_groups = [name for name in groups if isinstance(name, str) and "/" not in name]
-            if not base_groups:
-                raise ValueError("lock has no base target framework")
-            expected_rid_groups = {
-                f"{base}/{rid}" for base in base_groups for rid in rids
-            } if aot else set()
-            actual_rid_groups = {
-                name for name in groups if isinstance(name, str) and "/" in name
-            }
-            if aot and actual_rid_groups != expected_rid_groups:
-                errors.append(f"{relative}: runtime-specific lock groups differ from RuntimeIdentifiers")
-            for group_name, entries in groups.items():
-                if not isinstance(group_name, str) or not isinstance(entries, dict):
-                    raise ValueError("lock dependency group is not canonical")
-                folded_entries, entry_errors = folded_lock_entries(relative, entries)
-                errors.extend(entry_errors)
-
-                is_base = "/" not in group_name
-                expected_direct = references if is_base else {}
-                errors.extend(expected_lock_errors(relative, group_name, expected_direct, folded_entries))
-
-                implicit = {}
-                if aot and is_base:
-                    implicit = sdk_pins
-                elif aot and group_name in expected_rid_groups:
-                    implicit = rid_sdk_pins
-                consumed_sdk_pins.update(implicit)
-                errors.extend(expected_lock_errors(relative, group_name, implicit, folded_entries))
-
-                permitted_direct = set(expected_direct) | set(implicit)
-                for key, (name, record) in folded_entries.items():
-                    if isinstance(record, dict) and record.get("type") == "Direct" and key not in permitted_direct:
-                        errors.append(f"{relative}: unexpected direct dependency {name}")
-        except (OSError, KeyError, TypeError, ValueError, ElementTree.ParseError):
-            errors.append(f"{relative}: unable to parse canonical packages.lock.json")
+        errors.extend(
+            project_lock_errors(
+                lock_path.relative_to(root), lock_path, references, aot, rids,
+                sdk_pins, rid_sdk_pins, consumed_sdk_pins,
+            )
+        )
     for key in set(sdk_pins) - consumed_sdk_pins:
         errors.append(f"{sdk_pins[key]['name']}: SDK NuGet role is unused by any AOT lock")
     return errors
+
+
+def download_declaration_lines(lines: list[str], artifact_urls: set) -> list[tuple[int, str]]:
+    return [
+        (number, content)
+        for number, line in enumerate(lines, start=1)
+        if not (content := line.lstrip(" \t")).startswith("#")
+        and (
+            DOWNLOAD_COMMAND.search(content)
+            or any(artifact_url in content for artifact_url in artifact_urls)
+        )
+    ]
+
+
+def source_line_errors(
+    relative: Path, lines: list[str], pins: dict, is_workflow: bool, is_dockerfile: bool
+) -> list[str]:
+    errors = []
+    for number, line in enumerate(lines, start=1):
+        content = line.lstrip(" \t")
+        location = f"{relative}:{number}"
+        if is_workflow and not content.startswith("#"):
+            if content.startswith("?") or "\\" in content or YAML_QUOTED_KEY.search(content):
+                errors.append(f"{location}: YAML mapping key is not canonical")
+            if YAML_USES_WORD.search(content):
+                errors.extend(workflow_uses_errors(location, line, pins))
+        if is_dockerfile and FROM_LINE.match(line):
+            errors.extend(dockerfile_from_errors(location, FROM_LINE.match(line), pins))
+    return errors
+
+
+def source_file_errors(
+    root: Path, path: Path, pins: dict, artifact_urls: set, inventory: list[dict]
+) -> list[str]:
+    suffix = path.suffix.casefold()
+    filename = path.name.casefold()
+    is_dockerfile = (
+        filename == "dockerfile"
+        or filename.startswith("dockerfile.")
+        or filename.endswith(".dockerfile")
+    )
+    if suffix not in {".yml", ".yaml", ".sh"} and not is_dockerfile:
+        return []
+    with path.open(encoding="utf-8", errors="replace", newline="") as source_file:
+        text = source_file.read()
+    lines = text.split("\n")
+    relative = path.relative_to(root)
+    download_declarations = download_declaration_lines(lines, artifact_urls)
+    errors = source_line_errors(
+        relative, lines, pins, suffix in {".yml", ".yaml"}, is_dockerfile
+    )
+    if suffix == ".sh" and download_declarations:
+        errors.extend(validate_download_script(path, root, text, inventory))
+    elif suffix != ".sh":
+        errors.extend(
+            f"{relative}:{number}: download declarations are only permitted in canonical .sh shell scripts"
+            for number, _ in download_declarations
+        )
+    return errors
+
+
+def canonical_sdk_policy(payload) -> dict:
+    if not isinstance(payload, dict) or set(payload) != {"sdk"}:
+        raise ValueError("global root is not canonical")
+    sdk = payload["sdk"]
+    if (
+        not isinstance(sdk, dict)
+        or set(sdk) != {"version", "rollForward", "allowPrerelease"}
+        or not isinstance(sdk["version"], str)
+        or sdk["rollForward"] != "disable"
+        or sdk["allowPrerelease"] is not False
+    ):
+        raise ValueError("SDK policy is not stable")
+    return sdk
+
+
+def global_json_errors(root: Path, pins: dict) -> list[str]:
+    global_json = root / "global.json"
+    if not global_json.is_file():
+        return ["global.json is required"]
+    try:
+        sdk = canonical_sdk_policy(load_json(global_json.read_text(encoding="utf-8")))
+        expected = pins.get("dotnet-sdk")
+        if (
+            expected is None
+            or expected.get("kind") != "dotnet-sdk"
+            or expected["version"] != sdk["version"]
+        ):
+            return ["global.json: SDK version differs from the inventory"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return ["global.json: SDK version, rollForward, and allowPrerelease policy must be pinned"]
+    return []
 
 
 def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
@@ -936,76 +1139,8 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
         and isinstance(item.get("artifact_url"), str)
     }
     for path in files:
-        suffix = path.suffix.casefold()
-        filename = path.name.casefold()
-        is_dockerfile = (
-            filename == "dockerfile"
-            or filename.startswith("dockerfile.")
-            or filename.endswith(".dockerfile")
-        )
-        if suffix not in {".yml", ".yaml", ".sh"} and not is_dockerfile:
-            continue
-        with path.open(encoding="utf-8", errors="replace", newline="") as source_file:
-            text = source_file.read()
-        lines = text.split("\n")
-        is_workflow = suffix in {".yml", ".yaml"}
-        download_declarations = [
-            (number, content)
-            for number, line in enumerate(lines, start=1)
-            if not (content := line.lstrip(" \t")).startswith("#")
-            and (
-                DOWNLOAD_COMMAND.search(content)
-                or any(artifact_url in content for artifact_url in artifact_urls)
-            )
-        ]
-        for number, line in enumerate(lines, start=1):
-            content = line.lstrip(" \t")
-            location = f"{path.relative_to(root)}:{number}"
-            if is_workflow and not content.startswith("#"):
-                if content.startswith("?") or "\\" in content or YAML_QUOTED_KEY.search(content):
-                    errors.append(f"{location}: YAML mapping key is not canonical")
-                if YAML_USES_WORD.search(content):
-                    errors.extend(workflow_uses_errors(location, line, pins))
-            if is_dockerfile and FROM_LINE.match(line):
-                errors.extend(dockerfile_from_errors(location, FROM_LINE.match(line), pins))
-
-        if suffix == ".sh" and download_declarations:
-            errors.extend(validate_download_script(path, root, text, inventory))
-        elif suffix != ".sh":
-            for number, _ in download_declarations:
-                errors.append(
-                    f"{path.relative_to(root)}:{number}: download declarations are only permitted in canonical .sh shell scripts"
-                )
-
-    global_json = root / "global.json"
-    if not global_json.is_file():
-        errors.append("global.json is required")
-    else:
-        try:
-            payload = load_json(global_json.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict) or set(payload) != {"sdk"}:
-                raise ValueError("global root is not canonical")
-            sdk = payload["sdk"]
-            if (
-                not isinstance(sdk, dict)
-                or set(sdk) != {"version", "rollForward", "allowPrerelease"}
-                or not isinstance(sdk["version"], str)
-                or sdk["rollForward"] != "disable"
-                or sdk["allowPrerelease"] is not False
-            ):
-                raise ValueError("SDK policy is not stable")
-            expected = pins.get("dotnet-sdk")
-            if (
-                expected is None
-                or expected.get("kind") != "dotnet-sdk"
-                or expected["version"] != sdk["version"]
-            ):
-                errors.append("global.json: SDK version differs from the inventory")
-        except (OSError, ValueError, KeyError, TypeError):
-            errors.append(
-                "global.json: SDK version, rollForward, and allowPrerelease policy must be pinned"
-            )
-
+        errors.extend(source_file_errors(root, path, pins, artifact_urls, inventory))
+    errors.extend(global_json_errors(root, pins))
     errors.extend(validate_nuget_config(root, files))
     errors.extend(validate_dotnet_tools(root, files, inventory))
     package_errors, projects = validate_package_declarations(root, files, inventory)
@@ -1095,9 +1230,7 @@ def dotnet_container_release(item: dict, payload: dict) -> dict | None:
     return None
 
 
-def github_release_errors(item: dict, match, cached_json) -> list[str]:
-    owner, repository, tag = match.groups()
-    release, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
+def release_metadata_errors(item: dict, release: dict) -> list[str]:
     errors = []
     prerelease = release.get("prerelease")
     draft = release.get("draft")
@@ -1117,25 +1250,37 @@ def github_release_errors(item: dict, match, cached_json) -> list[str]:
         errors.append(f"{item['name']}: official release published_at is required")
     elif not same_timestamp(published_at, item["released_at"]):
         errors.append(f"{item['name']}: official release timestamp differs from inventory")
+    return errors
+
+
+def release_asset_errors(item: dict, release: dict) -> list[str]:
+    assets = release.get("assets")
+    artifact = next(
+        (
+            asset
+            for asset in assets
+            if isinstance(asset, dict)
+            and asset.get("browser_download_url") == item["artifact_url"]
+        ),
+        None,
+    ) if isinstance(assets, list) else None
+    if artifact is None or not isinstance(artifact.get("digest"), str):
+        return [f"{item['name']}: publisher did not provide the recorded download artifact checksum"]
+    if artifact["digest"].lower() != item["digest_or_sha"].lower():
+        return [f"{item['name']}: publisher checksum differs from inventory"]
+    return []
+
+
+def github_release_errors(item: dict, match, cached_json) -> list[str]:
+    owner, repository, tag = match.groups()
+    release, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
+    errors = release_metadata_errors(item, release)
     if item["kind"] in {"github-action", "github-release"}:
         commit, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
         if commit.get("sha", "").lower() != item["digest_or_sha"].lower():
             errors.append(f"{item['name']}: official release commit moved")
     if item["kind"] == "download":
-        assets = release.get("assets")
-        artifact = next(
-            (
-                asset
-                for asset in assets
-                if isinstance(asset, dict)
-                and asset.get("browser_download_url") == item["artifact_url"]
-            ),
-            None,
-        ) if isinstance(assets, list) else None
-        if artifact is None or not isinstance(artifact.get("digest"), str):
-            errors.append(f"{item['name']}: publisher did not provide the recorded download artifact checksum")
-        elif artifact["digest"].lower() != item["digest_or_sha"].lower():
-            errors.append(f"{item['name']}: publisher checksum differs from inventory")
+        errors.extend(release_asset_errors(item, release))
     return errors
 
 
@@ -1247,7 +1392,7 @@ def online_item_errors(item: dict, cached_json) -> list[str]:
     return [f"{item['name']}: unsupported official source"]
 
 
-def validate_online(inventory: list[dict], now: datetime) -> list[str]:
+def validate_online(inventory: list[dict]) -> list[str]:
     errors = []
     json_cache = {}
 
@@ -1284,10 +1429,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"invalid config/supply-chain.json: {error}", file=sys.stderr)
         return 1
 
-    now = datetime.now(timezone.utc)
-    errors = validate_inventory(inventory, now) + validate_declarations(root, inventory)
+    errors = validate_inventory(inventory) + validate_declarations(root, inventory)
     if arguments.online and not errors:
-        errors.extend(validate_online(inventory, now))
+        errors.extend(validate_online(inventory))
     for error in errors:
         print(error, file=sys.stderr)
     return int(bool(errors))

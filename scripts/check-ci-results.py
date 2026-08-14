@@ -76,6 +76,30 @@ def job_entry_errors(job: str, value: object, allowed: set[str], mode: str, deci
     return errors
 
 
+def decision_output_errors(payload: dict, decision: str) -> list[str]:
+    changes = payload.get("changes")
+    if not isinstance(changes, dict) or not isinstance(changes.get("outputs"), dict):
+        return []
+    if changes["outputs"].get("decision") == decision:
+        return []
+    return ["changes: decision output does not match the checked decision"]
+
+
+def dispatch_preflight_errors(payload: dict, mode: str) -> list[str]:
+    preflight = payload.get("validate-dispatch")
+    if mode != "dispatch" or not isinstance(preflight, dict):
+        return []
+    outputs = preflight.get("outputs")
+    if not isinstance(outputs, dict):
+        return []
+    errors = []
+    for field, pattern in (("head_sha", HEAD_SHA), ("head_repository", REPOSITORY)):
+        value = outputs.get(field)
+        if not isinstance(value, str) or pattern.fullmatch(value) is None:
+            errors.append(f"validate-dispatch: {field} is not canonical")
+    return errors
+
+
 def validate_needs(payload: object, mode: str, decision: str) -> list[str]:
     expected = expected_results(mode, decision)
     if not isinstance(payload, dict):
@@ -90,24 +114,8 @@ def validate_needs(payload: object, mode: str, decision: str) -> list[str]:
     for job in sorted(set(expected) & set(payload)):
         errors.extend(job_entry_errors(job, payload[job], expected[job], mode, decision))
 
-    changes = payload.get("changes")
-    if (
-        isinstance(changes, dict)
-        and isinstance(changes.get("outputs"), dict)
-        and changes["outputs"].get("decision") != decision
-    ):
-        errors.append("changes: decision output does not match the checked decision")
-
-    preflight = payload.get("validate-dispatch")
-    if mode == "dispatch" and isinstance(preflight, dict):
-        outputs = preflight.get("outputs")
-        if isinstance(outputs, dict):
-            head_sha = outputs.get("head_sha")
-            repository = outputs.get("head_repository")
-            if not isinstance(head_sha, str) or HEAD_SHA.fullmatch(head_sha) is None:
-                errors.append("validate-dispatch: head_sha is not canonical")
-            if not isinstance(repository, str) or REPOSITORY.fullmatch(repository) is None:
-                errors.append("validate-dispatch: head_repository is not canonical")
+    errors.extend(decision_output_errors(payload, decision))
+    errors.extend(dispatch_preflight_errors(payload, mode))
     return errors
 
 

@@ -255,7 +255,7 @@ def validate_chart(path: Path, version: str, image_digest: str):
     )
     if helper_definitions != 1 or IMAGE_HELPER not in helpers:
         raise ValueError("chart image helper must validate and join the repository and digest")
-    rendered_image_sources = re.findall(r"(?m)^\s+(?:- )?image:\s*(.+)$", deployment)
+    rendered_image_sources = re.findall(r"(?m)^[ \t]+(?:- )?image:[ \t]*(\S.*)$", deployment)
     if rendered_image_sources != ['{{ include "perf-sentinel-hub.image" . | quote }}']:
         raise ValueError("chart deployment must reference repository by immutable digest")
 

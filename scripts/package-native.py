@@ -70,6 +70,30 @@ def archive_name(path: Path, root: Path) -> str:
     return name
 
 
+def staging_entry(path: Path, root: Path, is_directory: bool, names: set[str]):
+    relative = archive_name(path, root)
+    collision_key = "/".join(
+        unicodedata.normalize("NFC", part).rstrip(" .").casefold()
+        for part in relative.split("/")
+    )
+    if collision_key in names:
+        raise ValueError(f"archive path collision: {relative}")
+    names.add(collision_key)
+    metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode):
+        raise ValueError(f"symlinks are not permitted: {relative}")
+    if not inside(path.resolve(strict=True), root):
+        raise ValueError(f"path escapes staging directory: {relative}")
+    if is_directory:
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError(f"non-directory encountered during traversal: {relative}")
+        return None
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError(f"only regular files are permitted: {relative}")
+    symbol = any(part.casefold().endswith(".dsym") for part in Path(relative).parts) or path.suffix.casefold() in SYMBOL_SUFFIXES
+    return path, relative, metadata, symbol
+
+
 def scan_staging(root: Path):
     def fail(error):
         raise error
@@ -81,28 +105,9 @@ def scan_staging(root: Path):
         files.sort()
         current_path = Path(current)
         for name in (*directories, *files):
-            path = current_path / name
-            relative = archive_name(path, root)
-            collision_key = "/".join(
-                unicodedata.normalize("NFC", part).rstrip(" .").casefold()
-                for part in relative.split("/")
-            )
-            if collision_key in names:
-                raise ValueError(f"archive path collision: {relative}")
-            names.add(collision_key)
-            metadata = path.lstat()
-            if stat.S_ISLNK(metadata.st_mode):
-                raise ValueError(f"symlinks are not permitted: {relative}")
-            if not inside(path.resolve(strict=True), root):
-                raise ValueError(f"path escapes staging directory: {relative}")
-            if name in directories:
-                if not stat.S_ISDIR(metadata.st_mode):
-                    raise ValueError(f"non-directory encountered during traversal: {relative}")
-                continue
-            if not stat.S_ISREG(metadata.st_mode):
-                raise ValueError(f"only regular files are permitted: {relative}")
-            symbol = any(part.casefold().endswith(".dsym") for part in Path(relative).parts) or path.suffix.casefold() in SYMBOL_SUFFIXES
-            entries.append((path, relative, metadata, symbol))
+            entry = staging_entry(current_path / name, root, name in directories, names)
+            if entry is not None:
+                entries.append(entry)
     entries.sort(key=lambda entry: entry[1])
     return entries
 

@@ -437,6 +437,26 @@ def validate_nuget_config(root: Path, files: list[Path]) -> list[str]:
     return []
 
 
+def canonical_tool_declaration(name, declaration, expected) -> bool:
+    commands = declaration.get("commands") if isinstance(declaration, dict) else None
+    return not (
+        not isinstance(name, str)
+        or re.fullmatch(SAFE_NAME, name) is None
+        or expected is None
+        or expected["name"] != name
+        or not isinstance(declaration, dict)
+        or set(declaration) != {"version", "commands"}
+        or declaration.get("version") != expected["version"]
+        or not isinstance(commands, list)
+        or not commands
+        or len(commands) != len(set(commands))
+        or any(
+            not isinstance(command, str) or re.fullmatch(SAFE_NAME, command) is None
+            for command in commands
+        )
+    )
+
+
 def validate_dotnet_tools(root: Path, files: list[Path], inventory: list[dict]) -> list[str]:
     errors = []
     pins = {
@@ -466,25 +486,7 @@ def validate_dotnet_tools(root: Path, files: list[Path], inventory: list[dict]) 
         consumed = set()
         for name, declaration in payload["tools"].items():
             key = name.casefold() if isinstance(name, str) else ""
-            commands = declaration.get("commands") if isinstance(declaration, dict) else None
-            expected = pins.get(key)
-            if (
-                not isinstance(name, str)
-                or re.fullmatch(SAFE_NAME, name) is None
-                or expected is None
-                or expected["name"] != name
-                or not isinstance(declaration, dict)
-                or set(declaration) != {"version", "commands"}
-                or declaration.get("version") != expected["version"]
-                or not isinstance(commands, list)
-                or not commands
-                or len(commands) != len(set(commands))
-                or any(
-                    not isinstance(command, str)
-                    or re.fullmatch(SAFE_NAME, command) is None
-                    for command in commands
-                )
-            ):
+            if not canonical_tool_declaration(name, declaration, pins.get(key)):
                 errors.append(f".config/dotnet-tools.json: dotnet tool {name} differs from the inventory")
                 continue
             consumed.add(key)

@@ -225,116 +225,130 @@ def is_supported_source(item: dict) -> bool:
     return bool(GITHUB_RELEASE.fullmatch(source))
 
 
+def digest_errors(name, kind, item) -> list[str]:
+    errors = []
+    if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
+        errors.append(f"{name}: GitHub releases require a raw release commit SHA")
+    if kind == "github-action" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
+        errors.append(f"{name}: GitHub Actions require a full commit SHA")
+    if (kind == "container" or kind == "download") and not SHA256.fullmatch(str(item["digest_or_sha"])):
+        errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
+    if kind == "dotnet-sdk" and not DOTNET_SHA512.fullmatch(str(item["digest_or_sha"])):
+        errors.append(f"{name}: .NET SDK artifacts require a sha512 checksum")
+    if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
+        errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
+    if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
+        errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
+    role = item.get("nuget_role")
+    if kind == "nuget" and "nuget_role" in item and (
+        not isinstance(role, str) or role not in NUGET_ROLES
+    ):
+        errors.append(f"{name}: unknown NuGet role")
+    if kind != "nuget" and "lock_content_hash" in item:
+        errors.append(f"{name}: lock_content_hash is only valid for NuGet packages")
+    if kind != "nuget" and "nuget_role" in item:
+        errors.append(f"{name}: nuget_role is only valid for NuGet packages")
+    return errors
+
+
+def artifact_url_errors(name, kind, item, artifact_keys) -> list[str]:
+    if kind == "dotnet-sdk":
+        artifact = urlsplit(str(item.get("artifact_url", "")))
+        if not (
+            artifact.scheme == "https"
+            and artifact.netloc == "builds.dotnet.microsoft.com"
+            and artifact.path.startswith(f"/dotnet/Sdk/{item['version']}/")
+            and artifact.query == ""
+            and artifact.fragment == ""
+        ):
+            return [f"{name}: .NET SDK artifact_url must match the inventory version"]
+        return []
+    if kind != "download":
+        return []
+    artifact_match = GITHUB_ARTIFACT.fullmatch(str(item.get("artifact_url", "")))
+    if artifact_match is None:
+        return [f"{name}: downloaded tools require an official artifact_url"]
+    errors = []
+    artifact_key = (
+        artifact_match.group(1).casefold(),
+        artifact_match.group(2).casefold(),
+        artifact_match.group(3),
+        artifact_match.group(4),
+    )
+    if artifact_key in artifact_keys:
+        errors.append(f"{name}: ambiguous download artifact_url")
+    artifact_keys.add(artifact_key)
+    source_match = GITHUB_RELEASE.fullmatch(str(item["source"]))
+    if source_match and (
+        artifact_key[:2] != (source_match.group(1).casefold(), source_match.group(2).casefold())
+        or artifact_key[2] != source_match.group(3)
+    ):
+        errors.append(f"{name}: artifact_url must belong to its source release")
+    return errors
+
+
+def inventory_item_errors(item, name_keys, artifact_keys) -> list[str]:
+    name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
+    if not isinstance(item, dict):
+        return ["inventory contains a non-object item"]
+    missing = REQUIRED_FIELDS - item.keys()
+    if missing:
+        return [f"{name}: missing required fields: {', '.join(sorted(missing))}"]
+
+    errors = []
+    unknown = item.keys() - ALLOWED_FIELDS
+    if unknown:
+        errors.append(f"{name}: unknown inventory fields: {', '.join(sorted(unknown))}")
+    if not isinstance(name, str) or re.fullmatch(SAFE_RELATIVE_PATH, name) is None:
+        errors.append(f"{name}: inventory name is not canonical")
+    if not isinstance(item["version"], str) or re.fullmatch(SAFE_VERSION, item["version"]) is None:
+        errors.append(f"{name}: inventory version is not canonical")
+    name_key = str(name).casefold()
+    if name_key in name_keys:
+        errors.append(f"{name}: ambiguous duplicate inventory name")
+    name_keys.add(name_key)
+    kind = item["kind"]
+    if not isinstance(kind, str) or kind not in KNOWN_KINDS:
+        errors.append(f"{name}: unknown inventory kind {item['kind']}")
+    if not isinstance(item["source"], str) or not is_supported_source(item):
+        errors.append(f"{name}: unsupported official source")
+    if not isinstance(item["reason"], str) or not item["reason"].strip():
+        errors.append(f"{name}: reason must explain the pin")
+    prerelease = (
+        UNSTABLE_CONTAINER_TAG.search(str(item["version"]))
+        if kind == "container"
+        else SEMVER_PRERELEASE.fullmatch(str(item["version"]))
+    )
+    if prerelease:
+        errors.append(f"{name}: prerelease versions are not permitted")
+    try:
+        release_value = item["released_at"]
+        date_only = bool(isinstance(release_value, str) and DATE_ONLY.fullmatch(release_value))
+        if date_only and kind != "container" and kind != "dotnet-sdk":
+            raise ValueError("this source requires a precise timestamp")
+        release_time(release_value)
+    except (TypeError, ValueError):
+        errors.append(
+            f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
+        )
+        return errors
+
+    errors.extend(digest_errors(name, kind, item))
+    errors.extend(artifact_url_errors(name, kind, item, artifact_keys))
+    match = GITHUB_RELEASE.fullmatch(str(item["source"]))
+    if match and match.group(3).lstrip("v") != str(item["version"]).lstrip("v"):
+        errors.append(f"{name}: source release tag must match the inventory version")
+    if kind == "github-action" and match and str(item["name"]).lower() != f"{match.group(1)}/{match.group(2)}".lower():
+        errors.append(f"{name}: action name must match its owner/repository source")
+    return errors
+
+
 def validate_inventory(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     name_keys = set()
     artifact_keys = set()
     for item in inventory:
-        name = item.get("name", "<unnamed>") if isinstance(item, dict) else "<invalid>"
-        if not isinstance(item, dict):
-            errors.append("inventory contains a non-object item")
-            continue
-        missing = REQUIRED_FIELDS - item.keys()
-        if missing:
-            errors.append(f"{name}: missing required fields: {', '.join(sorted(missing))}")
-            continue
-        unknown = item.keys() - ALLOWED_FIELDS
-        if unknown:
-            errors.append(f"{name}: unknown inventory fields: {', '.join(sorted(unknown))}")
-        if not isinstance(name, str) or re.fullmatch(SAFE_RELATIVE_PATH, name) is None:
-            errors.append(f"{name}: inventory name is not canonical")
-        if not isinstance(item["version"], str) or re.fullmatch(SAFE_VERSION, item["version"]) is None:
-            errors.append(f"{name}: inventory version is not canonical")
-        name_key = str(name).casefold()
-        if name_key in name_keys:
-            errors.append(f"{name}: ambiguous duplicate inventory name")
-        name_keys.add(name_key)
-        kind = item["kind"]
-        if not isinstance(kind, str) or kind not in KNOWN_KINDS:
-            errors.append(f"{name}: unknown inventory kind {item['kind']}")
-        if not isinstance(item["source"], str) or not is_supported_source(item):
-            errors.append(f"{name}: unsupported official source")
-        if not isinstance(item["reason"], str) or not item["reason"].strip():
-            errors.append(f"{name}: reason must explain the pin")
-        prerelease = (
-            UNSTABLE_CONTAINER_TAG.search(str(item["version"]))
-            if kind == "container"
-            else SEMVER_PRERELEASE.fullmatch(str(item["version"]))
-        )
-        if prerelease:
-            errors.append(f"{name}: prerelease versions are not permitted")
-        try:
-            release_value = item["released_at"]
-            date_only = bool(
-                isinstance(release_value, str)
-                and DATE_ONLY.fullmatch(release_value)
-            )
-            if date_only and kind != "container" and kind != "dotnet-sdk":
-                raise ValueError("this source requires a precise timestamp")
-            release_time(release_value)
-        except (TypeError, ValueError):
-            errors.append(
-                f"{name}: released_at must be an ISO-8601 date or UTC timestamp matching source precision"
-            )
-            continue
-        if kind == "github-release" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
-            errors.append(f"{name}: GitHub releases require a raw release commit SHA")
-        if kind == "github-action" and not ACTION_SHA.fullmatch(str(item["digest_or_sha"])):
-            errors.append(f"{name}: GitHub Actions require a full commit SHA")
-        if (kind == "container" or kind == "download") and not SHA256.fullmatch(str(item["digest_or_sha"])):
-            errors.append(f"{name}: downloaded tools and containers require a sha256 checksum")
-        if kind == "dotnet-sdk" and not DOTNET_SHA512.fullmatch(str(item["digest_or_sha"])):
-            errors.append(f"{name}: .NET SDK artifacts require a sha512 checksum")
-        if kind in ("dotnet-tool", "nuget") and not is_canonical_nuget_digest(item["digest_or_sha"]):
-            errors.append(f"{name}: NuGet packages require a sha512-base64 checksum")
-        if kind == "nuget" and not is_canonical_sha512(item.get("lock_content_hash")):
-            errors.append(f"{name}: NuGet packages require a canonical lock_content_hash")
-        role = item.get("nuget_role")
-        if kind == "nuget" and "nuget_role" in item and (
-            not isinstance(role, str) or role not in NUGET_ROLES
-        ):
-            errors.append(f"{name}: unknown NuGet role")
-        if kind != "nuget" and "lock_content_hash" in item:
-            errors.append(f"{name}: lock_content_hash is only valid for NuGet packages")
-        if kind != "nuget" and "nuget_role" in item:
-            errors.append(f"{name}: nuget_role is only valid for NuGet packages")
-        if kind == "dotnet-sdk":
-            artifact = urlsplit(str(item.get("artifact_url", "")))
-            if not (
-                artifact.scheme == "https"
-                and artifact.netloc == "builds.dotnet.microsoft.com"
-                and artifact.path.startswith(f"/dotnet/Sdk/{item['version']}/")
-                and artifact.query == ""
-                and artifact.fragment == ""
-            ):
-                errors.append(f"{name}: .NET SDK artifact_url must match the inventory version")
-        if kind == "download":
-            artifact_url = str(item.get("artifact_url", ""))
-            artifact_match = GITHUB_ARTIFACT.fullmatch(artifact_url)
-            if artifact_match is None:
-                errors.append(f"{name}: downloaded tools require an official artifact_url")
-            else:
-                artifact_key = (
-                    artifact_match.group(1).casefold(),
-                    artifact_match.group(2).casefold(),
-                    artifact_match.group(3),
-                    artifact_match.group(4),
-                )
-                if artifact_key in artifact_keys:
-                    errors.append(f"{name}: ambiguous download artifact_url")
-                artifact_keys.add(artifact_key)
-                source_match = GITHUB_RELEASE.fullmatch(str(item["source"]))
-                if source_match and (
-                    artifact_key[:2]
-                    != (source_match.group(1).casefold(), source_match.group(2).casefold())
-                    or artifact_key[2] != source_match.group(3)
-                ):
-                    errors.append(f"{name}: artifact_url must belong to its source release")
-        match = GITHUB_RELEASE.fullmatch(str(item["source"]))
-        if match and match.group(3).lstrip("v") != str(item["version"]).lstrip("v"):
-            errors.append(f"{name}: source release tag must match the inventory version")
-        if kind == "github-action" and match and str(item["name"]).lower() != f"{match.group(1)}/{match.group(2)}".lower():
-            errors.append(f"{name}: action name must match its owner/repository source")
+        errors.extend(inventory_item_errors(item, name_keys, artifact_keys))
     return errors
 
 

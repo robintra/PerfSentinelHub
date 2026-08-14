@@ -511,6 +511,49 @@ def msbuild_attributes(element: ElementTree.Element) -> dict[str, str]:
     return attributes
 
 
+def folded_lock_entries(relative, entries) -> tuple[dict, list[str]]:
+    folded_entries = {}
+    errors = []
+    for name, record in entries.items():
+        if not isinstance(name, str):
+            raise ValueError("lock package name is not a string")
+        key = name.casefold()
+        if key in folded_entries:
+            errors.append(f"{relative}: {name} has a case-insensitive duplicate")
+        folded_entries[key] = (name, record)
+        if not isinstance(record, dict) or record.get("type") not in {
+            "Direct",
+            "Transitive",
+            "CentralTransitive",
+            "Project",
+        }:
+            errors.append(f"{relative}: {name} has an unknown lock role")
+        elif record["type"] != "Project" and (
+            not isinstance(record.get("resolved"), str)
+            or not is_canonical_sha512(record.get("contentHash"))
+        ):
+            errors.append(f"{relative}: {name} is not fully content-locked")
+    return folded_entries, errors
+
+
+def expected_lock_errors(relative, group_name: str, expected: dict, folded_entries: dict) -> list[str]:
+    errors = []
+    for key, item in expected.items():
+        locked = folded_entries.get(key)
+        if locked is None:
+            errors.append(f"{relative}: {item['name']} is missing from {group_name}")
+            continue
+        errors.extend(
+            validate_lock_entry(
+                relative,
+                item["name"],
+                locked[1],
+                (item["version"], item["lock_content_hash"]),
+            )
+        )
+    return errors
+
+
 def central_element_errors(element, local_tag: str, parents, properties) -> list[str]:
     errors = []
     if any(msbuild_name(attribute) == "condition" for attribute in element.attrib):
@@ -820,42 +863,12 @@ def validate_package_locks(
             for group_name, entries in groups.items():
                 if not isinstance(group_name, str) or not isinstance(entries, dict):
                     raise ValueError("lock dependency group is not canonical")
-                folded_entries = {}
-                for name, record in entries.items():
-                    if not isinstance(name, str):
-                        raise ValueError("lock package name is not a string")
-                    key = name.casefold()
-                    if key in folded_entries:
-                        errors.append(f"{relative}: {name} has a case-insensitive duplicate")
-                    folded_entries[key] = (name, record)
-                    if not isinstance(record, dict) or record.get("type") not in {
-                        "Direct",
-                        "Transitive",
-                        "CentralTransitive",
-                        "Project",
-                    }:
-                        errors.append(f"{relative}: {name} has an unknown lock role")
-                    elif record["type"] != "Project" and (
-                        not isinstance(record.get("resolved"), str)
-                        or not is_canonical_sha512(record.get("contentHash"))
-                    ):
-                        errors.append(f"{relative}: {name} is not fully content-locked")
+                folded_entries, entry_errors = folded_lock_entries(relative, entries)
+                errors.extend(entry_errors)
 
                 is_base = "/" not in group_name
                 expected_direct = references if is_base else {}
-                for key, item in expected_direct.items():
-                    locked = folded_entries.get(key)
-                    if locked is None:
-                        errors.append(f"{relative}: {item['name']} is missing from {group_name}")
-                    else:
-                        errors.extend(
-                            validate_lock_entry(
-                                relative,
-                                item["name"],
-                                locked[1],
-                                (item["version"], item["lock_content_hash"]),
-                            )
-                        )
+                errors.extend(expected_lock_errors(relative, group_name, expected_direct, folded_entries))
 
                 implicit = {}
                 if aot and is_base:
@@ -863,19 +876,7 @@ def validate_package_locks(
                 elif aot and group_name in expected_rid_groups:
                     implicit = rid_sdk_pins
                 consumed_sdk_pins.update(implicit)
-                for key, item in implicit.items():
-                    locked = folded_entries.get(key)
-                    if locked is None:
-                        errors.append(f"{relative}: {item['name']} is missing from {group_name}")
-                    else:
-                        errors.extend(
-                            validate_lock_entry(
-                                relative,
-                                item["name"],
-                                locked[1],
-                                (item["version"], item["lock_content_hash"]),
-                            )
-                        )
+                errors.extend(expected_lock_errors(relative, group_name, implicit, folded_entries))
 
                 permitted_direct = set(expected_direct) | set(implicit)
                 for key, (name, record) in folded_entries.items():

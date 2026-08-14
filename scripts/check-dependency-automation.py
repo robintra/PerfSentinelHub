@@ -275,7 +275,7 @@ def validate_config(root):
             continue
         ownership.append((entry.get("package-ecosystem"), entry.get("directory")))
         errors.extend(validate_update(entry))
-    expected = list(ECOSYSTEMS.items())
+    expected = ECOSYSTEMS.items()
     if sorted(ownership, key=str) != sorted(expected, key=str):
         errors.append("NuGet, Docker, Helm, and GitHub Actions must each be owned exactly once")
     return errors

@@ -53,7 +53,7 @@ SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 WORKFLOW_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)\}\}")
 CANONICAL_SECRET_REFERENCE = re.compile(r"\s*secrets\.([A-Z][A-Z0-9_]*)\s*")
 # "secrets:S6338" is a Sonar rule key, not a GitHub secret reference.
-SECRET_TOKEN = re.compile(r"(?<![A-Za-z0-9_])secrets(?![A-Za-z0-9_])(?!:S\d)", re.IGNORECASE)
+SECRET_TOKEN = re.compile(r"(?<![a-z0-9_])secrets(?![a-z0-9_])(?!:S\d)", re.IGNORECASE)
 SECRET_VALUE = re.compile(
     r"(?i)(?:\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{16,}"
     r"|(?:gh[pousr]_|github_pat_|sqa_|qdt_)[A-Za-z0-9_=-]{16,}"
@@ -114,7 +114,7 @@ def validate_secret_inventory(root: Path) -> tuple[list[str], set[str]]:
     path = root / "config" / "secret-inventory.json"
     try:
         payload = load_json(path)
-    except (OSError, UnicodeError, ValueError, TypeError) as error:
+    except (OSError, ValueError, TypeError) as error:
         return [f"config/secret-inventory.json: invalid canonical JSON: {error}"], set()
     errors = []
     names = set()

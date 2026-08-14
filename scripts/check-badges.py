@@ -38,14 +38,9 @@ BADGES = {
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml",
         ".github/workflows/security-audit.yml",
     ),
-    "OpenSSF Scorecard": (
-        "https://api.securityscorecards.dev/projects/github.com/robintra/PerfSentinelHub/badge",
-        "https://securityscorecards.dev/viewer/?uri=github.com/robintra/PerfSentinelHub",
-        ".github/workflows/security-audit.yml",
-    ),
-    "Latest release": (
-        "https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver",
-        "https://github.com/robintra/PerfSentinelHub/releases/latest",
+    "Release": (
+        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg",
+        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml",
         RELEASE_WORKFLOW,
     ),
     "GHCR": (
@@ -62,11 +57,6 @@ BADGES = {
         f"https://img.shields.io/badge/.NET-{SDK_VERSION}-512BD4",
         "https://github.com/robintra/PerfSentinelHub/blob/main/global.json",
         "global.json",
-    ),
-    "License": (
-        "https://img.shields.io/github/license/robintra/PerfSentinelHub",
-        "https://github.com/robintra/PerfSentinelHub/blob/main/LICENSE",
-        "LICENSE",
     ),
 }
 
@@ -93,7 +83,7 @@ def validate(root: Path):
         errors.append(".NET badge differs from global.json")
     license_digest = hashlib.sha256((root / "LICENSE").read_bytes()).hexdigest()
     if license_digest != LICENSE_SHA256:
-        errors.append("License badge differs from canonical AGPL-3.0-only")
+        errors.append("LICENSE differs from canonical AGPL-3.0-only")
 
     return errors
 

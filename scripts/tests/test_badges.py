@@ -29,13 +29,9 @@ BADGES = {
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg",
         "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml",
     ),
-    "OpenSSF Scorecard": (
-        "https://api.securityscorecards.dev/projects/github.com/robintra/PerfSentinelHub/badge",
-        "https://securityscorecards.dev/viewer/?uri=github.com/robintra/PerfSentinelHub",
-    ),
-    "Latest release": (
-        "https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver",
-        "https://github.com/robintra/PerfSentinelHub/releases/latest",
+    "Release": (
+        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg",
+        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml",
     ),
     "GHCR": (
         "https://img.shields.io/badge/GHCR-configured-lightgrey",
@@ -48,10 +44,6 @@ BADGES = {
     ".NET": (
         "https://img.shields.io/badge/.NET-10.0.400-512BD4",
         "https://github.com/robintra/PerfSentinelHub/blob/main/global.json",
-    ),
-    "License": (
-        "https://img.shields.io/github/license/robintra/PerfSentinelHub",
-        "https://github.com/robintra/PerfSentinelHub/blob/main/LICENSE",
     ),
 }
 
@@ -257,7 +249,7 @@ class BadgeTests(unittest.TestCase):
                 result = run_checker(complete_readme(), license_text=license_text)
 
                 self.assertEqual(1, result.returncode)
-                self.assertIn("License badge differs from canonical AGPL-3.0-only", result.stderr)
+                self.assertIn("LICENSE differs from canonical AGPL-3.0-only", result.stderr)
 
 
 if __name__ == "__main__":

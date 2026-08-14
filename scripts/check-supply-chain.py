@@ -1049,6 +1049,199 @@ def fetch_manifest_digest(url: str) -> str | None:
         return response.headers.get("Docker-Content-Digest")
 
 
+def same_timestamp(left: object, right: object) -> bool:
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    try:
+        return parse_timestamp(left) == parse_timestamp(right)
+    except ValueError:
+        return False
+
+
+def same_release_value(left: object, right: object) -> bool:
+    left_is_date = bool(isinstance(left, str) and DATE_ONLY.fullmatch(left))
+    right_is_date = bool(isinstance(right, str) and DATE_ONLY.fullmatch(right))
+    if left_is_date or right_is_date:
+        return left_is_date and right_is_date and left == right
+    return same_timestamp(left, right)
+
+
+def dotnet_container_release(item: dict, payload: dict) -> dict | None:
+    base_version = item["version"].split("-", 1)[0]
+    if item["name"] == "mcr.microsoft.com/dotnet/sdk":
+        return next(
+            (
+                release
+                for release in payload.get("releases", [])
+                if release.get("sdk", {}).get("version") == base_version
+            ),
+            None,
+        )
+    if item["name"] == "mcr.microsoft.com/dotnet/runtime-deps":
+        return next(
+            (
+                release
+                for release in payload.get("releases", [])
+                if release.get("release-version") == base_version
+                and release.get("runtime", {}).get("version") == base_version
+            ),
+            None,
+        )
+    return None
+
+
+def github_release_errors(item: dict, match, cached_json) -> list[str]:
+    owner, repository, tag = match.groups()
+    release, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
+    errors = []
+    prerelease = release.get("prerelease")
+    draft = release.get("draft")
+    if type(prerelease) is not bool:
+        errors.append(f"{item['name']}: official release prerelease must be a required boolean")
+    if type(draft) is not bool:
+        errors.append(f"{item['name']}: official release draft must be a required boolean")
+    if prerelease is True or draft is True:
+        errors.append(f"{item['name']}: official release is prerelease or draft")
+    tag_name = release.get("tag_name")
+    if not isinstance(tag_name, str):
+        errors.append(f"{item['name']}: official release tag_name is required")
+    elif tag_name.lstrip("v") != str(item["version"]).lstrip("v"):
+        errors.append(f"{item['name']}: official release tag moved or differs from inventory")
+    published_at = release.get("published_at")
+    if not isinstance(published_at, str):
+        errors.append(f"{item['name']}: official release published_at is required")
+    elif not same_timestamp(published_at, item["released_at"]):
+        errors.append(f"{item['name']}: official release timestamp differs from inventory")
+    if item["kind"] in {"github-action", "github-release"}:
+        commit, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
+        if commit.get("sha", "").lower() != item["digest_or_sha"].lower():
+            errors.append(f"{item['name']}: official release commit moved")
+    if item["kind"] == "download":
+        assets = release.get("assets")
+        artifact = next(
+            (
+                asset
+                for asset in assets
+                if isinstance(asset, dict)
+                and asset.get("browser_download_url") == item["artifact_url"]
+            ),
+            None,
+        ) if isinstance(assets, list) else None
+        if artifact is None or not isinstance(artifact.get("digest"), str):
+            errors.append(f"{item['name']}: publisher did not provide the recorded download artifact checksum")
+        elif artifact["digest"].lower() != item["digest_or_sha"].lower():
+            errors.append(f"{item['name']}: publisher checksum differs from inventory")
+    return errors
+
+
+def container_errors(item: dict, source: str, cached_json) -> list[str]:
+    if urlsplit(source).netloc == "hub.docker.com":
+        tag, _ = cached_json(source)
+        errors = []
+        if tag.get("name") != item["version"]:
+            errors.append(f"{item['name']}: Docker Hub tag differs from inventory")
+        if tag.get("tag_status") != "active":
+            errors.append(f"{item['name']}: Docker Hub tag is not active")
+        if str(tag.get("digest", "")).lower() != item["digest_or_sha"].lower():
+            errors.append(f"{item['name']}: Docker Hub manifest digest moved")
+        if not same_timestamp(tag.get("last_updated"), item["released_at"]):
+            errors.append(f"{item['name']}: Docker Hub release timestamp differs from inventory")
+        return errors
+    errors = []
+    digest = fetch_manifest_digest(source)
+    if digest is None:
+        errors.append(f"{item['name']}: registry did not provide Docker-Content-Digest")
+    elif digest.lower() != item["digest_or_sha"].lower():
+        errors.append(f"{item['name']}: container manifest digest moved")
+    payload, _ = cached_json(DOTNET_RELEASES)
+    release = dotnet_container_release(item, payload)
+    if release is None:
+        errors.append(f"{item['name']}: .NET metadata does not contain the container version")
+        return errors
+    release_date = release.get("release-date")
+    if not isinstance(release_date, str):
+        errors.append(f"{item['name']}: official container release date is required")
+    elif not same_release_value(release_date, item["released_at"]):
+        errors.append(f"{item['name']}: official container release date differs from inventory")
+    return errors
+
+
+def nuget_errors(item: dict, source: str, cached_json) -> list[str]:
+    payload, _ = cached_json(source)
+    errors = []
+    if payload.get("listed") is not True:
+        errors.append(f"{item['name']}: NuGet registration listed status must be true")
+    if not same_timestamp(payload.get("published"), item["released_at"]):
+        errors.append(f"{item['name']}: NuGet release timestamp differs from inventory")
+    catalog = payload.get("catalogEntry")
+    if isinstance(catalog, str):
+        parsed_catalog = urlsplit(catalog)
+        if not (
+            parsed_catalog.scheme == "https"
+            and parsed_catalog.netloc == "api.nuget.org"
+            and parsed_catalog.path.startswith("/v3/catalog0/data/")
+            and parsed_catalog.query == ""
+            and parsed_catalog.fragment == ""
+        ):
+            errors.append(f"{item['name']}: NuGet catalog source is not official")
+            catalog = None
+        else:
+            catalog, _ = cached_json(catalog)
+    if not isinstance(catalog, dict):
+        errors.append(f"{item['name']}: NuGet catalog entry is required")
+        catalog = {}
+    catalog_id = catalog.get("id")
+    if not isinstance(catalog_id, str) or catalog_id.casefold() != item["name"].casefold():
+        errors.append(f"{item['name']}: NuGet catalog identity differs from inventory")
+    if catalog.get("version") != item["version"]:
+        errors.append(f"{item['name']}: NuGet version differs from inventory")
+    if catalog.get("listed") is not True:
+        errors.append(f"{item['name']}: NuGet catalog listed status must be true")
+    if not same_timestamp(catalog.get("published"), item["released_at"]):
+        errors.append(f"{item['name']}: NuGet release timestamp differs from inventory")
+    if (
+        catalog.get("packageHashAlgorithm") != "SHA512"
+        or not isinstance(catalog.get("packageHash"), str)
+        or f"sha512-base64:{catalog['packageHash']}" != item["digest_or_sha"]
+    ):
+        errors.append(f"{item['name']}: NuGet checksum differs from inventory")
+    return errors
+
+
+def dotnet_sdk_errors(item: dict, source: str, cached_json) -> list[str]:
+    payload, _ = cached_json(source)
+    release = next(
+        (candidate for candidate in payload.get("releases", []) if candidate.get("sdk", {}).get("version") == item["version"]),
+        None,
+    )
+    if release is None:
+        return [f"{item['name']}: .NET metadata does not contain the pinned SDK"]
+    errors = []
+    if not same_release_value(release.get("release-date"), item["released_at"]):
+        errors.append(f"{item['name']}: .NET metadata release timestamp differs from inventory")
+    artifact = next(
+        (file for file in release.get("sdk", {}).get("files", []) if file.get("url") == item.get("artifact_url")),
+        None,
+    )
+    if artifact is None or f"sha512:{artifact.get('hash', '')}" != item["digest_or_sha"]:
+        errors.append(f"{item['name']}: .NET metadata digest differs from inventory")
+    return errors
+
+
+def online_item_errors(item: dict, cached_json) -> list[str]:
+    source = item["source"]
+    match = GITHUB_RELEASE.fullmatch(source)
+    if match:
+        return github_release_errors(item, match, cached_json)
+    if item["kind"] == "container":
+        return container_errors(item, source, cached_json)
+    if item["kind"] in ("dotnet-tool", "nuget"):
+        return nuget_errors(item, source, cached_json)
+    if item["kind"] == "dotnet-sdk":
+        return dotnet_sdk_errors(item, source, cached_json)
+    return [f"{item['name']}: unsupported official source"]
+
+
 def validate_online(inventory: list[dict], now: datetime) -> list[str]:
     errors = []
     json_cache = {}
@@ -1058,175 +1251,9 @@ def validate_online(inventory: list[dict], now: datetime) -> list[str]:
             json_cache[url] = fetch_json(url)
         return json_cache[url]
 
-    def same_timestamp(left: object, right: object) -> bool:
-        if not isinstance(left, str) or not isinstance(right, str):
-            return False
-        try:
-            return parse_timestamp(left) == parse_timestamp(right)
-        except ValueError:
-            return False
-
-    def same_release_value(left: object, right: object) -> bool:
-        left_is_date = bool(
-            isinstance(left, str) and DATE_ONLY.fullmatch(left)
-        )
-        right_is_date = bool(
-            isinstance(right, str) and DATE_ONLY.fullmatch(right)
-        )
-        if left_is_date or right_is_date:
-            return left_is_date and right_is_date and left == right
-        return same_timestamp(left, right)
-
-    def dotnet_container_release(item: dict, payload: dict) -> dict | None:
-        base_version = item["version"].split("-", 1)[0]
-        if item["name"] == "mcr.microsoft.com/dotnet/sdk":
-            return next(
-                (
-                    release
-                    for release in payload.get("releases", [])
-                    if release.get("sdk", {}).get("version") == base_version
-                ),
-                None,
-            )
-        if item["name"] == "mcr.microsoft.com/dotnet/runtime-deps":
-            return next(
-                (
-                    release
-                    for release in payload.get("releases", [])
-                    if release.get("release-version") == base_version
-                    and release.get("runtime", {}).get("version") == base_version
-                ),
-                None,
-            )
-        return None
-
     for item in inventory:
-        source = item["source"]
         try:
-            match = GITHUB_RELEASE.fullmatch(source)
-            if match:
-                owner, repository, tag = match.groups()
-                release, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/releases/tags/{tag}")
-                prerelease = release.get("prerelease")
-                draft = release.get("draft")
-                if type(prerelease) is not bool:
-                    errors.append(f"{item['name']}: official release prerelease must be a required boolean")
-                if type(draft) is not bool:
-                    errors.append(f"{item['name']}: official release draft must be a required boolean")
-                if prerelease is True or draft is True:
-                    errors.append(f"{item['name']}: official release is prerelease or draft")
-                tag_name = release.get("tag_name")
-                if not isinstance(tag_name, str):
-                    errors.append(f"{item['name']}: official release tag_name is required")
-                elif tag_name.lstrip("v") != str(item["version"]).lstrip("v"):
-                    errors.append(f"{item['name']}: official release tag moved or differs from inventory")
-                published_at = release.get("published_at")
-                if not isinstance(published_at, str):
-                    errors.append(f"{item['name']}: official release published_at is required")
-                elif not same_timestamp(published_at, item["released_at"]):
-                    errors.append(f"{item['name']}: official release timestamp differs from inventory")
-                if item["kind"] in {"github-action", "github-release"}:
-                    commit, _ = cached_json(f"https://api.github.com/repos/{owner}/{repository}/commits/{tag}")
-                    if commit.get("sha", "").lower() != item["digest_or_sha"].lower():
-                        errors.append(f"{item['name']}: official release commit moved")
-                if item["kind"] == "download":
-                    assets = release.get("assets")
-                    artifact = next(
-                        (
-                            asset
-                            for asset in assets
-                            if isinstance(asset, dict)
-                            and asset.get("browser_download_url") == item["artifact_url"]
-                        ),
-                        None,
-                    ) if isinstance(assets, list) else None
-                    if artifact is None or not isinstance(artifact.get("digest"), str):
-                        errors.append(f"{item['name']}: publisher did not provide the recorded download artifact checksum")
-                    elif artifact["digest"].lower() != item["digest_or_sha"].lower():
-                        errors.append(f"{item['name']}: publisher checksum differs from inventory")
-            elif item["kind"] == "container":
-                if urlsplit(source).netloc == "hub.docker.com":
-                    tag, _ = cached_json(source)
-                    if tag.get("name") != item["version"]:
-                        errors.append(f"{item['name']}: Docker Hub tag differs from inventory")
-                    if tag.get("tag_status") != "active":
-                        errors.append(f"{item['name']}: Docker Hub tag is not active")
-                    if str(tag.get("digest", "")).lower() != item["digest_or_sha"].lower():
-                        errors.append(f"{item['name']}: Docker Hub manifest digest moved")
-                    updated = tag.get("last_updated")
-                    if not same_timestamp(updated, item["released_at"]):
-                        errors.append(f"{item['name']}: Docker Hub release timestamp differs from inventory")
-                else:
-                    digest = fetch_manifest_digest(source)
-                    if digest is None:
-                        errors.append(f"{item['name']}: registry did not provide Docker-Content-Digest")
-                    elif digest.lower() != item["digest_or_sha"].lower():
-                        errors.append(f"{item['name']}: container manifest digest moved")
-                    payload, _ = cached_json(DOTNET_RELEASES)
-                    release = dotnet_container_release(item, payload)
-                    if release is None:
-                        errors.append(f"{item['name']}: .NET metadata does not contain the container version")
-                    else:
-                        release_date = release.get("release-date")
-                        if not isinstance(release_date, str):
-                            errors.append(f"{item['name']}: official container release date is required")
-                        elif not same_release_value(release_date, item["released_at"]):
-                            errors.append(
-                                f"{item['name']}: official container release date differs from inventory"
-                            )
-            elif item["kind"] in ("dotnet-tool", "nuget"):
-                payload, _ = cached_json(source)
-                if payload.get("listed") is not True:
-                    errors.append(f"{item['name']}: NuGet registration listed status must be true")
-                if not same_timestamp(payload.get("published"), item["released_at"]):
-                    errors.append(f"{item['name']}: NuGet release timestamp differs from inventory")
-                catalog = payload.get("catalogEntry")
-                if isinstance(catalog, str):
-                    parsed_catalog = urlsplit(catalog)
-                    if not (
-                        parsed_catalog.scheme == "https"
-                        and parsed_catalog.netloc == "api.nuget.org"
-                        and parsed_catalog.path.startswith("/v3/catalog0/data/")
-                        and parsed_catalog.query == ""
-                        and parsed_catalog.fragment == ""
-                    ):
-                        errors.append(f"{item['name']}: NuGet catalog source is not official")
-                        catalog = None
-                    else:
-                        catalog, _ = cached_json(catalog)
-                if not isinstance(catalog, dict):
-                    errors.append(f"{item['name']}: NuGet catalog entry is required")
-                    catalog = {}
-                catalog_id = catalog.get("id")
-                if not isinstance(catalog_id, str) or catalog_id.casefold() != item["name"].casefold():
-                    errors.append(f"{item['name']}: NuGet catalog identity differs from inventory")
-                if catalog.get("version") != item["version"]:
-                    errors.append(f"{item['name']}: NuGet version differs from inventory")
-                if catalog.get("listed") is not True:
-                    errors.append(f"{item['name']}: NuGet catalog listed status must be true")
-                if not same_timestamp(catalog.get("published"), item["released_at"]):
-                    errors.append(f"{item['name']}: NuGet release timestamp differs from inventory")
-                if (
-                    catalog.get("packageHashAlgorithm") != "SHA512"
-                    or not isinstance(catalog.get("packageHash"), str)
-                    or f"sha512-base64:{catalog['packageHash']}" != item["digest_or_sha"]
-                ):
-                    errors.append(f"{item['name']}: NuGet checksum differs from inventory")
-            elif item["kind"] == "dotnet-sdk":
-                payload, _ = cached_json(source)
-                release = next((candidate for candidate in payload.get("releases", []) if candidate.get("sdk", {}).get("version") == item["version"]), None)
-                if release is None:
-                    errors.append(f"{item['name']}: .NET metadata does not contain the pinned SDK")
-                    continue
-                if not same_release_value(
-                    release.get("release-date"), item["released_at"]
-                ):
-                    errors.append(f"{item['name']}: .NET metadata release timestamp differs from inventory")
-                artifact = next((file for file in release.get("sdk", {}).get("files", []) if file.get("url") == item.get("artifact_url")), None)
-                if artifact is None or f"sha512:{artifact.get('hash', '')}" != item["digest_or_sha"]:
-                    errors.append(f"{item['name']}: .NET metadata digest differs from inventory")
-            else:
-                errors.append(f"{item['name']}: unsupported official source")
+            errors.extend(online_item_errors(item, cached_json))
         except (AttributeError, URLError, ValueError, TypeError, TimeoutError) as error:
             errors.append(f"{item['name']}: unable to verify official source: {error}")
     return errors

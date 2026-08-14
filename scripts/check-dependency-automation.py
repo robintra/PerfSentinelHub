@@ -82,10 +82,9 @@ def parse_yaml_scalar(value):
     return parsed
 
 
-def load_dependabot_yaml(path):
-    raw_lines = path.read_text(encoding="utf-8").splitlines()
+def normalized_yaml_lines(path):
     lines = []
-    for number, raw in enumerate(raw_lines, start=1):
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw or raw.isspace():
             continue
         if "\t" in raw or raw.rstrip(" ") != raw:
@@ -96,45 +95,57 @@ def load_dependabot_yaml(path):
         lines.append((number, indent, raw[indent:]))
     if not lines:
         raise ValueError("configuration is empty")
+    return lines
 
-    def parse_block(index, indent):
-        if index >= len(lines) or lines[index][1] != indent:
-            raise ValueError("invalid indentation")
-        sequence = lines[index][2] == "-" or lines[index][2].startswith("- ")
-        result = [] if sequence else {}
-        while index < len(lines) and lines[index][1] == indent:
-            number, _, content = lines[index]
-            if sequence:
-                if content == "-":
-                    index += 1
-                    if index >= len(lines) or lines[index][1] != indent + 2:
-                        raise ValueError(f"line {number}: sequence item requires a nested value")
-                    item, index = parse_block(index, indent + 2)
-                elif content.startswith("- "):
-                    item = parse_yaml_scalar(content[2:])
-                    index += 1
-                else:
-                    raise ValueError(f"line {number}: mixed mapping and sequence")
-                result.append(item)
-                continue
 
-            match = YAML_KEY.fullmatch(content)
-            if match is None:
-                raise ValueError(f"line {number}: mapping key is not canonical")
-            key = match.group("key")
-            if key in result:
-                raise ValueError(f"line {number}: duplicate YAML key: {key}")
-            value = match.group("value")
-            index += 1
-            if value is None:
-                if index >= len(lines) or lines[index][1] != indent + 2:
-                    raise ValueError(f"line {number}: mapping key requires a nested value")
-                result[key], index = parse_block(index, indent + 2)
-            else:
-                result[key] = parse_yaml_scalar(value)
-        return result, index
+def parse_sequence_item(lines, index, indent):
+    number, _, content = lines[index]
+    if content == "-":
+        index += 1
+        if index >= len(lines) or lines[index][1] != indent + 2:
+            raise ValueError(f"line {number}: sequence item requires a nested value")
+        return parse_block(lines, index, indent + 2)
+    if content.startswith("- "):
+        return parse_yaml_scalar(content[2:]), index + 1
+    raise ValueError(f"line {number}: mixed mapping and sequence")
 
-    parsed, index = parse_block(0, lines[0][1])
+
+def parse_mapping_entry(lines, index, indent, result):
+    number, _, content = lines[index]
+    match = YAML_KEY.fullmatch(content)
+    if match is None:
+        raise ValueError(f"line {number}: mapping key is not canonical")
+    key = match.group("key")
+    if key in result:
+        raise ValueError(f"line {number}: duplicate YAML key: {key}")
+    value = match.group("value")
+    index += 1
+    if value is not None:
+        result[key] = parse_yaml_scalar(value)
+        return index
+    if index >= len(lines) or lines[index][1] != indent + 2:
+        raise ValueError(f"line {number}: mapping key requires a nested value")
+    result[key], index = parse_block(lines, index, indent + 2)
+    return index
+
+
+def parse_block(lines, index, indent):
+    if index >= len(lines) or lines[index][1] != indent:
+        raise ValueError("invalid indentation")
+    sequence = lines[index][2] == "-" or lines[index][2].startswith("- ")
+    result = [] if sequence else {}
+    while index < len(lines) and lines[index][1] == indent:
+        if sequence:
+            item, index = parse_sequence_item(lines, index, indent)
+            result.append(item)
+        else:
+            index = parse_mapping_entry(lines, index, indent, result)
+    return result, index
+
+
+def load_dependabot_yaml(path):
+    lines = normalized_yaml_lines(path)
+    parsed, index = parse_block(lines, 0, lines[0][1])
     if lines[0][1] != 0 or index != len(lines):
         raise ValueError("unexpected indentation or trailing content")
     return parsed

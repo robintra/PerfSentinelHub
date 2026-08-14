@@ -66,11 +66,11 @@
     {
       "name": "Microsoft.NET.Test.Sdk",
       "kind": "nuget",
-      "version": "18.8.1",
-      "digest_or_sha": "sha512-base64:7ZJBYyRfeaV4hDllSLVb7dtLXQb4SpbAhy+s9Sc+dUV2zwDUTTJtPLYTjanS5kqqm+283NNxIY4271uUY0Pvjw==",
-      "lock_content_hash": "dknJL3/9Y3t4XuCBqnc0PevPxgLsUMmVhjwup/b1HNovA8zWcj3XsfIf7c6p05363DWcqL7X/YhDL9B+Zymv1w==",
-      "released_at": "2026-07-14T13:07:09.393Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.test.sdk/18.8.1.json",
+      "version": "18.9.0",
+      "digest_or_sha": "sha512-base64:sP6KzBc705KPFUjqccutk9u2G/5Nd5QG68QHTIcRSJVf1pzijnQl+8AD36gG/F4fsBBs6RpTga1CShmuWr6aOg==",
+      "lock_content_hash": "xIzVXa/VpKXqDWzyC/5Hw8JbFY5u9k3Jc53CpcjBiOXvkQGio484LD9FNwOiGUSMDcYL3Rcw9sNgGi5WrswlPQ==",
+      "released_at": "2026-08-14T09:42:25.82Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.test.sdk/18.9.0.json",
       "reason": "Latest stable test SDK compatible with the locked test suite."
     },
     {

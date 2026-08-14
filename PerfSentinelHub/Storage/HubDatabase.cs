@@ -13,6 +13,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private const int PurgeChunkSize = 5_000;
+    private const string SourceIdParameter = "$source_id";
+    private const string ObservedAtParameter = "$observed_at";
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _ready;
@@ -157,8 +159,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                   producer_version = excluded.producer_version,
                   last_error_code = NULL;
                 """ : "UPDATE source_state SET producer_version = $producer_version WHERE source_id = $source_id;";
-            state.Parameters.AddWithValue("$source_id", source.SourceId);
-            state.Parameters.AddWithValue("$observed_at", observedAtMs);
+            state.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
+            state.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
             state.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
             await state.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -181,7 +183,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             VALUES ($source_id, $attempted_at)
             ON CONFLICT(source_id) DO UPDATE SET last_attempt_ms = excluded.last_attempt_ms;
             """;
-            command.Parameters.AddWithValue("$source_id", sourceId);
+            command.Parameters.AddWithValue(SourceIdParameter, sourceId);
             command.Parameters.AddWithValue("$attempted_at", attemptedAtMs);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -211,7 +213,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               unreachable_since_ms = COALESCE(source_state.unreachable_since_ms, excluded.unreachable_since_ms),
               last_error_code = excluded.last_error_code;
             """;
-            command.Parameters.AddWithValue("$source_id", sourceId);
+            command.Parameters.AddWithValue(SourceIdParameter, sourceId);
             command.Parameters.AddWithValue("$failed_at", failedAtMs);
             command.Parameters.AddWithValue("$error_code", errorCode);
             await command.ExecuteNonQueryAsync(cancellationToken);
@@ -410,7 +412,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
         command.Parameters.AddWithValue("$sample_trace_id", (object?)finding.TraceId ?? DBNull.Value);
-        command.Parameters.AddWithValue("$observed_at", observedAtMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         command.Parameters.AddWithValue("$confidence", finding.Confidence);
         command.Parameters.AddWithValue("$confidence_rank", finding.ConfidenceRank);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -441,11 +443,11 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               last_seen_ms = MAX(finding_sources.last_seen_ms, excluded.last_seen_ms);
             """;
         command.Parameters.AddWithValue("$signature", finding.Signature);
-        command.Parameters.AddWithValue("$source_id", source.SourceId);
+        command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
         command.Parameters.AddWithValue("$source_name", source.SourceName);
         command.Parameters.AddWithValue("$environment", source.Environment);
         command.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
-        command.Parameters.AddWithValue("$observed_at", observedAtMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -465,10 +467,10 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             ON CONFLICT(source_id, service, endpoint) DO UPDATE SET
               last_seen_any_ms = MAX(endpoint_heartbeats.last_seen_any_ms, excluded.last_seen_any_ms);
             """;
-        command.Parameters.AddWithValue("$source_id", source.SourceId);
+        command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
         command.Parameters.AddWithValue("$service", finding.Service);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
-        command.Parameters.AddWithValue("$observed_at", observedAtMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

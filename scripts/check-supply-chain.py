@@ -511,6 +511,39 @@ def msbuild_attributes(element: ElementTree.Element) -> dict[str, str]:
     return attributes
 
 
+def workflow_uses_errors(location: str, line: str, pins) -> list[str]:
+    action = CANONICAL_USES.fullmatch(line)
+    if action is None:
+        return [f"{location}: uses must use the canonical form and a full commit SHA"]
+    name = action.group("name")
+    sha = action.group("sha")
+    repository = "/".join(name.split("/")[:2])
+    expected = pins.get(repository)
+    if expected is None or expected.get("kind") != "github-action":
+        return [f"{location}: action {name} is absent from the inventory"]
+    if expected["digest_or_sha"].lower() != sha.lower():
+        return [f"{location}: action {name} differs from the inventory"]
+    return []
+
+
+def dockerfile_from_errors(location: str, image, pins) -> list[str]:
+    reference = image.group(1)
+    if "@sha256:" not in reference:
+        return [f"{location}: FROM must contain @sha256:"]
+    image_reference, digest = reference.split("@", 1)
+    if ":" not in image_reference or SHA256.fullmatch(digest) is None:
+        return [f"{location}: FROM is not canonical"]
+    image_name, tag = image_reference.rsplit(":", 1)
+    expected = pins.get(image_name)
+    if expected is None or expected.get("kind") != "container":
+        return [f"{location}: container {image_name} is absent from the inventory"]
+    if expected["version"] != tag:
+        return [f"{location}: container {image_name} tag differs from the inventory"]
+    if expected["digest_or_sha"].lower() != digest.lower():
+        return [f"{location}: container {image_name} differs from the inventory"]
+    return []
+
+
 def folded_lock_entries(relative, entries) -> tuple[dict, list[str]]:
     folded_entries = {}
     errors = []
@@ -925,45 +958,14 @@ def validate_declarations(root: Path, inventory: list[dict]) -> list[str]:
         ]
         for number, line in enumerate(lines, start=1):
             content = line.lstrip(" \t")
-            if is_workflow and not content.startswith("#") and (
-                content.startswith("?") or "\\" in content or YAML_QUOTED_KEY.search(content)
-            ):
-                errors.append(f"{path.relative_to(root)}:{number}: YAML mapping key is not canonical")
-            if is_workflow and not content.startswith("#") and YAML_USES_WORD.search(content):
-                action = CANONICAL_USES.fullmatch(line)
-                if action is None:
-                    errors.append(
-                        f"{path.relative_to(root)}:{number}: uses must use the canonical form and a full commit SHA"
-                    )
-                else:
-                    name = action.group("name")
-                    sha = action.group("sha")
-                    parts = name.split("/")
-                    repository = "/".join(parts[:2])
-                    expected = pins.get(repository)
-                    if expected is None or expected.get("kind") != "github-action":
-                        errors.append(f"{path.relative_to(root)}:{number}: action {name} is absent from the inventory")
-                    elif expected["digest_or_sha"].lower() != sha.lower():
-                        errors.append(f"{path.relative_to(root)}:{number}: action {name} differs from the inventory")
-
-            image = FROM_LINE.match(line) if is_dockerfile else None
-            if image:
-                reference = image.group(1)
-                if "@sha256:" not in reference:
-                    errors.append(f"{path.relative_to(root)}:{number}: FROM must contain @sha256:")
-                else:
-                    image_reference, digest = reference.split("@", 1)
-                    if ":" not in image_reference or SHA256.fullmatch(digest) is None:
-                        errors.append(f"{path.relative_to(root)}:{number}: FROM is not canonical")
-                    else:
-                        image_name, tag = image_reference.rsplit(":", 1)
-                        expected = pins.get(image_name)
-                        if expected is None or expected.get("kind") != "container":
-                            errors.append(f"{path.relative_to(root)}:{number}: container {image_name} is absent from the inventory")
-                        elif expected["version"] != tag:
-                            errors.append(f"{path.relative_to(root)}:{number}: container {image_name} tag differs from the inventory")
-                        elif expected["digest_or_sha"].lower() != digest.lower():
-                            errors.append(f"{path.relative_to(root)}:{number}: container {image_name} differs from the inventory")
+            location = f"{path.relative_to(root)}:{number}"
+            if is_workflow and not content.startswith("#"):
+                if content.startswith("?") or "\\" in content or YAML_QUOTED_KEY.search(content):
+                    errors.append(f"{location}: YAML mapping key is not canonical")
+                if YAML_USES_WORD.search(content):
+                    errors.extend(workflow_uses_errors(location, line, pins))
+            if is_dockerfile and FROM_LINE.match(line):
+                errors.extend(dockerfile_from_errors(location, FROM_LINE.match(line), pins))
 
         if suffix == ".sh" and download_declarations:
             errors.extend(validate_download_script(path, root, text, inventory))

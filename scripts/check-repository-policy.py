@@ -731,8 +731,10 @@ def normalized_status_checks(status_parameters):
             not isinstance(item, dict)
             or not isinstance(item.get("context"), str)
             or set(item) - {"context", "integration_id"}
-            or item.get("integration_id") is not None
-            and type(item.get("integration_id")) is not int
+            or (
+                item.get("integration_id") is not None
+                and type(item.get("integration_id")) is not int
+            )
         ):
             return None
         normalized.append({"context": item["context"], "integration_id": item.get("integration_id")})

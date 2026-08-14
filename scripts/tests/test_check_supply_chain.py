@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -489,7 +488,6 @@ class SupplyChainCheckerTests(unittest.TestCase):
             self.assertIn("prerelease", result.stderr)
 
     def test_rejects_eap_container_inventory_versions(self):
-        now = datetime(2026, 8, 11, tzinfo=timezone.utc)
         for version in ("2026.1-eap", "2026.1_EAP", "2026.1.EaP"):
             with self.subTest(version=version):
                 item = inventory_item(

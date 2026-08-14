@@ -269,7 +269,7 @@ def package(rid: str, version: str, commit_time: int, staging: Path, output: Pat
         output.mkdir(parents=True, exist_ok=True)
         temporary = []
         try:
-            for name, selected in zip(names, (runtime, symbols), strict=True):
+            for selected in (runtime, symbols):
                 descriptor, temporary_name = tempfile.mkstemp(dir=output, prefix=".package-")
                 os.close(descriptor)
                 temporary_path = Path(temporary_name)

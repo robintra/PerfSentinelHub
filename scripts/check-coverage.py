@@ -49,7 +49,7 @@ def direct_children(element: ElementTree.Element, name: str) -> list[ElementTree
     return [child for child in element if local_name(child.tag) == name]
 
 
-def read_report(path: Path) -> dict[tuple[str, int], bool]:
+def parsed_coverage_root(path: Path):
     try:
         with path.open("rb") as report:
             payload = report.read(MAX_REPORT_BYTES + 1)
@@ -77,7 +77,30 @@ def read_report(path: Path) -> dict[tuple[str, int], bool]:
         raise CoverageError(f"{path}: coverage report must declare strict UTF-8 without BOM")
     if local_name(root.tag) != "coverage":
         raise CoverageError(f"{path}: Cobertura root must be coverage")
+    return root
 
+
+def collect_class_lines(path: Path, element, lines: dict, records: int) -> int:
+    class_lines = direct_children(element, "lines")
+    if len(class_lines) != 1:
+        raise CoverageError(f"{path}: Cobertura class lines structure is required")
+    filename = normalized_filename(element.get("filename"))
+    for line in direct_children(class_lines[0], "line"):
+        number_text = line.get("number")
+        hits_text = line.get("hits")
+        if not isinstance(number_text, str) or not POSITIVE_INTEGER.fullmatch(number_text):
+            raise CoverageError(f"{path}: line number is missing or invalid")
+        if not isinstance(hits_text, str) or not NONNEGATIVE_INTEGER.fullmatch(hits_text):
+            raise CoverageError(f"{path}: line hits are missing or invalid")
+        records += 1
+        if records > MAX_LINE_RECORDS:
+            raise CoverageError(f"{path}: report exceeds {MAX_LINE_RECORDS} line records")
+        key = (filename, int(number_text))
+        lines[key] = lines.get(key, False) or int(hits_text) > 0
+    return records
+
+
+def line_records(path: Path, root) -> dict[tuple[str, int], bool]:
     packages = direct_children(root, "packages")
     if len(packages) != 1:
         raise CoverageError(f"{path}: Cobertura packages structure is required")
@@ -88,31 +111,13 @@ def read_report(path: Path) -> dict[tuple[str, int], bool]:
         if len(classes_nodes) != 1:
             raise CoverageError(f"{path}: Cobertura classes structure is required")
         for element in direct_children(classes_nodes[0], "class"):
-            class_lines = direct_children(element, "lines")
-            if len(class_lines) != 1:
-                raise CoverageError(f"{path}: Cobertura class lines structure is required")
-            filename = normalized_filename(element.get("filename"))
-            for line in direct_children(class_lines[0], "line"):
-                number_text = line.get("number")
-                hits_text = line.get("hits")
-                if not isinstance(number_text, str) or not POSITIVE_INTEGER.fullmatch(
-                    number_text
-                ):
-                    raise CoverageError(f"{path}: line number is missing or invalid")
-                if not isinstance(hits_text, str) or not NONNEGATIVE_INTEGER.fullmatch(
-                    hits_text
-                ):
-                    raise CoverageError(f"{path}: line hits are missing or invalid")
-                records += 1
-                if records > MAX_LINE_RECORDS:
-                    raise CoverageError(
-                        f"{path}: report exceeds {MAX_LINE_RECORDS} line records"
-                    )
-                key = (filename, int(number_text))
-                lines[key] = lines.get(key, False) or int(hits_text) > 0
+            records = collect_class_lines(path, element, lines, records)
     if not lines:
         raise CoverageError(f"{path}: report contains no line records")
+    return lines
 
+
+def reject_inconsistent_counters(path: Path, root, lines: dict) -> None:
     valid_text = root.get("lines-valid")
     covered_text = root.get("lines-covered")
     if (
@@ -124,6 +129,12 @@ def read_report(path: Path) -> dict[tuple[str, int], bool]:
         raise CoverageError(f"{path}: Cobertura root line counts are missing or invalid")
     if int(valid_text) != len(lines) or int(covered_text) != sum(lines.values()):
         raise CoverageError(f"{path}: Cobertura root line counts differ from line records")
+
+
+def read_report(path: Path) -> dict[tuple[str, int], bool]:
+    root = parsed_coverage_root(path)
+    lines = line_records(path, root)
+    reject_inconsistent_counters(path, root, lines)
     return lines
 
 

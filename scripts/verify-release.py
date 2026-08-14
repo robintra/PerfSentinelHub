@@ -17,6 +17,8 @@ import tempfile
 from pathlib import Path, PurePosixPath
 
 
+PROVENANCE_FILE = "release.provenance.sigstore.json"
+RELEASE_MANIFEST_FILE = "release-manifest.json"
 RIDS = ("linux-x64", "linux-arm64", "osx-arm64", "win-x64")
 VERSION = re.compile(r"^0\.[0-9]+\.[0-9]+$")
 STABLE_TAG = re.compile(r"^v0[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$")
@@ -130,7 +132,7 @@ def subject_names(version: str):
 
 
 def expected_files(version: str):
-    names = {"release.provenance.sigstore.json"}
+    names = {PROVENANCE_FILE}
     for name, _, _ in subject_names(version):
         names.update((name, f"{name}.spdx.json", f"{name}.sigstore.json", f"{name}.sbom.sigstore.json"))
     return names
@@ -274,7 +276,7 @@ def validate_evidence(files: dict[str, Path], subjects, image_digest: str, versi
         validate_sbom(files[f"{name}.spdx.json"], name)
         validate_signature_bundle(files[f"{name}.sigstore.json"], digest)
         validate_sbom_attestation(files[f"{name}.sbom.sigstore.json"], (name, digest))
-    validate_provenance(files["release.provenance.sigstore.json"], subject_digests)
+    validate_provenance(files[PROVENANCE_FILE], subject_digests)
     checker = image_checker_module()
     actual_image_digest = checker.validated_digest(
         files[f"perf-sentinel-hub-{version}.oci.tar"],
@@ -337,7 +339,7 @@ def manifest_payload(root: Path, version: str, source_commit: str, source_reposi
                 "sbom": f"{name}.spdx.json",
                 "signature_bundle": f"{name}.sigstore.json",
                 "sbom_attestation": f"{name}.sbom.sigstore.json",
-                "provenance": "release.provenance.sigstore.json",
+                "provenance": PROVENANCE_FILE,
                 "source_commit": source_commit,
             }
             for name, kind, target in subjects
@@ -420,7 +422,7 @@ def verify_manifest(root: Path, path: Path):
                 "sbom": f"{name}.spdx.json",
                 "signature_bundle": f"{name}.sigstore.json",
                 "sbom_attestation": f"{name}.sbom.sigstore.json",
-                "provenance": "release.provenance.sigstore.json",
+                "provenance": PROVENANCE_FILE,
                 "source_commit": source["commit"],
             }
         )
@@ -469,7 +471,7 @@ def latest_stable(content: bytes) -> str:
 
 def verify_published(root: Path):
     files = regular_files(root)
-    if "SHA256SUMS" not in files or "release-manifest.json" not in files:
+    if "SHA256SUMS" not in files or RELEASE_MANIFEST_FILE not in files:
         raise ValueError("published release requires SHA256SUMS and release-manifest.json")
     checksums = {}
     pattern = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
@@ -486,9 +488,9 @@ def verify_published(root: Path):
     with tempfile.TemporaryDirectory(prefix="perf-sentinel-public-release-") as directory:
         verification_root = Path(directory)
         for name, path in files.items():
-            if name not in {"SHA256SUMS", "release-manifest.json"}:
+            if name not in {"SHA256SUMS", RELEASE_MANIFEST_FILE}:
                 shutil.copyfile(path, verification_root / name)
-        verify_manifest(verification_root, files["release-manifest.json"])
+        verify_manifest(verification_root, files[RELEASE_MANIFEST_FILE])
 
 
 def parser():

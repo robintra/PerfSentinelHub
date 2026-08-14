@@ -20,6 +20,8 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
+CSPROJ_SUFFIX = ".csproj"
+NUGET_LOCK_FILE = "packages.lock.json"
 REQUIRED_FIELDS = {
     "name",
     "kind",
@@ -615,7 +617,7 @@ def validate_package_declarations(
     xml_files = [
         path
         for path in files
-        if path.suffix.casefold() in {".csproj", ".props", ".targets"}
+        if path.suffix.casefold() in {CSPROJ_SUFFIX, ".props", ".targets"}
         and path != central_path
     ]
     for path in xml_files:
@@ -652,7 +654,7 @@ def validate_package_declarations(
                     runtime_identifiers.append(element.text)
                 if folded_tag != "packagereference":
                     continue
-                if path.suffix.casefold() != ".csproj":
+                if path.suffix.casefold() != CSPROJ_SUFFIX:
                     errors.append(
                         f"{relative}: PackageReference is only permitted in project files"
                     )
@@ -721,7 +723,7 @@ def validate_package_declarations(
                         errors.append(f"{relative}: RuntimeIdentifiers is not canonical")
                     else:
                         rids = values
-            if path.suffix.casefold() == ".csproj":
+            if path.suffix.casefold() == CSPROJ_SUFFIX:
                 projects[path] = (references, aot, rids)
         except (OSError, ValueError, ElementTree.ParseError):
             errors.append(f"{relative}: unable to parse canonical project XML")
@@ -768,14 +770,14 @@ def validate_package_locks(
         if item["nuget_role"] == "sdk-aot-base-rid"
     }
     consumed_sdk_pins = set()
-    expected_locks = {path.parent / "packages.lock.json" for path in projects}
-    actual_locks = {path for path in files if path.name == "packages.lock.json"}
+    expected_locks = {path.parent / NUGET_LOCK_FILE for path in projects}
+    actual_locks = {path for path in files if path.name == NUGET_LOCK_FILE}
     for path in sorted(expected_locks - actual_locks):
         errors.append(f"{path.relative_to(root)} is required for its project")
     for path in sorted(actual_locks - expected_locks):
         errors.append(f"{path.relative_to(root)} is orphaned from any project")
     for project, (references, aot, rids) in projects.items():
-        lock_path = project.parent / "packages.lock.json"
+        lock_path = project.parent / NUGET_LOCK_FILE
         if lock_path not in actual_locks:
             continue
         relative = lock_path.relative_to(root)

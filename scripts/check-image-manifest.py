@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 
 
+INDEX_FILE = "index.json"
 SHA256 = re.compile(r"^sha256:([0-9a-f]{64})$")
 PLATFORM = re.compile(r"^(linux)/(amd64|arm64)$")
 INDEX_MEDIA_TYPES = {
@@ -102,7 +103,7 @@ class Layout:
 
     def reject_unreferenced_blobs(self):
         blobs = {name for name in self.entries if name.startswith("blobs/sha256/")}
-        expected = {"oci-layout", "index.json"} | self.referenced_blobs
+        expected = {"oci-layout", INDEX_FILE} | self.referenced_blobs
         if blobs != self.referenced_blobs or set(self.entries) != expected:
             raise ValueError("OCI layout contains missing, unreferenced, or unlisted blobs")
 
@@ -116,7 +117,7 @@ def validated_layout(
     marker = load_json(layout.required("oci-layout"), "oci-layout")
     if marker != {"imageLayoutVersion": "1.0.0"}:
         raise ValueError("OCI layout version must be exactly 1.0.0")
-    index_content = layout.required("index.json")
+    index_content = layout.required(INDEX_FILE)
     index = load_json(index_content, "OCI index")
     if not isinstance(index, dict) or index.get("schemaVersion") != 2 or not isinstance(index.get("manifests"), list):
         raise ValueError("OCI index structure is invalid")
@@ -220,7 +221,7 @@ def compose_layout(
 
     entries = {
         "oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
-        "index.json": json.dumps(
+        INDEX_FILE: json.dumps(
             {
                 "schemaVersion": 2,
                 "mediaType": "application/vnd.oci.image.index.v1+json",

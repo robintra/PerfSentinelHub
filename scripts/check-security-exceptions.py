@@ -12,9 +12,9 @@ from zoneinfo import ZoneInfo
 
 
 FIELDS = {"advisory", "exposure", "owner", "expires", "paths"}
-ADVISORY = re.compile(
-    r"^(?:GHSA-[23456789cfghjmpqrvwxy]{4}-[23456789cfghjmpqrvwxy]{4}-[23456789cfghjmpqrvwxy]{4}|CVE-(?:1999|2[0-9]{3})-(?:0[0-9]{3}|[1-9][0-9]{3,}))$"
-)
+GHSA_SEGMENT = "[23456789cfghjmpqrvwxy]{4}"
+GHSA_ADVISORY = re.compile(rf"^GHSA-{GHSA_SEGMENT}-{GHSA_SEGMENT}-{GHSA_SEGMENT}$")
+CVE_ADVISORY = re.compile(r"^CVE-(?:1999|2[0-9]{3})-(?:0[0-9]{3}|[1-9][0-9]{3,})$")
 EXPIRY = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
 
@@ -39,6 +39,59 @@ def valid_path(value: object) -> bool:
     )
 
 
+def expiry_errors(expires: object, label: str, today: date) -> list[str]:
+    try:
+        if not isinstance(expires, str) or EXPIRY.fullmatch(expires) is None:
+            raise ValueError
+        expiry = date.fromisoformat(expires)
+    except ValueError:
+        return [f"{label}: expires must be a valid YYYY-MM-DD date"]
+    if expiry < today:
+        return [f"{label}: security exception expired on {expires}"]
+    if expiry > today + timedelta(days=90):
+        return [f"{label}: expires must be no more than 90 days away"]
+    return []
+
+
+def exception_entry_errors(entry: object, label: str, advisories: set[str], today: date) -> list[str]:
+    if not isinstance(entry, dict) or set(entry) != FIELDS:
+        return [f"{label}: advisory, exposure, owner, expires, and paths are required"]
+
+    errors = []
+    advisory = entry["advisory"]
+    canonical = isinstance(advisory, str) and (
+        GHSA_ADVISORY.fullmatch(advisory) is not None or CVE_ADVISORY.fullmatch(advisory) is not None
+    )
+    if not canonical:
+        errors.append(f"{label}: advisory must be a canonical GHSA or CVE identifier")
+    elif advisory in advisories:
+        errors.append(f"{label}: duplicate advisory {advisory}")
+    else:
+        advisories.add(advisory)
+
+    for field in ("exposure", "owner"):
+        value = entry[field]
+        if (
+            not isinstance(value, str)
+            or not value.strip()
+            or value != value.strip()
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        ):
+            errors.append(f"{label}: {field} must be a non-empty canonical string")
+
+    errors.extend(expiry_errors(entry["expires"], label, today))
+
+    paths = entry["paths"]
+    if (
+        not isinstance(paths, list)
+        or not paths
+        or any(not valid_path(path) for path in paths)
+        or len(paths) != len(set(paths))
+    ):
+        errors.append(f"{label}: paths must be unique canonical repository-relative paths")
+    return errors
+
+
 def validate(payload: object, today: date) -> list[str]:
     if not isinstance(payload, dict) or set(payload) != {"schema_version", "exceptions"}:
         return ["only schema_version and exceptions are permitted"]
@@ -51,50 +104,7 @@ def validate(payload: object, today: date) -> list[str]:
     errors = []
     advisories = set()
     for index, entry in enumerate(exceptions, start=1):
-        label = f"exception {index}"
-        if not isinstance(entry, dict) or set(entry) != FIELDS:
-            errors.append(f"{label}: advisory, exposure, owner, expires, and paths are required")
-            continue
-
-        advisory = entry["advisory"]
-        if not isinstance(advisory, str) or ADVISORY.fullmatch(advisory) is None:
-            errors.append(f"{label}: advisory must be a canonical GHSA or CVE identifier")
-        elif advisory in advisories:
-            errors.append(f"{label}: duplicate advisory {advisory}")
-        else:
-            advisories.add(advisory)
-
-        for field in ("exposure", "owner"):
-            value = entry[field]
-            if (
-                not isinstance(value, str)
-                or not value.strip()
-                or value != value.strip()
-                or any(ord(character) < 32 or ord(character) == 127 for character in value)
-            ):
-                errors.append(f"{label}: {field} must be a non-empty canonical string")
-
-        expires = entry["expires"]
-        try:
-            if not isinstance(expires, str) or EXPIRY.fullmatch(expires) is None:
-                raise ValueError
-            expiry = date.fromisoformat(expires)
-        except ValueError:
-            errors.append(f"{label}: expires must be a valid YYYY-MM-DD date")
-        else:
-            if expiry < today:
-                errors.append(f"{label}: security exception expired on {expires}")
-            elif expiry > today + timedelta(days=90):
-                errors.append(f"{label}: expires must be no more than 90 days away")
-
-        paths = entry["paths"]
-        if (
-            not isinstance(paths, list)
-            or not paths
-            or any(not valid_path(path) for path in paths)
-            or len(paths) != len(set(paths))
-        ):
-            errors.append(f"{label}: paths must be unique canonical repository-relative paths")
+        errors.extend(exception_entry_errors(entry, f"exception {index}", advisories, today))
     return errors
 
 

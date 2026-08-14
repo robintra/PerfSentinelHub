@@ -118,6 +118,25 @@ def resembles_secret(value: str) -> bool:
     )
 
 
+def secret_entry_errors(entry: object, label: str, names: set[str]) -> list[str]:
+    if not isinstance(entry, dict):
+        return [f"{label} must be an object"]
+    if set(entry) != SECRET_FIELDS:
+        return [f"{label} must contain metadata fields only"]
+    name = entry.get("name")
+    if not isinstance(name, str) or SECRET_NAME.fullmatch(name) is None:
+        return [f"{label} name is not canonical"]
+    errors = [f"{label} duplicates {name}"] if name in names else []
+    names.add(name)
+    for field in SECRET_FIELDS - {"name"}:
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{label} requires non-empty {field}")
+        elif resembles_secret(value):
+            errors.append(f"{label} {field} resembles a secret value")
+    return errors
+
+
 def validate_secret_inventory(root: Path) -> tuple[list[str], set[str]]:
     path = root / "config" / "secret-inventory.json"
     try:
@@ -138,25 +157,7 @@ def validate_secret_inventory(root: Path) -> tuple[list[str], set[str]]:
         return ["config/secret-inventory.json: schema_version 1 and a secrets array are required"], names
     for index, entry in enumerate(entries):
         label = f"config/secret-inventory.json: entry {index + 1}"
-        if not isinstance(entry, dict):
-            errors.append(f"{label} must be an object")
-            continue
-        if set(entry) != SECRET_FIELDS:
-            errors.append(f"{label} must contain metadata fields only")
-            continue
-        name = entry.get("name")
-        if not isinstance(name, str) or SECRET_NAME.fullmatch(name) is None:
-            errors.append(f"{label} name is not canonical")
-            continue
-        if name in names:
-            errors.append(f"{label} duplicates {name}")
-        names.add(name)
-        for field in SECRET_FIELDS - {"name"}:
-            value = entry.get(field)
-            if not isinstance(value, str) or not value.strip():
-                errors.append(f"{label} requires non-empty {field}")
-            elif resembles_secret(value):
-                errors.append(f"{label} {field} resembles a secret value")
+        errors.extend(secret_entry_errors(entry, label, names))
     missing = REQUIRED_SECRETS - names
     unexpected = names - REQUIRED_SECRETS
     errors.extend(
@@ -168,6 +169,26 @@ def validate_secret_inventory(root: Path) -> tuple[list[str], set[str]]:
         for name in sorted(unexpected)
     )
     return errors, names
+
+
+def workflow_line_errors(line: str, location: str, inventory_names: set[str]) -> list[str]:
+    errors = []
+    remaining = line
+    for expression in WORKFLOW_EXPRESSION.finditer(line):
+        body = expression.group("body")
+        if not SECRET_TOKEN.search(body):
+            continue
+        match = CANONICAL_SECRET_REFERENCE.fullmatch(body)
+        if match is None:
+            errors.append(f"{location}: non-canonical secret reference")
+            continue
+        name = match.group(1)
+        if name not in inventory_names:
+            errors.append(f"{location}: workflow secret {name} is absent from the inventory")
+        remaining = remaining.replace(expression.group(0), "", 1)
+    if SECRET_TOKEN.search(remaining):
+        errors.append(f"{location}: non-canonical secret reference")
+    return errors
 
 
 def validate_workflow_secrets(root: Path, inventory_names: set[str]) -> list[str]:
@@ -184,27 +205,8 @@ def validate_workflow_secrets(root: Path, inventory_names: set[str]) -> list[str
         for number, line in enumerate(text.splitlines(), start=1):
             if line.lstrip().startswith("#"):
                 continue
-            remaining = line
-            for expression in WORKFLOW_EXPRESSION.finditer(line):
-                body = expression.group("body")
-                if not SECRET_TOKEN.search(body):
-                    continue
-                match = CANONICAL_SECRET_REFERENCE.fullmatch(body)
-                if match is None:
-                    errors.append(
-                        f"{path.relative_to(root)}:{number}: non-canonical secret reference"
-                    )
-                    continue
-                name = match.group(1)
-                if name not in inventory_names:
-                    errors.append(
-                        f"{path.relative_to(root)}:{number}: workflow secret {name} is absent from the inventory"
-                    )
-                remaining = remaining.replace(expression.group(0), "", 1)
-            if SECRET_TOKEN.search(remaining):
-                errors.append(
-                    f"{path.relative_to(root)}:{number}: non-canonical secret reference"
-                )
+            location = f"{path.relative_to(root)}:{number}"
+            errors.extend(workflow_line_errors(line, location, inventory_names))
     return errors
 
 

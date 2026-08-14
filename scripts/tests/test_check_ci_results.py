@@ -63,7 +63,7 @@ def run_checker(
     mode: str = "internal",
     decision: str = "code",
     *,
-    needs: dict | list | str | int | bool | object | None = DEFAULT_NEEDS,
+    needs: object = DEFAULT_NEEDS,
     raw_needs: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     if raw_needs is None:

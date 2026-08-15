@@ -130,6 +130,9 @@ ENVIRONMENT_SCHEMA = {
         },
     ),
 }
+# The sole documented bypass: the repository-admin role, so the maintainer can push to the
+# default branch directly. Any other actor, team, app or deploy key stays refused.
+ADMIN_BYPASS = [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
 # The dedicated gate App, and GitHub Actions itself. Both are stable numeric App ids.
 CI_GATE_APP_ID = 4586215
 GITHUB_ACTIONS_APP_ID = 15368
@@ -243,7 +246,7 @@ def canonical_branch_policy(branch, checks, expected_checks) -> bool:
         and branch["require_signed_commits"] is True
         and branch["allow_force_pushes"] is False
         and branch["allow_deletions"] is False
-        and branch["bypass_actors"] == []
+        and branch["bypass_actors"] == ADMIN_BYPASS
         and branch["emergency_bypass_record"] is None
     )
 

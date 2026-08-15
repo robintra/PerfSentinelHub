@@ -49,7 +49,13 @@
     "require_signed_commits": true,
     "allow_force_pushes": false,
     "allow_deletions": false,
-    "bypass_actors": [],
+    "bypass_actors": [
+      {
+        "actor_id": 5,
+        "actor_type": "RepositoryRole",
+        "bypass_mode": "always"
+      }
+    ],
     "emergency_bypass_record": null
   },
   "tag_ruleset": {

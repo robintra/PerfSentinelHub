@@ -61,7 +61,9 @@ def public_api_fixture():
                 "name": "Protect main",
                 "target": "branch",
                 "enforcement": "active",
-                "bypass_actors": [],
+                "bypass_actors": [
+                    {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}
+                ],
                 "conditions": {
                     "ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
                 },
@@ -377,7 +379,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                 self.assertIn("default branch", result.stderr)
                 self.assertIn(forbidden_rule if forbidden_rule == "non_fast_forward" else "deletion", result.stderr)
 
-    def test_requires_signed_commits_and_rejects_every_bypass_actor(self):
+    def test_requires_signed_commits_and_rejects_any_bypass_beyond_the_admin_role(self):
         for mutation in ("unsigned", "administrator-bypass"):
             with self.subTest(mutation=mutation):
                 api = public_api_fixture()
@@ -390,7 +392,8 @@ class RepositoryPolicyTests(unittest.TestCase):
                             "actor_id": 5,
                             "actor_type": "RepositoryRole",
                             "bypass_mode": "always",
-                        }
+                        },
+                        {"actor_id": 99, "actor_type": "Team", "bypass_mode": "always"},
                     ]
 
                 result = run_checker(api)

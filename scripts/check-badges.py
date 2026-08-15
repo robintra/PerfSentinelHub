@@ -53,10 +53,10 @@ BADGES = {
     ),
 }
 
-CANONICAL_PREFIX = "# PerfSentinelHub\n\n" + '<p align="center">\n' + "".join(
+CANONICAL_PREFIX = '<p align="center">\n' + "".join(
     f'    <a href="{destination}"><img src="{image}" alt="{label}" /></a>\n'
     for label, (image, destination, _) in BADGES.items()
-) + "</p>\n\n"
+) + "</p>\n\n# PerfSentinelHub\n\n"
 
 
 def validate(root: Path):

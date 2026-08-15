@@ -47,10 +47,10 @@ def badge(label, image, destination):
 
 
 def complete_readme():
-    return "# PerfSentinelHub\n\n" + '<p align="center">\n' + "".join(
+    return '<p align="center">\n' + "".join(
         badge(label, image, destination) + "\n"
         for label, (image, destination) in BADGES.items()
-    ) + "</p>\n\n"
+    ) + "</p>\n\n# PerfSentinelHub\n\n"
 
 
 def add_to_badge_block(addition):

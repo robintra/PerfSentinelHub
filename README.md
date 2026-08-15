@@ -1,24 +1,26 @@
 # PerfSentinelHub
 
-[![CI](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml)
-[![Sonar quality](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub)
-[![Sonar coverage](https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage)](https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list)
-[![CodeQL](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml)
-[![Daily audit](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml)
-[![Release](https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg)](https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml)
-[![GHCR](https://img.shields.io/badge/GHCR-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub)
-[![Helm](https://img.shields.io/badge/Helm-configured-lightgrey)](https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub)
-[![.NET](https://img.shields.io/badge/.NET-10.0.400-512BD4)](https://github.com/robintra/PerfSentinelHub/blob/main/global.json)
+<p align="center">
+    <a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Frobintra%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version&label=.NET&color=512BD4&logo=dotnet&logoColor=white" alt=".NET" /></a>
+    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg" alt="Security Audit" /></a>
+    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
+    <a href="https://sonarcloud.io/summary/overall?id=robintrassard_PerfSentinelHub"><img src="https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage" alt="Coverage" /></a>
+    <a href="https://sonarcloud.io/summary/overall?id=robintrassard_PerfSentinelHub"><img src="https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status" alt="Quality Gate" /></a>
+    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+    <a href="https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub"><img src="https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white" alt="Container image" /></a>
+    <a href="https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub"><img src="https://img.shields.io/badge/helm-perf--sentinel--hub-0F1689?logo=helm&logoColor=white" alt="Helm chart" /></a>
+</p>
 
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
 [perf-sentinel](https://github.com/robintra/perf-sentinel) instances.
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 
-The badges link to workflows, analysis projects, and package destinations. CI, Sonar, CodeQL, and
-the daily audit report observed runs. The others do not: the GHCR and Helm badges deliberately say
-`configured` because nothing is published yet, and the release badge stays empty until the release
-workflow runs for the first time. No badge should be read as proof of a published package.
+CI, the daily audit, CodeQL, coverage, and the quality gate report observed runs. The rest do not.
+The release badge stays empty until the release workflow runs for the first time, and the last two
+name the destinations a release will publish to, so those links answer 404 until it does. No badge
+here should be read as proof of a published package.
 
 ## Release contract and maturity
 

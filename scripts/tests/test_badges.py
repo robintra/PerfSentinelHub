@@ -8,55 +8,57 @@ from pathlib import Path
 REPOSITORY = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY / "scripts" / "check-badges.py"
 CANONICAL_LICENSE = (REPOSITORY / "LICENSE").read_text(encoding="utf-8")
+REPO_URL = "https://github.com/robintra/PerfSentinelHub"
+SONAR_URL = "https://sonarcloud.io"
+SONAR_KEY = "robintrassard_PerfSentinelHub"
 BADGES = {
-    "CI": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml",
+    ".NET": (
+        "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com"
+        "%2Frobintra%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version"
+        "&label=.NET&color=512BD4&logo=dotnet&logoColor=white",
+        "https://dotnet.microsoft.com/",
     ),
-    "Sonar quality": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status",
-        "https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub",
-    ),
-    "Sonar coverage": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
-        "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
+    "CI": (f"{REPO_URL}/actions/workflows/ci.yml/badge.svg", f"{REPO_URL}/actions/workflows/ci.yml"),
+    "Security Audit": (
+        f"{REPO_URL}/actions/workflows/security-audit.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/security-audit.yml",
     ),
     "CodeQL": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml",
+        f"{REPO_URL}/actions/workflows/codeql.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/codeql.yml",
     ),
-    "Daily audit": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml",
+    "Coverage": (
+        f"{SONAR_URL}/api/project_badges/measure?project={SONAR_KEY}&metric=coverage",
+        f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
+    ),
+    "Quality Gate": (
+        f"{SONAR_URL}/api/project_badges/measure?project={SONAR_KEY}&metric=alert_status",
+        f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
     ),
     "Release": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml",
+        f"{REPO_URL}/actions/workflows/release.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/release.yml",
     ),
-    "GHCR": (
-        "https://img.shields.io/badge/GHCR-configured-lightgrey",
-        "https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub",
+    "Container image": (
+        "https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white",
+        f"{REPO_URL}/pkgs/container/perf-sentinel-hub",
     ),
-    "Helm": (
-        "https://img.shields.io/badge/Helm-configured-lightgrey",
-        "https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub",
-    ),
-    ".NET": (
-        "https://img.shields.io/badge/.NET-10.0.400-512BD4",
-        "https://github.com/robintra/PerfSentinelHub/blob/main/global.json",
+    "Helm chart": (
+        "https://img.shields.io/badge/helm-perf--sentinel--hub-0F1689?logo=helm&logoColor=white",
+        f"{REPO_URL}/pkgs/container/charts%2Fperf-sentinel-hub",
     ),
 }
 
 
 def badge(label, image, destination):
-    return f"[![{label}]({image})]({destination})"
+    return f'    <a href="{destination}"><img src="{image}" alt="{label}" /></a>'
 
 
 def complete_readme():
-    return "# PerfSentinelHub\n\n" + "\n".join(
-        badge(label, image, destination)
+    return "# PerfSentinelHub\n\n" + '<p align="center">\n' + "".join(
+        badge(label, image, destination) + "\n"
         for label, (image, destination) in BADGES.items()
-    ) + "\n\n"
+    ) + "</p>\n\n"
 
 
 def add_to_badge_block(addition):
@@ -229,12 +231,6 @@ class BadgeTests(unittest.TestCase):
 
         self.assertEqual(1, result.returncode)
         self.assertIn("missing local evidence: .github/workflows/security-audit.yml", result.stderr)
-
-    def test_rejects_dotnet_badge_when_the_pinned_sdk_differs(self):
-        result = run_checker(complete_readme(), sdk_version="10.0.999")
-
-        self.assertEqual(1, result.returncode)
-        self.assertIn(".NET badge differs from global.json", result.stderr)
 
     def test_rejects_license_badge_when_the_license_is_not_canonical(self):
         invalid_licenses = {

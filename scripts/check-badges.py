@@ -3,67 +3,70 @@
 
 import argparse
 import hashlib
-import json
 import sys
 from pathlib import Path
 
 
+REPO_URL = "https://github.com/robintra/PerfSentinelHub"
+SONAR_URL = "https://sonarcloud.io"
+SONAR_KEY = "robintrassard_PerfSentinelHub"
 CI_WORKFLOW = ".github/workflows/ci.yml"
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
-SDK_VERSION = "10.0.400"
 LICENSE_SHA256 = "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
 BADGES = {
+    ".NET": (
+        "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com"
+        "%2Frobintra%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version"
+        "&label=.NET&color=512BD4&logo=dotnet&logoColor=white",
+        "https://dotnet.microsoft.com/",
+        "global.json",
+    ),
     "CI": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml",
+        f"{REPO_URL}/actions/workflows/ci.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/ci.yml",
         CI_WORKFLOW,
     ),
-    "Sonar quality": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status",
-        "https://sonarcloud.io/summary/new_code?id=robintrassard_PerfSentinelHub",
-        CI_WORKFLOW,
-    ),
-    "Sonar coverage": (
-        "https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage",
-        "https://sonarcloud.io/component_measures?id=robintrassard_PerfSentinelHub&metric=coverage&view=list",
-        CI_WORKFLOW,
-    ),
-    "CodeQL": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml",
-        ".github/workflows/codeql.yml",
-    ),
-    "Daily audit": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml",
+    "Security Audit": (
+        f"{REPO_URL}/actions/workflows/security-audit.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/security-audit.yml",
         ".github/workflows/security-audit.yml",
     ),
+    "CodeQL": (
+        f"{REPO_URL}/actions/workflows/codeql.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/codeql.yml",
+        ".github/workflows/codeql.yml",
+    ),
+    "Coverage": (
+        f"{SONAR_URL}/api/project_badges/measure?project={SONAR_KEY}&metric=coverage",
+        f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
+        CI_WORKFLOW,
+    ),
+    "Quality Gate": (
+        f"{SONAR_URL}/api/project_badges/measure?project={SONAR_KEY}&metric=alert_status",
+        f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
+        CI_WORKFLOW,
+    ),
     "Release": (
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg",
-        "https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml",
+        f"{REPO_URL}/actions/workflows/release.yml/badge.svg",
+        f"{REPO_URL}/actions/workflows/release.yml",
         RELEASE_WORKFLOW,
     ),
-    "GHCR": (
-        "https://img.shields.io/badge/GHCR-configured-lightgrey",
-        "https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub",
+    "Container image": (
+        "https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white",
+        f"{REPO_URL}/pkgs/container/perf-sentinel-hub",
         RELEASE_WORKFLOW,
     ),
-    "Helm": (
-        "https://img.shields.io/badge/Helm-configured-lightgrey",
-        "https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub",
+    "Helm chart": (
+        "https://img.shields.io/badge/helm-perf--sentinel--hub-0F1689?logo=helm&logoColor=white",
+        f"{REPO_URL}/pkgs/container/charts%2Fperf-sentinel-hub",
         RELEASE_WORKFLOW,
-    ),
-    ".NET": (
-        f"https://img.shields.io/badge/.NET-{SDK_VERSION}-512BD4",
-        "https://github.com/robintra/PerfSentinelHub/blob/main/global.json",
-        "global.json",
     ),
 }
 
-CANONICAL_PREFIX = "# PerfSentinelHub\n\n" + "".join(
-    f"[![{label}]({image})]({destination})\n"
+CANONICAL_PREFIX = "# PerfSentinelHub\n\n" + '<p align="center">\n' + "".join(
+    f'    <a href="{destination}"><img src="{image}" alt="{label}" /></a>\n'
     for label, (image, destination, _) in BADGES.items()
-) + "\n"
+) + "</p>\n\n"
 
 
 def validate(root: Path):
@@ -77,10 +80,6 @@ def validate(root: Path):
         if not (root / evidence).is_file():
             errors.append(f"missing local evidence: {evidence}")
 
-    global_json = json.loads((root / "global.json").read_text(encoding="utf-8"))
-    sdk = global_json.get("sdk") if isinstance(global_json, dict) else None
-    if not isinstance(sdk, dict) or sdk.get("version") != SDK_VERSION:
-        errors.append(".NET badge differs from global.json")
     license_digest = hashlib.sha256((root / "LICENSE").read_bytes()).hexdigest()
     if license_digest != LICENSE_SHA256:
         errors.append("LICENSE differs from canonical AGPL-3.0-only")

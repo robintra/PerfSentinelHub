@@ -47,7 +47,7 @@ def parse_commit_time(value: str) -> int:
     if not 315532800 <= timestamp <= 0xFFFFFFFF:
         raise ValueError(ARCHIVE_RANGE_ERROR)
     try:
-        year = datetime.datetime.fromtimestamp(timestamp, datetime.UTC).year
+        year = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc).year
     except (OverflowError, OSError, ValueError) as error:
         raise ValueError(ARCHIVE_RANGE_ERROR) from error
     if not 1980 <= year <= 2106:

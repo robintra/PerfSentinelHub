@@ -12,7 +12,7 @@ import re
 import ssl
 import sys
 import xml.etree.ElementTree as ElementTree
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 from urllib.error import URLError
@@ -91,13 +91,13 @@ DIGEST_SHAPES = {
     "download": (SHA256, "downloaded tools and containers require a sha256 checksum"),
     "dotnet-sdk": (DOTNET_SHA512, ".NET SDK artifacts require a sha512 checksum"),
 }
-UTC_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+UTC_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def timestamp_from_datetime(value: datetime) -> Decimal:
     if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamp is not timezone-aware")
-    normalized = value.astimezone(timezone.utc)
+    normalized = value.astimezone(UTC)
     delta = normalized.replace(microsecond=0) - UTC_EPOCH
     return Decimal(delta.days * 86400 + delta.seconds) + Decimal(normalized.microsecond).scaleb(-6)
 
@@ -110,7 +110,7 @@ def parse_timestamp(value: object) -> Decimal:
         seconds = timestamp_from_datetime(
             datetime(
                 *(int(match.group(name)) for name in ("year", "month", "day", "hour", "minute", "second")),
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             )
         )
     except ValueError as error:
@@ -129,7 +129,7 @@ def release_time(value: object) -> Decimal:
             return timestamp_from_datetime(
                 datetime(
                     *(int(match.group(name)) for name in ("year", "month", "day")),
-                    tzinfo=timezone.utc,
+                    tzinfo=UTC,
                 )
             )
         except ValueError as error:

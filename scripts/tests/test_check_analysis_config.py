@@ -117,19 +117,18 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
 
     def test_requires_dedicated_gate_app_secret_metadata(self):
         for missing in ("CI_GATE_APP_ID", "CI_GATE_APP_PRIVATE_KEY"):
-            with self.subTest(missing=missing):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    inventory = secret_inventory()
-                    inventory["secrets"] = [
-                        entry for entry in inventory["secrets"] if entry["name"] != missing
-                    ]
-                    write_repository(root, secrets=inventory)
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                inventory = secret_inventory()
+                inventory["secrets"] = [
+                    entry for entry in inventory["secrets"] if entry["name"] != missing
+                ]
+                write_repository(root, secrets=inventory)
 
-                    result = run_checker(root)
+                result = run_checker(root)
 
-                    self.assertEqual(1, result.returncode)
-                    self.assertIn(missing, result.stderr)
+                self.assertEqual(1, result.returncode)
+                self.assertIn(missing, result.stderr)
 
     def test_rejects_missing_sonar_coverage_path_and_source_exclusion(self):
         cases = (
@@ -137,15 +136,14 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
             SONAR.replace("graphify-out/**", "PerfSentinelHub/Api/**"),
         )
         for sonar in cases:
-            with self.subTest(sonar=sonar):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    write_repository(root, sonar=sonar)
+            with self.subTest(sonar=sonar), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_repository(root, sonar=sonar)
 
-                    result = run_checker(root)
+                result = run_checker(root)
 
-                    self.assertEqual(1, result.returncode)
-                    self.assertIn(".github/workflows/ci.yml", result.stderr)
+                self.assertEqual(1, result.returncode)
+                self.assertIn(".github/workflows/ci.yml", result.stderr)
 
     def test_rejects_missing_scanner_arguments(self):
         cases = (
@@ -153,14 +151,13 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
             SONAR.replace("/d:sonar.qualitygate.wait=true ", ""),
         )
         for sonar in cases:
-            with self.subTest(sonar=sonar):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    write_repository(root, sonar=sonar)
+            with self.subTest(sonar=sonar), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_repository(root, sonar=sonar)
 
-                    result = run_checker(root)
+                result = run_checker(root)
 
-                    self.assertEqual(1, result.returncode)
+                self.assertEqual(1, result.returncode)
 
     def test_rejects_workflow_secret_absent_from_inventory_without_echoing_expression(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -200,17 +197,16 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
     def test_requires_exact_integer_secret_inventory_schema_version(self):
         cases = ((True, 1), (1.0, 1), ("1", 1), (1, 0))
         for schema_version, expected_status in cases:
-            with self.subTest(schema_version=schema_version):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    inventory = secret_inventory()
-                    inventory["schema_version"] = schema_version
-                    write_repository(root, secrets=inventory)
+            with self.subTest(schema_version=schema_version), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                inventory = secret_inventory()
+                inventory["schema_version"] = schema_version
+                write_repository(root, secrets=inventory)
 
-                    result = run_checker(root)
+                result = run_checker(root)
 
-                    self.assertEqual(expected_status, result.returncode, result.stderr)
-                    self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(expected_status, result.returncode, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_rejects_field_or_metadata_that_resembles_a_secret_value(self):
         cases = (
@@ -218,15 +214,14 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
             secret_inventory(purpose="Bearer abcdefghijklmnopqrstuvwxyz0123456789"),
         )
         for secrets in cases:
-            with self.subTest(secrets=secrets):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    write_repository(root, secrets=secrets)
+            with self.subTest(secrets=secrets), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_repository(root, secrets=secrets)
 
-                    result = run_checker(root)
+                result = run_checker(root)
 
-                    self.assertEqual(1, result.returncode)
-                    self.assertIn("secret-inventory.json", result.stderr)
+                self.assertEqual(1, result.returncode)
+                self.assertIn("secret-inventory.json", result.stderr)
 
     def test_require_inputs_checks_cobertura_sonarqube_and_test_reports(self):
         with tempfile.TemporaryDirectory() as directory:

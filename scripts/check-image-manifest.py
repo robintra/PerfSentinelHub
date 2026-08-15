@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import io
 import json
-import os
 import re
 import sys
 import tarfile
@@ -266,7 +265,7 @@ def compose_layout(
                     info.uid = info.gid = 0
                     info.mtime = source_date_epoch
                     archive.addfile(info, io.BytesIO(content))
-        os.replace(temporary_name, output)
+        Path(temporary_name).replace(output)
         temporary_name = None
     finally:
         if temporary_name is not None:

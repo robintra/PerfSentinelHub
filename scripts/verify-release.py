@@ -360,7 +360,7 @@ def write_manifest(path: Path, payload):
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        temporary.replace(path)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise

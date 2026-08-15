@@ -55,9 +55,11 @@ class NativePackageTests(unittest.TestCase):
                 self.assertEqual((before.st_dev, before.st_ino, before.st_size), (after.st_dev, after.st_ino, after.st_size))
                 return entries
 
-            with patch.object(packager, "scan_staging", side_effect=scan_then_mutate):
-                with self.assertRaisesRegex(ValueError, "changed during packaging"):
-                    packager.package("osx-arm64", VERSION, int(COMMIT_TIME), publish, output)
+            with (
+                patch.object(packager, "scan_staging", side_effect=scan_then_mutate),
+                self.assertRaisesRegex(ValueError, "changed during packaging"),
+            ):
+                packager.package("osx-arm64", VERSION, int(COMMIT_TIME), publish, output)
 
             for path, content in old_outputs.items():
                 self.assertEqual(content, path.read_bytes())
@@ -221,19 +223,21 @@ class NativePackageTests(unittest.TestCase):
             ("linux-x64", VERSION, "4354819200"),
         )
         for rid, version, commit_time in cases:
-            with self.subTest(rid=rid, version=version, commit_time=commit_time):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    result = self.run_packager(
-                        self.publish_tree(root),
-                        root / "dist",
-                        rid=rid,
-                        version=version,
-                        commit_time=commit_time,
-                    )
-                    self.assertNotEqual(0, result.returncode)
-                    self.assertIn("error:", result.stderr)
-                    self.assertFalse((root / "dist").exists())
+            with (
+                self.subTest(rid=rid, version=version, commit_time=commit_time),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                result = self.run_packager(
+                    self.publish_tree(root),
+                    root / "dist",
+                    rid=rid,
+                    version=version,
+                    commit_time=commit_time,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("error:", result.stderr)
+                self.assertFalse((root / "dist").exists())
 
     def publish_tree(self, root):
         publish = root / "publish"

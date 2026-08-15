@@ -42,7 +42,7 @@ SONAR_SCANNER_ARGUMENTS = (
     "/d:sonar.issue.ignore.multicriteria.sqlbuilder.ruleKey=csharpsquid:S2077",
     "/d:sonar.issue.ignore.multicriteria.sqlbuilder.resourceKey=PerfSentinelHub/Storage/HubDatabase.cs",
     # [0-9] and [A-Za-z0-9_] are ASCII by design: \d and \w also match Unicode digits and
-    # letters, which would let these fail-closed validators accept a tag like v0.١.٠.
+    # letters, which would let these fail-closed validators accept a tag like v0.١.٠.  # noqa: RUF003
     "/d:sonar.issue.ignore.multicriteria.asciiclass.ruleKey=python:S6353",
     '"/d:sonar.issue.ignore.multicriteria.asciiclass.resourceKey=scripts/**"',
     # The base images pin a tag and a digest on purpose: the digest makes them immutable and

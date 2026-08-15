@@ -47,7 +47,7 @@ def parse_commit_time(value: str) -> int:
     if not 315532800 <= timestamp <= 0xFFFFFFFF:
         raise ValueError(ARCHIVE_RANGE_ERROR)
     try:
-        year = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc).year
+        year = datetime.datetime.fromtimestamp(timestamp, datetime.UTC).year
     except (OverflowError, OSError, ValueError) as error:
         raise ValueError(ARCHIVE_RANGE_ERROR) from error
     if not 1980 <= year <= 2106:
@@ -202,24 +202,26 @@ def normalized_mode(entry) -> int:
 
 
 def write_tar(path: Path, entries, commit_time: int) -> None:
-    with path.open("wb") as raw:
-        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=commit_time) as compressed:
-            with tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive:
-                for entry in entries:
-                    _, relative, metadata, _, _ = entry
-                    info = tarfile.TarInfo(relative)
-                    info.size = metadata.st_size
-                    info.mode = normalized_mode(entry)
-                    info.mtime = commit_time
-                    info.uid = info.gid = 0
-                    info.uname = info.gname = ""
-                    with SnapshotReader(entry) as source:
-                        archive.addfile(info, source)
-                        source.verify()
+    with (
+        path.open("wb") as raw,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=commit_time) as compressed,
+        tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive,
+    ):
+        for entry in entries:
+            _, relative, metadata, _, _ = entry
+            info = tarfile.TarInfo(relative)
+            info.size = metadata.st_size
+            info.mode = normalized_mode(entry)
+            info.mtime = commit_time
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            with SnapshotReader(entry) as source:
+                archive.addfile(info, source)
+                source.verify()
 
 
 def write_zip(path: Path, entries, commit_time: int) -> None:
-    moment = datetime.datetime.fromtimestamp(commit_time, datetime.timezone.utc)
+    moment = datetime.datetime.fromtimestamp(commit_time, datetime.UTC)
     timestamp = (moment.year, moment.month, moment.day, moment.hour, moment.minute, moment.second)
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for entry in entries:
@@ -286,8 +288,8 @@ def package(rid: str, version: str, commit_time: int, staging: Path, output: Pat
             temporary_sums = Path(sums_name)
             temporary.append(temporary_sums)
             for source, name in zip(temporary[:2], names, strict=True):
-                os.replace(source, output / name)
-            os.replace(temporary_sums, output / "SHA256SUMS")
+                source.replace(output / name)
+            temporary_sums.replace(output / "SHA256SUMS")
         finally:
             for path in temporary:
                 path.unlink(missing_ok=True)

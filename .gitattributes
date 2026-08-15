@@ -1,0 +1,5 @@
+# The Python under scripts/ is CI and release tooling, not the product, and it outweighs the
+# C# service it validates. Excluding it from Linguist keeps the language breakdown on the
+# shipped code. These files stay first-party, so neither linguist-vendored nor
+# linguist-generated would be true of them.
+scripts/** linguist-detectable=false

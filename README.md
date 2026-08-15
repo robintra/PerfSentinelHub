@@ -8,8 +8,6 @@
     <a href="https://sonarcloud.io/summary/overall?id=robintrassard_PerfSentinelHub"><img src="https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage" alt="Coverage" /></a>
     <a href="https://sonarcloud.io/summary/overall?id=robintrassard_PerfSentinelHub"><img src="https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status" alt="Quality Gate" /></a>
     <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub"><img src="https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white" alt="Container image" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub"><img src="https://img.shields.io/badge/helm-perf--sentinel--hub-0F1689?logo=helm&logoColor=white" alt="Helm chart" /></a>
 </p>
 
 PerfSentinelHub gives IDE plugins one durable endpoint for findings collected from one or more
@@ -17,10 +15,10 @@ PerfSentinelHub gives IDE plugins one durable endpoint for findings collected fr
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 
-CI, the daily audit, CodeQL, coverage, and the quality gate report observed runs. The rest do not.
-The release badge stays empty until the release workflow runs for the first time, and the last two
-name the destinations a release will publish to, so those links answer 404 until it does. No badge
-here should be read as proof of a published package.
+Every badge above reports something observed, except the release one, which stays empty until the
+release workflow runs for the first time. Badges for the container image and the Helm chart are
+deliberately absent: their package pages answer 404 until a release publishes them, and a badge
+that links nowhere is a promise rather than evidence. They come back with the first release.
 
 ## Release contract and maturity
 

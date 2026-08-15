@@ -51,16 +51,6 @@ BADGES = {
         f"{REPO_URL}/actions/workflows/release.yml",
         RELEASE_WORKFLOW,
     ),
-    "Container image": (
-        "https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white",
-        f"{REPO_URL}/pkgs/container/perf-sentinel-hub",
-        RELEASE_WORKFLOW,
-    ),
-    "Helm chart": (
-        "https://img.shields.io/badge/helm-perf--sentinel--hub-0F1689?logo=helm&logoColor=white",
-        f"{REPO_URL}/pkgs/container/charts%2Fperf-sentinel-hub",
-        RELEASE_WORKFLOW,
-    ),
 }
 
 CANONICAL_PREFIX = "# PerfSentinelHub\n\n" + '<p align="center">\n' + "".join(

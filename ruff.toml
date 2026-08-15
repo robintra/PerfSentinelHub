@@ -1,0 +1,14 @@
+# Lint configuration for the repository's own Python tooling under scripts/.
+# SonarCloud already analyses these files, so ruff is a second, different lens:
+# pyflakes, pyupgrade, bugbear and pathlib rules that Sonar does not carry.
+# The action-pins job runs it from the trusted checkout against candidate code,
+# so a fork cannot weaken this file for its own pull request.
+
+target-version = "py312"
+
+[lint]
+select = ["E", "W", "F", "B", "C4", "SIM", "UP", "RET", "ARG", "PTH", "RUF"]
+
+# E501: the validators carry long literal tables, notably the Sonar analysis
+# arguments, which are far more readable on one line than wrapped.
+ignore = ["E501"]

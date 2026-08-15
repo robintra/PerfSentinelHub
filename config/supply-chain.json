@@ -418,6 +418,16 @@
       "reason": "Latest stable Zizmor Linux archive checksum."
     },
     {
+      "name": "ruff",
+      "kind": "download",
+      "version": "0.16.3",
+      "digest_or_sha": "sha256:7ab3b978d2c0b1c96b2323d4e5c4f35284ae1cdf35d2f7399595c74c805f5fa3",
+      "released_at": "2026-08-13T15:18:05Z",
+      "source": "https://github.com/astral-sh/ruff/releases/tag/0.16.3",
+      "artifact_url": "https://github.com/astral-sh/ruff/releases/download/0.16.3/ruff-x86_64-unknown-linux-gnu.tar.gz",
+      "reason": "Latest stable ruff Linux archive checksum."
+    },
+    {
       "name": "actionlint",
       "kind": "download",
       "version": "1.7.12",

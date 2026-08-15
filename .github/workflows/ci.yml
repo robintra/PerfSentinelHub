@@ -534,7 +534,7 @@ jobs:
           path: candidate
           persist-credentials: false
           fetch-depth: 1
-      - name: Validate workflow and locked supply chain
+      - name: Validate workflow, Python tooling, and locked supply chain
         env:
           INTERNAL_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
@@ -545,8 +545,10 @@ jobs:
           /bin/dash "$trusted_root/scripts/download-workflow-tools.sh"
           tar -xzf tools/actionlint.tar.gz -C tools actionlint
           tar -xzf tools/zizmor.tar.gz -C tools zizmor
+          tar -xzf tools/ruff.tar.gz -C tools --strip-components=1 ruff-x86_64-unknown-linux-gnu/ruff
           tools/actionlint -color "$GITHUB_WORKSPACE/candidate/.github/workflows/ci.yml"
           tools/zizmor "$GITHUB_WORKSPACE/candidate/.github/workflows/ci.yml"
+          tools/ruff check --config "$trusted_root/ruff.toml" "$GITHUB_WORKSPACE/candidate/scripts"
           cd "$GITHUB_WORKSPACE/candidate"
           python3 "$trusted_root/scripts/check-supply-chain.py"
 

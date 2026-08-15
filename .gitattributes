@@ -5,3 +5,4 @@
 # true of them.
 scripts/** linguist-detectable=false
 Makefile linguist-detectable=false
+ruff.toml linguist-detectable=false

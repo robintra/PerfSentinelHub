@@ -269,7 +269,7 @@ class CiWorkflowTests(unittest.TestCase):
     def test_security_and_workflow_tools_use_the_canonical_locked_downloaders(self):
         expected = {
             "download-secret-scanners.sh": ("gitleaks_8.30.1", "trufflehog_3.96.0"),
-            "download-workflow-tools.sh": ("actionlint_1.7.12", "zizmor-x86_64"),
+            "download-workflow-tools.sh": ("actionlint_1.7.12", "zizmor-x86_64", "ruff-x86_64"),
         }
         for filename, markers in expected.items():
             with self.subTest(script=filename):

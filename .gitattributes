@@ -1,5 +1,7 @@
-# The Python under scripts/ is CI and release tooling, not the product, and it outweighs the
-# C# service it validates. Excluding it from Linguist keeps the language breakdown on the
-# shipped code. These files stay first-party, so neither linguist-vendored nor
-# linguist-generated would be true of them.
+# Keep the language breakdown on what the project ships. Excluded here is developer tooling
+# only: the CI and release scripts, and the convenience Makefile. The Dockerfile and the Helm
+# chart stay counted, because a release publishes both to GHCR, so they are deliverables.
+# These files stay first-party, so neither linguist-vendored nor linguist-generated would be
+# true of them.
 scripts/** linguist-detectable=false
+Makefile linguist-detectable=false

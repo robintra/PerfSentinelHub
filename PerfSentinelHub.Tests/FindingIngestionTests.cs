@@ -24,6 +24,8 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal("blocking_wait:rider-smoke:checkout:slow-path", finding.Signature);
         Assert.Equal("rider-smoke", finding.Service);
         Assert.Equal("POST /checkout", finding.Endpoint);
+        Assert.Equal(1786183200000L, finding.FirstSeenMs);
+        Assert.Equal(1786183205000L, finding.StoredAtMs);
         Assert.Contains("future_contract_field", finding.EnvelopeJson, StringComparison.Ordinal);
     }
 
@@ -87,6 +89,35 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal(
             2000L,
             await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Upsert_honors_daemon_reported_first_and_last_seen()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        // A realistic poll clock: after the fixture's stored_at_ms, so the
+        // daemon-reported window survives the clamp instead of being cut to it.
+        const long observedAt = 1786190000000;
+
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
+            batch,
+            observedAt,
+            cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            1786183200000L,
+            await ScalarAsync(connection, "SELECT first_seen_ms FROM findings;", cancellationToken));
+        Assert.Equal(
+            1786183205000L,
+            await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
+        Assert.Equal(
+            1786183200000L,
+            await ScalarAsync(connection, "SELECT first_seen_ms FROM finding_sources;", cancellationToken));
     }
 
     [Fact]

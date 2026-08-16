@@ -20,7 +20,9 @@ public sealed record ParsedFinding(
     string TemplateHash,
     string? TraceId,
     string Confidence,
-    int ConfidenceRank);
+    int ConfidenceRank,
+    long? FirstSeenMs,
+    long? StoredAtMs);
 
 // Explicit validation branches keep malformed-input handling auditable.
 // ReSharper disable ConvertIfStatementToSwitchStatement
@@ -127,8 +129,20 @@ public static class FindingParser
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(template))).ToLowerInvariant(),
             traceId,
             confidence,
-            ConfidenceRank(confidence));
+            ConfidenceRank(confidence),
+            TryPositiveInt64(envelope, "first_seen_ms"),
+            TryPositiveInt64(envelope, "stored_at_ms"));
         return true;
+    }
+
+    private static long? TryPositiveInt64(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+               property.ValueKind == JsonValueKind.Number &&
+               property.TryGetInt64(out var value) &&
+               value > 0
+            ? value
+            : null;
     }
 
     private static bool TryString(JsonElement element, string propertyName, out string value)

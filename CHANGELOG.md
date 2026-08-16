@@ -7,3 +7,4 @@ All notable changes to PerfSentinelHub are recorded here.
 ### Added
 
 - Initial NativeAOT Hub release with durable SQLite findings, authenticated push ingestion, recovery polling, retention, and Helm deployment support.
+- `first_seen` and `last_seen` come from the daemon envelope (`first_seen_ms`, `stored_at_ms`) instead of the Hub's poll clock, clamped to the observation time so a daemon clock running ahead cannot mint future observations. A finding's age now reflects when the daemon first detected it, not when the Hub first heard about it.

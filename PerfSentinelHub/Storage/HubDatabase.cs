@@ -362,6 +362,14 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         parameters.Add((parameter, value));
     }
 
+    // Daemon-reported timestamps win over the Hub clock, clamped so a daemon
+    // clock running ahead cannot mint future observations.
+    private static (long FirstSeenMs, long LastSeenMs) SeenWindow(ParsedFinding finding, long observedAtMs)
+    {
+        var lastSeen = Math.Min(finding.StoredAtMs ?? observedAtMs, observedAtMs);
+        return (Math.Min(finding.FirstSeenMs ?? lastSeen, lastSeen), lastSeen);
+    }
+
     private static async Task UpsertFindingAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -369,6 +377,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         long observedAtMs,
         CancellationToken cancellationToken)
     {
+        var (firstSeenMs, lastSeenMs) = SeenWindow(finding, observedAtMs);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -378,7 +387,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               max_confidence, max_confidence_rank)
             VALUES (
               $signature, $finding_json, $service, $finding_type, $severity, $endpoint,
-              $template_hash, $sample_trace_id, $observed_at, $observed_at,
+              $template_hash, $sample_trace_id, $first_seen, $last_seen,
               $confidence, $confidence_rank)
             ON CONFLICT(signature) DO UPDATE SET
               -- Only a newer observation may replace the envelope and its indexed columns:
@@ -412,7 +421,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
         command.Parameters.AddWithValue("$sample_trace_id", (object?)finding.TraceId ?? DBNull.Value);
-        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        command.Parameters.AddWithValue("$first_seen", firstSeenMs);
+        command.Parameters.AddWithValue("$last_seen", lastSeenMs);
         command.Parameters.AddWithValue("$confidence", finding.Confidence);
         command.Parameters.AddWithValue("$confidence_rank", finding.ConfidenceRank);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -426,6 +436,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         long observedAtMs,
         CancellationToken cancellationToken)
     {
+        var (firstSeenMs, lastSeenMs) = SeenWindow(finding, observedAtMs);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -434,7 +445,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               first_seen_ms, last_seen_ms)
             VALUES (
               $signature, $source_id, $source_name, $environment, $producer_version,
-              $observed_at, $observed_at)
+              $first_seen, $last_seen)
             ON CONFLICT(signature, source_id) DO UPDATE SET
               source_name = excluded.source_name,
               environment = excluded.environment,
@@ -447,7 +458,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.Parameters.AddWithValue("$source_name", source.SourceName);
         command.Parameters.AddWithValue("$environment", source.Environment);
         command.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
-        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        command.Parameters.AddWithValue("$first_seen", firstSeenMs);
+        command.Parameters.AddWithValue("$last_seen", lastSeenMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

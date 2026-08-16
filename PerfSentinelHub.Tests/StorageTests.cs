@@ -72,7 +72,7 @@ public sealed class StorageTests
         await database.InitializeAsync(cancellationToken);
         var finding = new ParsedFinding(
             "signature", "{}", "checkout", "slow_sql", "warning", "POST /checkout",
-            "template-hash", "trace", "daemon_production", 4);
+            "template-hash", "trace", "daemon_production", 4, null, null);
 
         Assert.True(await database.TryUpsertBatchAsync(
             new SourceSnapshot("push-only", "Push only", "production", "0.11.3"),

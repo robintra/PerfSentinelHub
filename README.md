@@ -142,7 +142,12 @@ while its daemon pushes successfully.
 - `GET /api/findings/{traceId}` returns findings for a sample trace.
 
 Responses preserve each daemon finding as an opaque, additive JSON document and add durable
-`first_seen`, `last_seen`, `max_confidence`, and source freshness metadata. IDE clients should
+`first_seen`, `last_seen`, `max_confidence`, and source freshness metadata. `first_seen` and
+`last_seen` come from the daemon envelope (`first_seen_ms` and `stored_at_ms`), clamped to the
+Hub's own observation time so a daemon clock running ahead cannot mint future observations, and
+they fall back to the observation time when a producer omits those fields. `first_seen` is per
+signature: a finding whose normalized template changes gets a new signature and therefore a new
+`first_seen`, the Hub records no lineage between the two rows. IDE clients should
 ignore unknown fields, as they do with the daemon API. `/health/live` checks the process;
 `/health/ready` becomes successful after SQLite initialization.
 
@@ -162,12 +167,53 @@ retried with bounded exponential backoff; a later success clears that state. Pol
 limited to 16 MiB, requests have a timeout, imports are transactional, and logs identify only the
 source ID and a stable error code.
 
+## Backup and restore
+
+`first_seen` history is the one thing the Hub stores that nothing upstream can reconstruct: the
+daemon ring buffer forgets, so losing the volume loses the timeline. The binary ships a `backup`
+command that snapshots the live database with SQLite `VACUUM INTO`, safe next to the single
+writer thanks to WAL. It reads `Hub:DatabasePath` from the same configuration as the server and
+refuses to overwrite an existing destination.
+
+```bash
+kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup.db
+```
+
+The runtime image is chiseled, so `kubectl cp` cannot pull the file from the Hub pod directly
+(no tar inside). Mount the same PVC in a short-lived helper pod and copy from there:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hub-backup-fetch
+spec:
+  containers:
+    - name: fetch
+      image: busybox:1.37
+      command: ["sleep", "3600"]
+      volumeMounts: [{ name: data, mountPath: /data }]
+  volumes:
+    - name: data
+      persistentVolumeClaim: { claimName: perf-sentinel-hub }
+EOF
+kubectl cp hub-backup-fetch:/data/hub-backup.db ./hub-backup.db
+kubectl delete pod hub-backup-fetch
+```
+
+Locally, `make backup DB=/path/to/hub.db DEST=backup.db` wraps the same command. Restore by
+replacing the database file while the Hub is stopped: scale the Deployment to zero (the chart
+uses `strategy: Recreate`, so a single replica never overlaps), copy the backup back to
+`/data/hub.db`, delete any stale `hub.db-wal` and `hub.db-shm` next to it, and scale back up.
+
 ## Deliberate exclusions
 
 The current codebase has no ingress, user authentication, CI/SARIF import, worker execution, trace
-backend, dashboard, acknowledgment writer, or remote backup. Network exposure and authentication
-belong in the next independent design; acknowledgments remain in the repository consumed by
-perf-sentinel.
+backend, dashboard, acknowledgment writer, or remote backup (the local `backup` command snapshots
+the database, shipping the file off the cluster on a schedule stays the operator's job). Network
+exposure and authentication belong in the next independent design; acknowledgments remain in the
+repository consumed by perf-sentinel.
 
 ## Development
 

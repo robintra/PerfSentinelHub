@@ -8,7 +8,9 @@ kind: Deployment
 metadata:
   name: {{ include "perf-sentinel-hub.name" . }}
 spec:
-  replicas: 1
+  # values.schema.json pins replicaCount to 1: SQLite has a single writer and
+  # the PVC is ReadWriteOnce, so this stays a knob in name only.
+  replicas: {{ .Values.replicaCount }}
   strategy: { type: Recreate }
   selector:
     matchLabels:

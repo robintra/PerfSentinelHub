@@ -4,7 +4,7 @@ override COVERAGE_DIR := artifacts/coverage
 override COVERAGE_REPORT := $(COVERAGE_DIR)/coverage.cobertura.xml
 override SONAR_DIR := artifacts/sonar
 
-.PHONY: tool-restore restore format build coverage coverage-check analysis-config-check badge-check security-exceptions security sonar-prepare python-tests test publish package-native audit image image-scan helm-lint helm-template release-check verify-fast verify
+.PHONY: tool-restore restore format build coverage coverage-check analysis-config-check badge-check security-exceptions security sonar-prepare python-tests test publish package-native audit backup image image-scan helm-lint helm-template release-check verify-fast verify
 
 tool-restore:
 	dotnet tool restore
@@ -63,6 +63,10 @@ package-native:
 audit: restore
 	dotnet package list --project PerfSentinelHub.sln --vulnerable --include-transitive --format json --no-restore > /tmp/perf-sentinel-hub-vulnerabilities.json
 	python3 -c 'import json,sys; d=json.load(open("/tmp/perf-sentinel-hub-vulnerabilities.json")); v=[x for p in d.get("projects",[]) for f in p.get("frameworks",[]) for k in ("topLevelPackages","transitivePackages") for x in f.get(k,[]) if x.get("vulnerabilities")]; sys.exit(bool(v))'
+
+backup:
+	@test -n "$(DEST)" || { echo "DEST is required (backup file to create)" >&2; exit 2; }
+	Hub__DatabasePath="$${DB:-/data/hub.db}" dotnet run --project PerfSentinelHub/PerfSentinelHub.csproj -- backup "$(DEST)"
 
 image:
 	docker build --platform linux/$${TARGETARCH:-arm64} -t perf-sentinel-hub:$${TAG:-local} .

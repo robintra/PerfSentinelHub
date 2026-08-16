@@ -7,6 +7,17 @@ using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
+if (args is ["backup", var backupDestination])
+{
+    // Reads the same appsettings + environment sources as the server, so the
+    // configured Hub:DatabasePath applies without booting listeners or workers.
+    var backupConfiguration = WebApplication.CreateSlimBuilder().Configuration;
+    return await HubBackup.RunAsync(
+        backupConfiguration[$"{HubOptions.SectionName}:{nameof(HubOptions.DatabasePath)}"]
+            ?? new HubOptions().DatabasePath,
+        backupDestination);
+}
+
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -37,6 +48,7 @@ await app.Services.GetRequiredService<HubDatabase>()
 app.MapHubApi();
 
 await app.RunAsync();
+return 0;
 
 // Exposed for WebApplicationFactory<Program> integration tests.
 // ReSharper disable once ClassNeverInstantiated.Global

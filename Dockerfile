@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.400-noble-aot@sha256:74edbceabfc6d1a7e4a5764be034fd744a07f60d26703232e74f6a5edc04e8ba AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.400-noble-aot@sha256:2ef30f119199e148cb35fd954ca61eddcf02f2996059f782899d318451ff4967 AS build
 ARG TARGETARCH
 ARG VERSION=0.1.0
 ARG SOURCE_DATE_EPOCH

@@ -140,10 +140,10 @@
     {
       "name": "docker/setup-buildx-action",
       "kind": "github-action",
-      "version": "4.2.0",
-      "digest_or_sha": "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c",
-      "released_at": "2026-07-02T09:23:15Z",
-      "source": "https://github.com/docker/setup-buildx-action/releases/tag/v4.2.0",
+      "version": "4.3.0",
+      "digest_or_sha": "37fe631027851001ddb9b187196cc803df7f5f0e",
+      "released_at": "2026-08-19T09:41:47Z",
+      "source": "https://github.com/docker/setup-buildx-action/releases/tag/v4.3.0",
       "reason": "Latest stable Docker Buildx setup action, pinned to its release commit."
     },
     {
@@ -194,10 +194,10 @@
     {
       "name": "step-security/harden-runner",
       "kind": "github-action",
-      "version": "2.20.1",
-      "digest_or_sha": "b09bb98e06d4d774595224525879c09bc6e98c40",
-      "released_at": "2026-08-05T05:52:30Z",
-      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.20.1",
+      "version": "2.21.0",
+      "digest_or_sha": "05e31511f85b41b11d1cf0ef85d0992719546e2c",
+      "released_at": "2026-08-15T05:52:25Z",
+      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.21.0",
       "reason": "Latest stable Harden-Runner release."
     },
     {
@@ -266,10 +266,10 @@
     {
       "name": "github/codeql-action",
       "kind": "github-action",
-      "version": "4.37.6",
-      "digest_or_sha": "5595ccaf912efad79be6eef63a5619ff05969be3",
-      "released_at": "2026-08-04T13:34:40Z",
-      "source": "https://github.com/github/codeql-action/releases/tag/v4.37.6",
+      "version": "4.37.8",
+      "digest_or_sha": "db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28",
+      "released_at": "2026-08-21T12:25:47Z",
+      "source": "https://github.com/github/codeql-action/releases/tag/v4.37.8",
       "reason": "Latest stable CodeQL action release."
     },
     {
@@ -285,8 +285,8 @@
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
       "version": "10.0.400-noble-aot",
-      "digest_or_sha": "sha256:74edbceabfc6d1a7e4a5764be034fd744a07f60d26703232e74f6a5edc04e8ba",
-      "released_at": "2026-08-11",
+      "digest_or_sha": "sha256:2ef30f119199e148cb35fd954ca61eddcf02f2996059f782899d318451ff4967",
+      "released_at": "2026-08-17",
       "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.400-noble-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
     },

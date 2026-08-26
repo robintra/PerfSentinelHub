@@ -298,7 +298,7 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertEqual(ALL_JOBS, names)
 
     def test_every_job_has_explicit_permissions_timeout_and_hardening_first(self):
-        harden_sha = "b09bb98e06d4d774595224525879c09bc6e98c40"
+        harden_sha = "05e31511f85b41b11d1cf0ef85d0992719546e2c"
         for name in ALL_JOBS:
             with self.subTest(job=name):
                 body = job_body(name)

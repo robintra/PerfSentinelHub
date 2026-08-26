@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -178,6 +179,180 @@ public sealed class FindingIngestionTests : IDisposable
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal(0L, await ScalarAsync(reopened, "SELECT COUNT(*) FROM findings;", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Upsert_links_a_template_mutation_to_its_lone_predecessor()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        await database.UpsertBatchAsync(source, batch, 1000, cancellationToken);
+
+        var mutated = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:mutated-path",
+            TemplateHash = "mutated-template-hash",
+        };
+        await database.UpsertBatchAsync(source, new ParsedBatch([mutated], 0), 2000, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(1L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_lineage;", cancellationToken));
+        Assert.Equal(
+            batch.Findings[0].Signature,
+            await TextScalarAsync(connection, "SELECT predecessor_signature FROM finding_lineage;", cancellationToken));
+        Assert.Equal(
+            1000L,
+            await ScalarAsync(connection, "SELECT predecessor_first_seen_ms FROM finding_lineage;", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Upsert_does_not_guess_between_two_lineage_candidates()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        var second = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:other-path",
+            TemplateHash = "other-template-hash",
+        };
+        // Same batch: two current problems on the endpoint, never a mutation.
+        await database.UpsertBatchAsync(
+            source, new ParsedBatch([batch.Findings[0], second], 0), 1000, cancellationToken);
+
+        var mutated = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:mutated-path",
+            TemplateHash = "mutated-template-hash",
+        };
+        await database.UpsertBatchAsync(source, new ParsedBatch([mutated], 0), 2000, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(0L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_lineage;", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Query_walks_the_lineage_chain_to_the_original_first_seen()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        await database.UpsertBatchAsync(source, batch, 1000, cancellationToken);
+        var second = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:v2",
+            TemplateHash = "hash-v2",
+        };
+        await database.UpsertBatchAsync(source, new ParsedBatch([second], 0), 2000, cancellationToken);
+        var third = second with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:v3",
+            TemplateHash = "hash-v3",
+        };
+        await database.UpsertBatchAsync(source, new ParsedBatch([third], 0), 3000, cancellationToken);
+
+        var rows = await database.QueryFindingsAsync(
+            new PerfSentinelHub.Api.FindingQuery(null, null, null, 100), cancellationToken);
+
+        // v2 replaced v1, so only v3 keeps a live predecessor chain of 2.
+        var successor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
+        Assert.NotNull(successor.Lineage);
+        Assert.Equal(2, successor.Lineage!.Predecessors);
+        Assert.Equal(1000L, successor.Lineage.OriginalFirstSeenMs);
+    }
+
+    [Fact]
+    public async Task Status_derives_from_heartbeats_and_source_reachability()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_786_190_000_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            clock);
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        var query = new PerfSentinelHub.Api.FindingQuery(null, null, null, 100);
+
+        var seededAt = clock.GetUtcNow().ToUnixTimeMilliseconds();
+        await database.UpsertBatchAsync(source, batch, seededAt, cancellationToken);
+        var seeded = Assert.Single(await database.QueryFindingsAsync(query, cancellationToken));
+        Assert.Equal("active", seeded.Status);
+
+        // Past the grace with a silent endpoint: nothing proves anything.
+        clock.Advance(TimeSpan.FromDays(8));
+        var quiet = Assert.Single(await database.QueryFindingsAsync(query, cancellationToken));
+        Assert.Equal("not_observed", quiet.Status);
+
+        // The endpoint heartbeats again through another finding while the
+        // old one stays silent: presumably fixed.
+        var other = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:other",
+            TemplateHash = "other-hash",
+        };
+        await database.UpsertBatchAsync(
+            source,
+            new ParsedBatch([other], 0),
+            clock.GetUtcNow().ToUnixTimeMilliseconds(),
+            cancellationToken);
+        var rows = await database.QueryFindingsAsync(query, cancellationToken);
+        Assert.Equal(
+            "likely_resolved",
+            Assert.Single(rows, row => row.Signature == batch.Findings[0].Signature).Status);
+
+        // An unreachable source withdraws the presumption.
+        await database.MarkSourceFailureAsync(
+            "production-a",
+            clock.GetUtcNow().ToUnixTimeMilliseconds(),
+            "timeout",
+            cancellationToken);
+        rows = await database.QueryFindingsAsync(query, cancellationToken);
+        Assert.Equal(
+            "not_observed",
+            Assert.Single(rows, row => row.Signature == batch.Findings[0].Signature).Status);
+    }
+
+    [Fact]
+    public async Task Status_filter_applies_before_the_page_limit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_786_190_000_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            clock);
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        await database.UpsertBatchAsync(
+            source, batch, clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
+        clock.Advance(TimeSpan.FromDays(8));
+        var fresh = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:fresh",
+            TemplateHash = "fresh-hash",
+        };
+        await database.UpsertBatchAsync(
+            source,
+            new ParsedBatch([fresh], 0),
+            clock.GetUtcNow().ToUnixTimeMilliseconds(),
+            cancellationToken);
+
+        var active = await database.QueryFindingsAsync(
+            new PerfSentinelHub.Api.FindingQuery(null, null, null, 1, Status: "active"), cancellationToken);
+        Assert.Equal("blocking_wait:rider-smoke:checkout:fresh", Assert.Single(active).Signature);
+
+        var resolved = await database.QueryFindingsAsync(
+            new PerfSentinelHub.Api.FindingQuery(null, null, null, 1, Status: "likely_resolved"),
+            cancellationToken);
+        Assert.Equal(batch.Findings[0].Signature, Assert.Single(resolved).Signature);
     }
 
     private HubDatabase CreateDatabase() => new(

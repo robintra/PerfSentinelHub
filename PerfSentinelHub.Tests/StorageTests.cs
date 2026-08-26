@@ -9,7 +9,7 @@ namespace PerfSentinelHub.Tests;
 public sealed class StorageTests
 {
     [Fact]
-    public async Task Initialize_is_idempotent_and_creates_the_v1_schema()
+    public async Task Initialize_is_idempotent_and_creates_the_schema()
     {
         using var fixture = TestDatabase.Create();
         var database = fixture.Database;
@@ -31,7 +31,7 @@ public sealed class StorageTests
         while (await reader.ReadAsync(cancellationToken))
             names.Add(reader.GetString(0));
         Assert.Equal(
-            ["endpoint_heartbeats", "finding_sources", "findings", "schema_migrations", "source_state"],
+            ["endpoint_heartbeats", "finding_lineage", "finding_sources", "findings", "schema_migrations", "source_state"],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);
     }

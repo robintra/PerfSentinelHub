@@ -50,4 +50,21 @@ internal static class Schema
           PRIMARY KEY(source_id, service, endpoint)
         );
         """;
+
+    // Lineage between a finding and the one it most likely mutated from: same
+    // service, detector and endpoint, different template hash. The predecessor's
+    // first_seen is copied at link time so the chain's origin survives the
+    // predecessor's retention purge; the successor's row cascades away with it.
+    internal const string V2 = """
+        CREATE TABLE IF NOT EXISTS finding_lineage (
+          successor_signature TEXT NOT NULL REFERENCES findings(signature) ON DELETE CASCADE,
+          predecessor_signature TEXT NOT NULL,
+          predecessor_first_seen_ms INTEGER NOT NULL,
+          linked_at_ms INTEGER NOT NULL,
+          method TEXT NOT NULL,
+          PRIMARY KEY(successor_signature, predecessor_signature)
+        );
+        CREATE INDEX IF NOT EXISTS ix_lineage_predecessor
+          ON finding_lineage(predecessor_signature);
+        """;
 }

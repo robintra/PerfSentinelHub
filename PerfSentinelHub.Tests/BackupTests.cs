@@ -60,9 +60,25 @@ public sealed class BackupTests : IDisposable
         Assert.False(File.Exists(_backupPath));
     }
 
+    [Fact]
+    public async Task Backup_reports_a_failed_vacuum_and_leaves_no_partial_file()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await SeedDatabaseAsync(cancellationToken);
+        var unreachable = Path.Combine(
+            Path.GetTempPath(),
+            $"perf-sentinel-hub-no-such-dir-{Guid.NewGuid():N}",
+            "backup.db");
+
+        var exitCode = await HubBackup.RunAsync(_databasePath, unreachable, cancellationToken);
+
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(unreachable));
+    }
+
     private async Task SeedDatabaseAsync(CancellationToken cancellationToken)
     {
-        var database = new HubDatabase(
+        using var database = new HubDatabase(
             Options.Create(new HubOptions { DatabasePath = _databasePath }),
             TimeProvider.System);
         await database.InitializeAsync(cancellationToken);

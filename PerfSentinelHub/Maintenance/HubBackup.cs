@@ -30,30 +30,42 @@ public static class HubBackup
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadOnly
         }.ToString();
-        await using var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using (var pragma = connection.CreateCommand())
-        {
-            pragma.CommandText = "PRAGMA busy_timeout = 5000;";
-            await pragma.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await using var vacuum = connection.CreateCommand();
-        // VACUUM INTO accepts any expression, so the destination binds as a
-        // parameter and needs no escaping.
-        vacuum.CommandText = "VACUUM INTO $destination;";
-        vacuum.Parameters.AddWithValue("$destination", destinationPath);
         try
         {
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var vacuum = connection.CreateCommand();
+            // VACUUM INTO accepts any expression, so the destination binds as
+            // a parameter and needs no escaping. Busy retries ride the
+            // provider's CommandTimeout (30 s default).
+            vacuum.CommandText = "VACUUM INTO $destination;";
+            vacuum.Parameters.AddWithValue("$destination", destinationPath);
             await vacuum.ExecuteNonQueryAsync(cancellationToken);
         }
         catch (SqliteException exception)
         {
             Console.Error.WriteLine($"Backup failed: {exception.Message}");
+            // SQLite never unlinks a partial output, and a leftover would
+            // make the overwrite guard refuse every retry at this path.
+            TryDeletePartial(destinationPath);
             return 1;
         }
 
         Console.WriteLine($"Backup written to '{destinationPath}'.");
         return 0;
+    }
+
+    private static void TryDeletePartial(string destinationPath)
+    {
+        try
+        {
+            File.Delete(destinationPath);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 }

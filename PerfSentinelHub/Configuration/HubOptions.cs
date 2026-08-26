@@ -11,6 +11,10 @@ public sealed record HubOptions
     public TimeSpan HttpTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public int MaxConcurrentPolls { get; set; } = 4;
     public TimeSpan Retention { get; set; } = TimeSpan.FromDays(180);
+    // Window behind the per-finding status: seen within it = active; older,
+    // with the endpoint still heartbeating from a reachable source =
+    // likely_resolved; anything else = not_observed.
+    public TimeSpan ResolutionGrace { get; set; } = TimeSpan.FromDays(7);
     public int DefaultReadLimit { get; set; } = 1000;
     public int MaxReadLimit { get; set; } = 10_000;
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
@@ -59,6 +63,8 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:HttpTimeout must be positive.");
         if (options.Retention <= TimeSpan.Zero)
             errors.Add("Hub:Retention must be positive.");
+        if (options.ResolutionGrace <= TimeSpan.Zero || options.ResolutionGrace >= options.Retention)
+            errors.Add("Hub:ResolutionGrace must be positive and below Hub:Retention.");
         if (options.MaxConcurrentPolls is < 1 or > 32)
             errors.Add("Hub:MaxConcurrentPolls must be between 1 and 32.");
         if (options.MaxReadLimit is < 1 or > 10_000)

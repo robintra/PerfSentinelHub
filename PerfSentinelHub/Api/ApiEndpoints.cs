@@ -149,12 +149,17 @@ public static partial class ApiEndpoints
             !bool.TryParse(rawIncludeAcked[0], out includeAcked))
             return false;
 
+        var status = ReadOptional(request, "status");
+        if (status is not null and not ("active" or "likely_resolved" or "not_observed"))
+            return false;
+
         query = new FindingQuery(
             ReadOptional(request, "service"),
             ReadOptional(request, "finding_type"),
             ReadOptional(request, "severity"),
             limit,
-            includeAcked);
+            includeAcked,
+            status);
         return true;
     }
 

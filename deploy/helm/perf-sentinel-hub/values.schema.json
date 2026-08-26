@@ -15,12 +15,13 @@
     },
     "hub": {
       "type": "object",
-      "required": ["pollInterval", "httpTimeout", "maxConcurrentPolls", "retention", "defaultReadLimit", "maxReadLimit"],
+      "required": ["pollInterval", "httpTimeout", "maxConcurrentPolls", "retention", "resolutionGrace", "defaultReadLimit", "maxReadLimit"],
       "properties": {
         "pollInterval": { "type": "string", "minLength": 1 },
         "httpTimeout": { "type": "string", "minLength": 1 },
         "maxConcurrentPolls": { "type": "integer", "minimum": 1, "maximum": 32 },
         "retention": { "type": "string", "minLength": 1 },
+        "resolutionGrace": { "type": "string", "minLength": 1 },
         "defaultReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
         "maxReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 }
       }

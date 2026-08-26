@@ -27,11 +27,29 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal(2, envelope.GetProperty("sources").GetArrayLength());
     }
 
+    [Fact]
+    public async Task Every_envelope_carries_a_derived_status()
+    {
+        await SeedAsync();
+        using var response = await _client.GetAsync(
+            "/api/findings?service=rider-smoke",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        var envelope = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Contains(
+            envelope.GetProperty("status").GetString(),
+            new[] { "active", "likely_resolved", "not_observed" });
+    }
+
     [Theory]
     [InlineData("/api/findings?limit=0")]
     [InlineData("/api/findings?limit=10001")]
     [InlineData("/api/findings?service=a&service=b")]
     [InlineData("/api/findings?service=%FF")]
+    [InlineData("/api/findings?status=resolved")]
     public async Task Invalid_query_is_rejected(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);

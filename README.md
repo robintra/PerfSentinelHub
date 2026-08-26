@@ -107,6 +107,7 @@ and `sources`.
 | `Hub:HttpTimeout` | `00:00:10` | Positive duration |
 | `Hub:MaxConcurrentPolls` | `4` | 1–32 |
 | `Hub:Retention` | `180.00:00:00` (180 days) | Positive duration |
+| `Hub:ResolutionGrace` | `7.00:00:00` (7 days) | Positive, below `Retention` |
 | `Hub:DefaultReadLimit` | `1000` | 1–`MaxReadLimit` |
 | `Hub:MaxReadLimit` | `10000` | 1–10000 |
 | `Hub:Sources` | none | At least one source |
@@ -136,22 +137,41 @@ while its daemon pushes successfully.
 ## Read API
 
 - `GET /api/status` reports the Hub service and version.
-- `GET /api/findings` accepts `service`, `finding_type`, `severity`, `limit`, and the
+- `GET /api/findings` accepts `service`, `finding_type`, `severity`, `limit`, `status`, and the
   daemon-compatible `include_acked` query parameter. `include_acked` defaults to `true`;
   `include_acked=false` hides envelopes carrying a non-null `acknowledged_by`.
 - `GET /api/findings/{traceId}` returns findings for a sample trace.
 
 Responses preserve each daemon finding as an opaque, additive JSON document and add durable
-`first_seen`, `last_seen`, `max_confidence`, and source freshness metadata. `first_seen` comes
+`first_seen`, `last_seen`, `max_confidence`, `status`, optional `lineage`, and source freshness
+metadata. `first_seen` comes
 from the daemon envelope (`first_seen_ms`), clamped to the Hub's observation time and to a
 Unix-ms sanity floor, so neither a daemon clock running ahead nor a seconds-unit bug can distort
 it, and it falls back to the observation time when a producer omits the field. `last_seen` is
 deliberately the Hub's own observation clock: retention, ordering and freshness comparisons rely
-on it, so it never comes from a remote clock. `first_seen` is per signature: a finding whose
-normalized template changes gets a new signature and therefore a new `first_seen`, the Hub
-records no lineage between the two rows. IDE clients should ignore unknown fields, as they do
+on it, so it never comes from a remote clock. IDE clients should ignore unknown fields, as they do
 with the daemon API. `/health/live` checks the process; `/health/ready` becomes successful after
 SQLite initialization.
+
+`status` is derived at read time, never stored, from data the Hub already keeps: `active` while
+the finding was seen within the resolution grace (`Hub:ResolutionGrace`, default 7 days),
+`likely_resolved` when the finding went quiet but its endpoint still heartbeats from a reachable
+source past the grace, and `not_observed` when nothing proves anything, a silent endpoint or an
+unreachable fleet included. It is a presumption, not a verdict: a finding leaving by retention
+still leaves silently, but a reader can now tell "the endpoint runs without the finding" apart
+from "nobody is looking". `?status=<value>` filters, and the filter applies before the page
+limit.
+
+`first_seen` is per signature: a finding whose normalized template changes gets a new signature
+and therefore a new `first_seen`. Since schema v2 the Hub links such a mutation to its
+predecessor at import time, when exactly one stored finding shares the service, detector and
+endpoint with a different template hash, was seen within the last 30 days and strictly before
+the incoming batch, and is not itself already superseded. Ambiguity records nothing: naming one
+of several candidates would be a guess. A linked finding's envelope carries a `lineage` object
+with `original_first_seen` (the earliest birth along the chain, copied at link time so it
+survives the predecessors' retention purge) and `predecessors` (the chain length). The heuristic
+is conservative and non-destructive: the two rows stay separate findings, and the predecessor
+ages out through normal retention.
 
 ## Freshness and recovery
 

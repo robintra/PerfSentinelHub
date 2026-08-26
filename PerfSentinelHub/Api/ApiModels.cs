@@ -9,4 +9,5 @@ public sealed record FindingQuery(
     string? FindingType,
     string? Severity,
     int Limit,
-    bool IncludeAcked = true);
+    bool IncludeAcked = true,
+    string? Status = null);

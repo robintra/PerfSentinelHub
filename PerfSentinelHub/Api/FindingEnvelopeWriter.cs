@@ -23,7 +23,8 @@ public static class FindingEnvelopeWriter
             // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var property in document.RootElement.EnumerateObject())
             {
-                if (property.Name is "first_seen" or "last_seen" or "max_confidence" or "sources")
+                if (property.Name is "first_seen" or "last_seen" or "max_confidence" or "sources"
+                    or "status" or "lineage")
                     continue;
 
                 property.WriteTo(writer);
@@ -32,6 +33,17 @@ public static class FindingEnvelopeWriter
             writer.WriteNumber("first_seen", row.FirstSeenMs);
             writer.WriteNumber("last_seen", row.LastSeenMs);
             writer.WriteString("max_confidence", row.MaxConfidence);
+            // Derived, never stored: active within the grace window,
+            // likely_resolved when the endpoint still heartbeats from a
+            // reachable source without the finding, not_observed otherwise.
+            writer.WriteString("status", row.Status);
+            if (row.Lineage is { } lineage)
+            {
+                writer.WriteStartObject("lineage");
+                writer.WriteNumber("original_first_seen", lineage.OriginalFirstSeenMs);
+                writer.WriteNumber("predecessors", lineage.Predecessors);
+                writer.WriteEndObject();
+            }
             writer.WriteStartArray("sources");
             foreach (var source in row.Sources.OrderBy(item => item.SourceId, StringComparer.Ordinal))
             {

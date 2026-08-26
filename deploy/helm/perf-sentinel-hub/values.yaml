@@ -7,6 +7,7 @@ hub:
   httpTimeout: "00:00:10"
   maxConcurrentPolls: 4
   retention: "180.00:00:00"
+  resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000
   maxReadLimit: 10000
 sources: []

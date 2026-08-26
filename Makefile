@@ -2,6 +2,7 @@ NATIVE_RIDS := linux-x64 linux-arm64 osx-arm64 win-x64
 OUTPUT ?= dist
 override COVERAGE_DIR := artifacts/coverage
 override COVERAGE_REPORT := $(COVERAGE_DIR)/coverage.cobertura.xml
+override COVERAGE_RAW := $(COVERAGE_DIR)/raw.cobertura.xml
 override SONAR_DIR := artifacts/sonar
 
 .PHONY: tool-restore restore format build coverage coverage-check analysis-config-check badge-check security-exceptions security sonar-prepare python-tests test publish package-native audit backup image image-scan helm-lint helm-template release-check verify-fast verify
@@ -18,12 +19,14 @@ format: restore
 build: restore
 	dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
 
-coverage: build
+coverage: tool-restore build
 	rm -rf "$(COVERAGE_DIR)" TestResults
 	mkdir -p "$(COVERAGE_DIR)"
-	dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$(CURDIR)/$(COVERAGE_REPORT)" --report-trx --report-trx-filename tests.trx
-	@test -f "$(COVERAGE_REPORT)" || { echo "expected a Cobertura report at $(COVERAGE_REPORT)" >&2; exit 1; }
-	@python3 -c "import pathlib; p=pathlib.Path('$(COVERAGE_REPORT)'); p.write_text(p.read_text('utf-8-sig'), 'utf-8')"
+	dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$(CURDIR)/$(COVERAGE_RAW)" --report-trx --report-trx-filename tests.trx
+	@test -f "$(COVERAGE_RAW)" || { echo "expected a Cobertura report at $(COVERAGE_RAW)" >&2; exit 1; }
+	dotnet tool run reportgenerator -- -reports:"$(COVERAGE_RAW)" -targetdir:"$(COVERAGE_DIR)" -reporttypes:Cobertura "-filefilters:-**/obj/**"
+	python3 scripts/normalize-coverage.py "$(COVERAGE_DIR)/Cobertura.xml" "$(COVERAGE_REPORT)"
+	rm -f "$(COVERAGE_DIR)/Cobertura.xml" "$(COVERAGE_RAW)"
 	mv TestResults/tests.trx "$(COVERAGE_DIR)/tests.trx"
 
 coverage-check: coverage

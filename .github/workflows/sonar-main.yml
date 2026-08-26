@@ -45,9 +45,11 @@ jobs:
         run: |
           rm -rf artifacts/coverage TestResults
           mkdir -p artifacts/coverage
-          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/artifacts/coverage/coverage.cobertura.xml" --report-trx --report-trx-filename tests.trx
-          test -f artifacts/coverage/coverage.cobertura.xml
-          python3 -c "import pathlib; p=pathlib.Path('artifacts/coverage/coverage.cobertura.xml'); p.write_text(p.read_text('utf-8-sig'), 'utf-8')"
+          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/artifacts/coverage/raw.cobertura.xml" --report-trx --report-trx-filename tests.trx
+          test -f artifacts/coverage/raw.cobertura.xml
+          dotnet tool run reportgenerator -- -reports:artifacts/coverage/raw.cobertura.xml -targetdir:artifacts/coverage -reporttypes:Cobertura "-filefilters:-**/obj/**"
+          python3 scripts/normalize-coverage.py artifacts/coverage/Cobertura.xml artifacts/coverage/coverage.cobertura.xml
+          rm -f artifacts/coverage/Cobertura.xml artifacts/coverage/raw.cobertura.xml
           mv TestResults/tests.trx artifacts/coverage/tests.trx
       - name: Prepare locked Sonar inputs
         run: |

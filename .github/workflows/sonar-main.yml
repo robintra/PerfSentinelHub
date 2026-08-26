@@ -43,13 +43,12 @@ jobs:
         run: dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
       - name: Run the covered suites
         run: |
-          rm -rf artifacts/coverage
+          rm -rf artifacts/coverage TestResults
           mkdir -p artifacts/coverage
-          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --filter "FullyQualifiedName~ConfigurationTests|FullyQualifiedName~FindingIngestionTests|FullyQualifiedName~FindingsApiTests|FullyQualifiedName~ImportApiTests|FullyQualifiedName~PollingTests|FullyQualifiedName~StatusTests|FullyQualifiedName~StorageTests|FullyQualifiedName~WorkerAndRetentionTests" --collect:"XPlat Code Coverage" --logger:"trx;LogFileName=tests.trx" --results-directory artifacts/coverage
-          set -- artifacts/coverage/*/coverage.cobertura.xml
-          test "$#" -eq 1
-          test -f "$1"
-          mv "$1" artifacts/coverage/coverage.cobertura.xml
+          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/artifacts/coverage/coverage.cobertura.xml" --report-trx --report-trx-filename tests.trx
+          test -f artifacts/coverage/coverage.cobertura.xml
+          python3 -c "import pathlib; p=pathlib.Path('artifacts/coverage/coverage.cobertura.xml'); p.write_text(p.read_text('utf-8-sig'), 'utf-8')"
+          mv TestResults/tests.trx artifacts/coverage/tests.trx
       - name: Prepare locked Sonar inputs
         run: |
           rm -rf artifacts/sonar

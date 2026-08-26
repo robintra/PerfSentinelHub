@@ -142,14 +142,16 @@ while its daemon pushes successfully.
 - `GET /api/findings/{traceId}` returns findings for a sample trace.
 
 Responses preserve each daemon finding as an opaque, additive JSON document and add durable
-`first_seen`, `last_seen`, `max_confidence`, and source freshness metadata. `first_seen` and
-`last_seen` come from the daemon envelope (`first_seen_ms` and `stored_at_ms`), clamped to the
-Hub's own observation time so a daemon clock running ahead cannot mint future observations, and
-they fall back to the observation time when a producer omits those fields. `first_seen` is per
-signature: a finding whose normalized template changes gets a new signature and therefore a new
-`first_seen`, the Hub records no lineage between the two rows. IDE clients should
-ignore unknown fields, as they do with the daemon API. `/health/live` checks the process;
-`/health/ready` becomes successful after SQLite initialization.
+`first_seen`, `last_seen`, `max_confidence`, and source freshness metadata. `first_seen` comes
+from the daemon envelope (`first_seen_ms`), clamped to the Hub's observation time and to a
+Unix-ms sanity floor, so neither a daemon clock running ahead nor a seconds-unit bug can distort
+it, and it falls back to the observation time when a producer omits the field. `last_seen` is
+deliberately the Hub's own observation clock: retention, ordering and freshness comparisons rely
+on it, so it never comes from a remote clock. `first_seen` is per signature: a finding whose
+normalized template changes gets a new signature and therefore a new `first_seen`, the Hub
+records no lineage between the two rows. IDE clients should ignore unknown fields, as they do
+with the daemon API. `/health/live` checks the process; `/health/ready` becomes successful after
+SQLite initialization.
 
 ## Freshness and recovery
 
@@ -172,40 +174,61 @@ source ID and a stable error code.
 `first_seen` history is the one thing the Hub stores that nothing upstream can reconstruct: the
 daemon ring buffer forgets, so losing the volume loses the timeline. The binary ships a `backup`
 command that snapshots the live database with SQLite `VACUUM INTO`, safe next to the single
-writer thanks to WAL. It reads `Hub:DatabasePath` from the same configuration as the server and
-refuses to overwrite an existing destination.
+writer thanks to WAL. It reads `Hub:DatabasePath` from the same configuration as the server,
+refuses to overwrite an existing destination, and removes its partial file when the copy fails.
+The snapshot is a full copy written onto the same volume, so keep at least the database's own
+size free on the PVC (the chart default is 1Gi total) before starting one.
 
 ```bash
-kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup.db
+kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db
 ```
 
-The runtime image is chiseled, so `kubectl cp` cannot pull the file from the Hub pod directly
-(no tar inside). Mount the same PVC in a short-lived helper pod and copy from there:
+Date the filename: the overwrite guard makes a fixed path fail on the second run, and the
+chiseled runtime image has no shell to delete a leftover with. `kubectl cp` cannot pull the file
+from the Hub pod either (no tar inside). Mount the same PVC in a short-lived helper pod, copy
+from there, and remove the snapshot from that pod. The volume is `ReadWriteOnce`, so pin the
+helper to the node the Hub pod runs on, run it as the Hub's own uid so it can read and delete
+the files, and give it the security context a `restricted` namespace demands:
 
 ```bash
-kubectl apply -f - <<'EOF'
+NODE=$(kubectl get pod -l app.kubernetes.io/name=perf-sentinel-hub -o jsonpath='{.items[0].spec.nodeName}')
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod
 metadata:
   name: hub-backup-fetch
 spec:
+  nodeName: ${NODE}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1654
+    runAsGroup: 1654
+    seccompProfile: { type: RuntimeDefault }
   containers:
     - name: fetch
       image: busybox:1.37
       command: ["sleep", "3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
       volumeMounts: [{ name: data, mountPath: /data }]
   volumes:
     - name: data
       persistentVolumeClaim: { claimName: perf-sentinel-hub }
 EOF
-kubectl cp hub-backup-fetch:/data/hub-backup.db ./hub-backup.db
+kubectl cp hub-backup-fetch:/data/hub-backup-20260826.db ./hub-backup.db
+kubectl exec hub-backup-fetch -- rm /data/hub-backup-20260826.db
 kubectl delete pod hub-backup-fetch
 ```
 
 Locally, `make backup DB=/path/to/hub.db DEST=backup.db` wraps the same command. Restore by
-replacing the database file while the Hub is stopped: scale the Deployment to zero (the chart
-uses `strategy: Recreate`, so a single replica never overlaps), copy the backup back to
-`/data/hub.db`, delete any stale `hub.db-wal` and `hub.db-shm` next to it, and scale back up.
+replacing the database file while the Hub is fully stopped: scale the Deployment to zero and
+wait for the pod to actually terminate before touching the volume, since graceful shutdown can
+take tens of seconds
+(`kubectl scale deploy/perf-sentinel-hub --replicas=0` then
+`kubectl wait --for=delete pod -l app.kubernetes.io/name=perf-sentinel-hub --timeout=120s`).
+Then, from the helper pod, copy the backup over `/data/hub.db`, delete any stale `hub.db-wal`
+and `hub.db-shm` next to it, and scale back up.
 
 ## Deliberate exclusions
 

@@ -1,9 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["replicaCount", "image", "hub", "sources", "persistence", "resources"],
+  "required": ["image", "hub", "sources", "persistence", "resources"],
   "properties": {
-    "replicaCount": { "const": 1 },
     "image": {
       "type": "object",
       "required": ["repository", "digest", "pullPolicy"],
@@ -54,9 +53,8 @@
     },
     "persistence": {
       "type": "object",
-      "required": ["enabled", "size", "storageClassName"],
+      "required": ["size", "storageClassName"],
       "properties": {
-        "enabled": { "const": true },
         "size": { "$ref": "#/$defs/positiveQuantity" },
         "storageClassName": { "type": "string" }
       }

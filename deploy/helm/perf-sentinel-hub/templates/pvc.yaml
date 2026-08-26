@@ -1,6 +1,5 @@
-{{- /* values.schema.json pins persistence.enabled to true: the findings
-timeline is the Hub's only non-reconstructible state. */ -}}
-{{- if .Values.persistence.enabled }}
+{{- /* Always rendered: the findings timeline is the Hub's only
+non-reconstructible state, so persistence is not optional. */ -}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -13,4 +12,3 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.size }}
-{{- end }}

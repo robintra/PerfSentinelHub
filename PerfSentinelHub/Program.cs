@@ -7,8 +7,16 @@ using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
-if (args is ["backup", var backupDestination])
+if (args is ["backup", ..])
 {
+    // Any wrong arity must refuse loudly: the fallthrough would silently
+    // discard the bare tokens and boot the full server instead.
+    if (args is not ["backup", var backupDestination])
+    {
+        Console.Error.WriteLine("Usage: PerfSentinelHub backup <destination>");
+        return 2;
+    }
+
     // Reads the same appsettings + environment sources as the server, so the
     // configured Hub:DatabasePath applies without booting listeners or workers.
     var backupConfiguration = WebApplication.CreateSlimBuilder().Configuration;

@@ -19,10 +19,12 @@ build: restore
 	dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
 
 coverage: build
-	rm -rf "$(COVERAGE_DIR)"
+	rm -rf "$(COVERAGE_DIR)" TestResults
 	mkdir -p "$(COVERAGE_DIR)"
-	dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --collect:"XPlat Code Coverage" --logger:"trx;LogFileName=tests.trx" --results-directory "$(COVERAGE_DIR)"
-	@set -- "$(COVERAGE_DIR)"/*/coverage.cobertura.xml; test "$$#" -eq 1 && test -f "$$1" || { echo "expected exactly one Cobertura report" >&2; exit 1; }; mv "$$1" "$(COVERAGE_REPORT)"
+	dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$(CURDIR)/$(COVERAGE_REPORT)" --report-trx --report-trx-filename tests.trx
+	@test -f "$(COVERAGE_REPORT)" || { echo "expected a Cobertura report at $(COVERAGE_REPORT)" >&2; exit 1; }
+	@python3 -c "import pathlib; p=pathlib.Path('$(COVERAGE_REPORT)'); p.write_text(p.read_text('utf-8-sig'), 'utf-8')"
+	mv TestResults/tests.trx "$(COVERAGE_DIR)/tests.trx"
 
 coverage-check: coverage
 	python3 scripts/check-coverage.py --current-report "$(COVERAGE_REPORT)"

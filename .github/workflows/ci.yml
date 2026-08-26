@@ -233,15 +233,14 @@ jobs:
           python3 -m unittest discover -s scripts/tests
       - name: Build with warnings as errors
         run: dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
-      - name: Run health, import, polling, overload, backpressure, response-streaming, SQLite retention, and bounded-storage suites with coverage
+      - name: Run backup, health, import, polling, overload, backpressure, response-streaming, SQLite retention, and bounded-storage suites with coverage
         run: |
-          rm -rf artifacts/coverage
+          rm -rf artifacts/coverage TestResults
           mkdir -p artifacts/coverage
-          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore --settings PerfSentinelHub.Tests/coverage.runsettings --filter "FullyQualifiedName~ConfigurationTests|FullyQualifiedName~FindingIngestionTests|FullyQualifiedName~FindingsApiTests|FullyQualifiedName~ImportApiTests|FullyQualifiedName~PollingTests|FullyQualifiedName~StatusTests|FullyQualifiedName~StorageTests|FullyQualifiedName~WorkerAndRetentionTests" --collect:"XPlat Code Coverage" --logger:"trx;LogFileName=tests.trx" --results-directory artifacts/coverage
-          set -- artifacts/coverage/*/coverage.cobertura.xml
-          test "$#" -eq 1
-          test -f "$1"
-          mv "$1" artifacts/coverage/coverage.cobertura.xml
+          dotnet test PerfSentinelHub.sln -c Release --no-build --no-restore -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/artifacts/coverage/coverage.cobertura.xml" --report-trx --report-trx-filename tests.trx
+          test -f artifacts/coverage/coverage.cobertura.xml
+          python3 -c "import pathlib; p=pathlib.Path('artifacts/coverage/coverage.cobertura.xml'); p.write_text(p.read_text('utf-8-sig'), 'utf-8')"
+          mv TestResults/tests.trx artifacts/coverage/tests.trx
           python3 scripts/check-coverage.py --current-report artifacts/coverage/coverage.cobertura.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}

@@ -64,26 +64,6 @@
       "reason": "Latest stable test clock package."
     },
     {
-      "name": "Microsoft.NET.Test.Sdk",
-      "kind": "nuget",
-      "version": "18.9.0",
-      "digest_or_sha": "sha512-base64:sP6KzBc705KPFUjqccutk9u2G/5Nd5QG68QHTIcRSJVf1pzijnQl+8AD36gG/F4fsBBs6RpTga1CShmuWr6aOg==",
-      "lock_content_hash": "xIzVXa/VpKXqDWzyC/5Hw8JbFY5u9k3Jc53CpcjBiOXvkQGio484LD9FNwOiGUSMDcYL3Rcw9sNgGi5WrswlPQ==",
-      "released_at": "2026-08-14T09:42:25.82Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.net.test.sdk/18.9.0.json",
-      "reason": "Latest stable test SDK compatible with the locked test suite."
-    },
-    {
-      "name": "coverlet.collector",
-      "kind": "nuget",
-      "version": "10.0.1",
-      "digest_or_sha": "sha512-base64:EfdSZknIPmkbuoqzgOnQ/TIEgRbdSnEjrJUs6qhvxLJPPqsWgNj+lWi9u8ho9CjF/JLC3HRkvadJMt0eZnHcrg==",
-      "lock_content_hash": "27jXSV/0DbVqF5jDrAxuQFZ9oaz6gmG03p8ttxAFk+X0M4woFYj7MoWDLCna5EGLb0CE6OE7X6ZH3Wt5smTtaA==",
-      "released_at": "2026-05-18T08:04:46.64Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/coverlet.collector/10.0.1.json",
-      "reason": "Latest stable XPlat coverage collector."
-    },
-    {
       "name": "SQLitePCLRaw.bundle_e_sqlite3",
       "kind": "nuget",
       "version": "3.0.5",
@@ -96,22 +76,12 @@
     {
       "name": "xunit.v3",
       "kind": "nuget",
-      "version": "3.2.2",
-      "digest_or_sha": "sha512-base64:lhL0gR/OkQZlVRrDcThrdGC8EYo514iSw1cJP5KqqeoaXcIeL5Oa4/8NWZycYnSaL5WHEibmCvoqmAfrJrv31g==",
-      "lock_content_hash": "L+4/4y0Uqcg8/d6hfnxhnwh4j9FaeULvefTwrk30rr1o4n/vdPfyUQ8k0yzH8VJx7bmFEkDdcRfbtbjEHlaYcA==",
-      "released_at": "2026-01-14T22:26:25.47Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/3.2.2.json",
+      "version": "4.0.0",
+      "digest_or_sha": "sha512-base64:9IJcyGm2SDTKtPIQGaqGw9W1xE4MHjXKuakxh8Q2nDJtqLTuEYv66H1UY3PA/3wD+vb6WIemJVrP+loLkxXXKQ==",
+      "lock_content_hash": "czH4MaZ2k2eLjetuN5W1fUEnNVADsTOeYxDvrqIFh04XO6H3Y8Yu1FrSy3psF1q06DZV33wftjqZVv4acwIp9Q==",
+      "released_at": "2026-08-15T01:50:55.493Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.0.json",
       "reason": "Latest stable xUnit v3 meta-package."
-    },
-    {
-      "name": "xunit.runner.visualstudio",
-      "kind": "nuget",
-      "version": "3.1.5",
-      "digest_or_sha": "sha512-base64:b/tvN9kXtUd3wSSYbC80Ic6y/dYlYbNSvatYiv71iozPhXqM4EaOuHujkIJh85b+wY6dgf25k9ENSy8jN6mlvQ==",
-      "lock_content_hash": "tKi7dSTwP4m5m9eXPM2Ime4Kn7xNf4x4zT9sdLO/G4hZVnQCRiMTWoSZqI/pYTVeI27oPPqHBKYI/DjJ9GsYgA==",
-      "released_at": "2025-09-27T23:39:53.19Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.runner.visualstudio/3.1.5.json",
-      "reason": "Latest stable Visual Studio runner compatible with xUnit v3."
     },
     {
       "name": "dotnet-reportgenerator-globaltool",
@@ -445,6 +415,26 @@
       "released_at": "2025-02-24T19:32:29Z",
       "source": "https://github.com/slsa-framework/slsa-github-generator/releases/tag/v2.1.0",
       "reason": "Latest stable SLSA generator release reserved for provenance generation."
+    },
+    {
+      "name": "Microsoft.Testing.Extensions.CodeCoverage",
+      "kind": "nuget",
+      "version": "18.10.0",
+      "digest_or_sha": "sha512-base64:AQUZq4ntiw5Nj35Vqd/2xLBR3b7YQsXGVyxgGJVlTZogP8DPML+tpkWDi0rqh7WmTZLcx3sGyPkBHJGcWlCbzQ==",
+      "lock_content_hash": "elUX4tKloHh2VCxagbmhV1039xBuE3lKXITtt/hUYU286hl+ja8poOUsF9OnevKoFKt7+p9vLb1LqqW7rFGi9Q==",
+      "released_at": "2026-08-12T17:01:25.7Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.10.0.json",
+      "reason": "Coverage collector for Microsoft.Testing.Platform, replacing the VSTest coverlet collector."
+    },
+    {
+      "name": "Microsoft.Testing.Extensions.TrxReport",
+      "kind": "nuget",
+      "version": "2.3.3",
+      "digest_or_sha": "sha512-base64:VlP6H4wII1oZ3zbHMxKCewH3YRroUbLrugdbXYKzbmUAB1igWFG3W9Edl1GpGiWSPoNaPuTDLjAevhvZtivofw==",
+      "lock_content_hash": "vYBqGSlT94B8d6d4PRdPQ83ogn3kK4kXcnI3SlHBHZu1XsU01IDTMnWoto5v5wXN/Mz4XsVM3Do/sJdGRgH29g==",
+      "released_at": "2026-07-28T07:32:41.38Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.3.3.json",
+      "reason": "TRX reporter for Microsoft.Testing.Platform, feeding sonar.cs.vstest.reportsPaths."
     }
   ]
 }

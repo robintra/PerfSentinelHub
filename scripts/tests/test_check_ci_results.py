@@ -453,17 +453,11 @@ class CiWorkflowTests(unittest.TestCase):
             "bounded-storage",
         ):
             self.assertIn(suite, quality)
-        for test_class in (
-            "ConfigurationTests",
-            "FindingIngestionTests",
-            "FindingsApiTests",
-            "ImportApiTests",
-            "PollingTests",
-            "StatusTests",
-            "StorageTests",
-            "WorkerAndRetentionTests",
-        ):
-            self.assertIn(test_class, quality)
+        # The coverage run carries no --filter allowlist any more: it runs the
+        # whole solution, so a suite added later is covered by construction
+        # instead of by remembering to extend a list of class names here.
+        self.assertIn("dotnet test PerfSentinelHub.sln", quality)
+        self.assertNotIn("--filter", quality)
 
         self.assertIn("sonar.qualitygate.wait=true", job_body("sonar"))
 

@@ -1096,8 +1096,18 @@ def source_file_errors(
 
 
 def canonical_sdk_policy(payload) -> dict:
-    if not isinstance(payload, dict) or set(payload) != {"sdk"}:
+    if not isinstance(payload, dict) or not {"sdk"} <= set(payload) <= {"sdk", "test"}:
         raise ValueError("global root is not canonical")
+    # The .NET 10 SDK routes dotnet test through Microsoft.Testing.Platform only
+    # when global.json opts in, and xunit.v3 4 runs on that platform. Pin the
+    # runner to the one value the suite is built for.
+    test = payload.get("test")
+    if test is not None and (
+        not isinstance(test, dict)
+        or set(test) != {"runner"}
+        or test["runner"] != "Microsoft.Testing.Platform"
+    ):
+        raise ValueError("test runner policy is not stable")
     sdk = payload["sdk"]
     if (
         not isinstance(sdk, dict)

@@ -21,7 +21,9 @@ NEW_CODE_PERCENT = 80
 POSITIVE_INTEGER = re.compile(r"^[1-9][0-9]{0,9}$")
 NONNEGATIVE_INTEGER = re.compile(r"^(?:0|[1-9][0-9]{0,9})$")
 XML_DECLARATION = re.compile(
-    r'^<\?xml\s+version="1\.0"\s+encoding="utf-8"\s*\?>'
+    r'^<\?xml\s+version="1\.0"\s+encoding="utf-8"'
+    r'(?:\s+standalone="(?:yes|no)")?\s*\?>',
+    re.IGNORECASE,
 )
 FORBIDDEN_XML_DECLARATION = re.compile(
     r"<!\s*(?:DOCTYPE|ENTITY)\b", re.IGNORECASE
@@ -80,7 +82,7 @@ def parsed_coverage_root(path: Path):
     return root
 
 
-def collect_class_lines(path: Path, element, lines: dict, records: int) -> int:
+def collect_class_lines(path: Path, element, lines: dict, tally: list) -> None:
     class_lines = direct_children(element, "lines")
     if len(class_lines) != 1:
         raise CoverageError(f"{path}: Cobertura class lines structure is required")
@@ -92,32 +94,37 @@ def collect_class_lines(path: Path, element, lines: dict, records: int) -> int:
             raise CoverageError(f"{path}: line number is missing or invalid")
         if not isinstance(hits_text, str) or not NONNEGATIVE_INTEGER.fullmatch(hits_text):
             raise CoverageError(f"{path}: line hits are missing or invalid")
-        records += 1
-        if records > MAX_LINE_RECORDS:
+        hit = int(hits_text) > 0
+        tally[0] += 1
+        tally[1] += 1 if hit else 0
+        if tally[0] > MAX_LINE_RECORDS:
             raise CoverageError(f"{path}: report exceeds {MAX_LINE_RECORDS} line records")
         key = (filename, int(number_text))
-        lines[key] = lines.get(key, False) or int(hits_text) > 0
-    return records
+        lines[key] = lines.get(key, False) or hit
 
 
-def line_records(path: Path, root) -> dict[tuple[str, int], bool]:
+def line_records(path: Path, root) -> tuple[dict[tuple[str, int], bool], list]:
     packages = direct_children(root, "packages")
     if len(packages) != 1:
         raise CoverageError(f"{path}: Cobertura packages structure is required")
     lines: dict[tuple[str, int], bool] = {}
-    records = 0
+    # Raw record tally, kept next to the deduplicated map: the coverage engine
+    # writes a line once per class that owns it, so a line shared by a partial
+    # or compiler-nested class appears twice, and the root counters tally
+    # records rather than distinct source lines.
+    tally = [0, 0]
     for package in direct_children(packages[0], "package"):
         classes_nodes = direct_children(package, "classes")
         if len(classes_nodes) != 1:
             raise CoverageError(f"{path}: Cobertura classes structure is required")
         for element in direct_children(classes_nodes[0], "class"):
-            records = collect_class_lines(path, element, lines, records)
+            collect_class_lines(path, element, lines, tally)
     if not lines:
         raise CoverageError(f"{path}: report contains no line records")
-    return lines
+    return lines, tally
 
 
-def reject_inconsistent_counters(path: Path, root, lines: dict) -> None:
+def reject_inconsistent_counters(path: Path, root, tally: list) -> None:
     valid_text = root.get("lines-valid")
     covered_text = root.get("lines-covered")
     if (
@@ -127,14 +134,14 @@ def reject_inconsistent_counters(path: Path, root, lines: dict) -> None:
         or not NONNEGATIVE_INTEGER.fullmatch(covered_text)
     ):
         raise CoverageError(f"{path}: Cobertura root line counts are missing or invalid")
-    if int(valid_text) != len(lines) or int(covered_text) != sum(lines.values()):
+    if int(valid_text) != tally[0] or int(covered_text) != tally[1]:
         raise CoverageError(f"{path}: Cobertura root line counts differ from line records")
 
 
 def read_report(path: Path) -> dict[tuple[str, int], bool]:
     root = parsed_coverage_root(path)
-    lines = line_records(path, root)
-    reject_inconsistent_counters(path, root, lines)
+    lines, tally = line_records(path, root)
+    reject_inconsistent_counters(path, root, tally)
     return lines
 
 

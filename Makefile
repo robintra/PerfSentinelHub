@@ -64,9 +64,9 @@ audit: restore
 	dotnet package list --project PerfSentinelHub.sln --vulnerable --include-transitive --format json --no-restore > /tmp/perf-sentinel-hub-vulnerabilities.json
 	python3 -c 'import json,sys; d=json.load(open("/tmp/perf-sentinel-hub-vulnerabilities.json")); v=[x for p in d.get("projects",[]) for f in p.get("frameworks",[]) for k in ("topLevelPackages","transitivePackages") for x in f.get(k,[]) if x.get("vulnerabilities")]; sys.exit(bool(v))'
 
-backup:
+backup: build
 	@test -n "$(DEST)" || { echo "DEST is required (backup file to create)" >&2; exit 2; }
-	Hub__DatabasePath="$${DB:-/data/hub.db}" dotnet run --project PerfSentinelHub/PerfSentinelHub.csproj -- backup "$(DEST)"
+	Hub__DatabasePath="$${DB:-/data/hub.db}" dotnet run --project PerfSentinelHub/PerfSentinelHub.csproj -c Release --no-build --no-restore -- backup "$(DEST)"
 
 image:
 	docker build --platform linux/$${TARGETARCH:-arm64} -t perf-sentinel-hub:$${TAG:-local} .

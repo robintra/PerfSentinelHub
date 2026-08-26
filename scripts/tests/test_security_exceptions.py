@@ -3,6 +3,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -280,16 +281,31 @@ class SecurityWorkflowContractTests(unittest.TestCase):
         self.assertIn("--gitleaks-ignore-path=.gitleaksignore", workflow)
 
     def test_license_override_is_narrow_and_the_allowlist_is_spdx_only(self):
-        self.assertEqual(
-            '''[[PackageOverrides]]
-name = "SQLite"
-version = "3.53.4"
-ecosystem = "NuGet"
-license.override = ["blessing"]
-reason = "SQLite is distributed under the SPDX-listed SQLite Blessing."
-''',
-            OSV_CONFIG.read_text(encoding="utf-8"),
-        )
+        # Every licence exception is enumerated here on purpose: adding one to
+        # osv-scanner.toml has to be restated in this test, so the surface
+        # cannot grow without a second, deliberate edit.
+        expected = {
+            ("SQLite", "3.53.4", "NuGet"): ("override", ["blessing"]),
+            ("Microsoft.Testing.Extensions.CodeCoverage", "18.10.0", "NuGet"): (
+                "ignore",
+                True,
+            ),
+        }
+        overrides = tomllib.loads(OSV_CONFIG.read_text(encoding="utf-8"))[
+            "PackageOverrides"
+        ]
+        actual = {}
+        for entry in overrides:
+            licence = entry["license"]
+            mechanism = "ignore" if licence.get("ignore") else "override"
+            actual[(entry["name"], entry["version"], entry["ecosystem"])] = (
+                mechanism,
+                licence.get("ignore") if mechanism == "ignore" else licence["override"],
+            )
+            # A pinned version and a recorded reason, never a range.
+            self.assertTrue(entry["reason"].strip())
+
+        self.assertEqual(expected, actual)
         workflow = SECURITY_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("--config=osv-scanner.toml", workflow)
         self.assertIn("--licenses=MIT,Apache-2.0,blessing", workflow)

@@ -4,3 +4,23 @@ version = "3.53.4"
 ecosystem = "NuGet"
 license.override = ["blessing"]
 reason = "SQLite is distributed under the SPDX-listed SQLite Blessing."
+
+# The only package here carrying a licence outside the MIT / Apache-2.0 /
+# blessing allowlist, and the only one whose licence is deliberately not
+# rewritten to something it is not: the scan simply skips it.
+[[PackageOverrides]]
+name = "Microsoft.Testing.Extensions.CodeCoverage"
+version = "18.10.0"
+ecosystem = "NuGet"
+license.ignore = true
+reason = """Ships under MICROSOFT SOFTWARE LICENSE TERMS (Microsoft .NET Library) \
+rather than an SPDX expression, because it carries the proprietary native \
+coverage engine. Accepted as a test-only, build-time dependency: it is never \
+referenced by PerfSentinelHub.csproj, never linked into the published binary \
+and never redistributed, so it does not reach anyone who receives the Hub \
+under AGPL-3.0. It is Microsoft's own coverage collector for \
+Microsoft.Testing.Platform, which xunit.v3 4 requires after the .NET 10 SDK \
+dropped the VSTest bridge; coverlet has no working equivalent on that platform \
+(coverlet.console runs the suite but reports zero coverage against the apphost \
+under this repository's deterministic PathMap build). Revisit when an \
+SPDX-licensed collector supports the platform."""

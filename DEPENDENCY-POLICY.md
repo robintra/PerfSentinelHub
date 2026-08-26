@@ -31,6 +31,23 @@ analysis, vulnerability scanning, or the aggregate CI gate. There is no auto-mer
 A security fix is pinned in `config/supply-chain.json` like any other entry, with its advisory and
 reason recorded. Prereleases, broad ranges, and standing exceptions are not permitted.
 
+## Licences
+
+The OSV scan enforces an allowlist of `MIT`, `Apache-2.0` and `blessing`. A package whose licence
+falls outside it is a build failure, and `osv-scanner.toml` is the only place an exception may be
+recorded, one package and one version at a time, never as a range.
+
+Two entries exist today. SQLite declares the SPDX-listed SQLite Blessing, which the scanner does
+not infer on its own, so its licence is restated rather than waived.
+`Microsoft.Testing.Extensions.CodeCoverage` is the single genuine exception: it ships under
+MICROSOFT SOFTWARE LICENSE TERMS because it carries a proprietary native coverage engine. It is
+accepted only because it is a test-only, build-time dependency that the published Hub binary never
+links or redistributes, so it does not reach anyone receiving the Hub under AGPL-3.0. It is
+Microsoft's own collector for Microsoft.Testing.Platform, which xunit.v3 4 requires since the .NET
+10 SDK dropped the VSTest bridge, and coverlet has no working equivalent there yet. The exception
+is pinned to one version, so a bump forces the reasoning to be made again, and it should be dropped
+as soon as an SPDX-licensed collector supports the platform.
+
 ## Review and activation
 
 Before merging any dependency pull request:

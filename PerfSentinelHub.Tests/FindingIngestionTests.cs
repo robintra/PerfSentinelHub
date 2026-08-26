@@ -25,7 +25,6 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal("rider-smoke", finding.Service);
         Assert.Equal("POST /checkout", finding.Endpoint);
         Assert.Equal(1786183200000L, finding.FirstSeenMs);
-        Assert.Equal(1786183205000L, finding.StoredAtMs);
         Assert.Contains("future_contract_field", finding.EnvelopeJson, StringComparison.Ordinal);
     }
 
@@ -92,32 +91,51 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     [Fact]
-    public async Task Upsert_honors_daemon_reported_first_and_last_seen()
+    public async Task Upsert_honors_the_daemon_reported_first_seen_and_keeps_the_hub_clock_for_last_seen()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = CreateDatabase();
         await database.InitializeAsync(cancellationToken);
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
-        // A realistic poll clock: after the fixture's stored_at_ms, so the
-        // daemon-reported window survives the clamp instead of being cut to it.
-        const long observedAt = 1786190000000;
+        // A realistic poll clock: after the fixture's first_seen_ms, so the
+        // daemon-reported birth survives the clamp instead of being cut to it.
+        const long firstObservedAt = 1786190000000;
+        const long secondObservedAt = firstObservedAt + 3_600_000;
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
 
-        await database.UpsertBatchAsync(
-            new SourceSnapshot("production-a", "Production A", "production", "0.11.2"),
-            batch,
-            observedAt,
-            cancellationToken);
+        await database.UpsertBatchAsync(source, batch, firstObservedAt, cancellationToken);
+        await database.UpsertBatchAsync(source, batch, secondObservedAt, cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal(
             1786183200000L,
             await ScalarAsync(connection, "SELECT first_seen_ms FROM findings;", cancellationToken));
         Assert.Equal(
-            1786183205000L,
+            secondObservedAt,
             await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
         Assert.Equal(
             1786183200000L,
             await ScalarAsync(connection, "SELECT first_seen_ms FROM finding_sources;", cancellationToken));
+        Assert.Equal(
+            secondObservedAt,
+            await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Parser_rejects_a_first_seen_below_the_epoch_ms_sanity_floor()
+    {
+        using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
+            FixturePath,
+            TestContext.Current.CancellationToken));
+        // A seconds-unit bug: the same instant, a thousand times smaller.
+        var seconds = fixture.RootElement[0].GetRawText()
+            .Replace("1786183200000", "1786183200", StringComparison.Ordinal);
+        var payload = System.Text.Encoding.UTF8.GetBytes($"[{seconds}]");
+
+        var batch = FindingParser.Parse(payload);
+
+        var finding = Assert.Single(batch.Findings);
+        Assert.Null(finding.FirstSeenMs);
     }
 
     [Fact]

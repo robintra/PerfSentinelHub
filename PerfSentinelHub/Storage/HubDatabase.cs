@@ -15,6 +15,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     private const int PurgeChunkSize = 5_000;
     private const string SourceIdParameter = "$source_id";
     private const string ObservedAtParameter = "$observed_at";
+    private const string FirstSeenParameter = "$first_seen";
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _ready;
@@ -137,8 +138,10 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
 
         foreach (var finding in batch.Findings)
         {
-            await UpsertFindingAsync(connection, transaction, finding, observedAtMs, cancellationToken);
-            await UpsertFindingSourceAsync(connection, transaction, source, finding, observedAtMs, cancellationToken);
+            var firstSeenMs = ClampedFirstSeen(finding, observedAtMs);
+            await UpsertFindingAsync(connection, transaction, finding, firstSeenMs, observedAtMs, cancellationToken);
+            await UpsertFindingSourceAsync(
+                connection, transaction, source, finding, firstSeenMs, observedAtMs, cancellationToken);
             await UpsertHeartbeatAsync(connection, transaction, source, finding, observedAtMs, cancellationToken);
         }
 
@@ -362,22 +365,21 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         parameters.Add((parameter, value));
     }
 
-    // Daemon-reported timestamps win over the Hub clock, clamped so a daemon
-    // clock running ahead cannot mint future observations.
-    private static (long FirstSeenMs, long LastSeenMs) SeenWindow(ParsedFinding finding, long observedAtMs)
-    {
-        var lastSeen = Math.Min(finding.StoredAtMs ?? observedAtMs, observedAtMs);
-        return (Math.Min(finding.FirstSeenMs ?? lastSeen, lastSeen), lastSeen);
-    }
+    // The daemon-reported birth wins over the Hub clock, clamped so a clock
+    // running ahead cannot mint future observations. last_seen stays the Hub
+    // clock on purpose: retention, ORDER BY and the freshness guard compare
+    // it, so it must come from one monotonic clock, never a remote one.
+    private static long ClampedFirstSeen(ParsedFinding finding, long observedAtMs) =>
+        Math.Min(finding.FirstSeenMs ?? observedAtMs, observedAtMs);
 
     private static async Task UpsertFindingAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         ParsedFinding finding,
+        long firstSeenMs,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
-        var (firstSeenMs, lastSeenMs) = SeenWindow(finding, observedAtMs);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -387,7 +389,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               max_confidence, max_confidence_rank)
             VALUES (
               $signature, $finding_json, $service, $finding_type, $severity, $endpoint,
-              $template_hash, $sample_trace_id, $first_seen, $last_seen,
+              $template_hash, $sample_trace_id, $first_seen, $observed_at,
               $confidence, $confidence_rank)
             ON CONFLICT(signature) DO UPDATE SET
               -- Only a newer observation may replace the envelope and its indexed columns:
@@ -421,8 +423,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
         command.Parameters.AddWithValue("$sample_trace_id", (object?)finding.TraceId ?? DBNull.Value);
-        command.Parameters.AddWithValue("$first_seen", firstSeenMs);
-        command.Parameters.AddWithValue("$last_seen", lastSeenMs);
+        command.Parameters.AddWithValue(FirstSeenParameter, firstSeenMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         command.Parameters.AddWithValue("$confidence", finding.Confidence);
         command.Parameters.AddWithValue("$confidence_rank", finding.ConfidenceRank);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -433,10 +435,10 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         SqliteTransaction transaction,
         SourceSnapshot source,
         ParsedFinding finding,
+        long firstSeenMs,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
-        var (firstSeenMs, lastSeenMs) = SeenWindow(finding, observedAtMs);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -445,7 +447,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               first_seen_ms, last_seen_ms)
             VALUES (
               $signature, $source_id, $source_name, $environment, $producer_version,
-              $first_seen, $last_seen)
+              $first_seen, $observed_at)
             ON CONFLICT(signature, source_id) DO UPDATE SET
               source_name = excluded.source_name,
               environment = excluded.environment,
@@ -458,8 +460,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.Parameters.AddWithValue("$source_name", source.SourceName);
         command.Parameters.AddWithValue("$environment", source.Environment);
         command.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
-        command.Parameters.AddWithValue("$first_seen", firstSeenMs);
-        command.Parameters.AddWithValue("$last_seen", lastSeenMs);
+        command.Parameters.AddWithValue(FirstSeenParameter, firstSeenMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

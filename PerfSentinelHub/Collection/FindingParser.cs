@@ -21,8 +21,7 @@ public sealed record ParsedFinding(
     string? TraceId,
     string Confidence,
     int ConfidenceRank,
-    long? FirstSeenMs,
-    long? StoredAtMs);
+    long? FirstSeenMs);
 
 // Explicit validation branches keep malformed-input handling auditable.
 // ReSharper disable ConvertIfStatementToSwitchStatement
@@ -130,17 +129,20 @@ public static class FindingParser
             traceId,
             confidence,
             ConfidenceRank(confidence),
-            TryPositiveInt64(envelope, "first_seen_ms"),
-            TryPositiveInt64(envelope, "stored_at_ms"));
+            TryEpochMs(envelope, "first_seen_ms"));
         return true;
     }
 
-    private static long? TryPositiveInt64(JsonElement element, string propertyName)
+    // Unix-ms sanity floor (2001-09-09). Rejects seconds-unit bugs and
+    // pre-epoch garbage that would poison the irreversible MIN(first_seen_ms).
+    private const long MinPlausibleEpochMs = 1_000_000_000_000;
+
+    private static long? TryEpochMs(JsonElement element, string propertyName)
     {
         return element.TryGetProperty(propertyName, out var property) &&
                property.ValueKind == JsonValueKind.Number &&
                property.TryGetInt64(out var value) &&
-               value > 0
+               value >= MinPlausibleEpochMs
             ? value
             : null;
     }

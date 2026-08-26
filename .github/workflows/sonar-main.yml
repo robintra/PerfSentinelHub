@@ -59,14 +59,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # ContinuousIntegrationBuild rewrites the source root to /_ so the build stays
-          # reproducible. Sonar cannot match that against the files it indexed, so the report
-          # would import zero files: put the paths back on the repository root it knows.
+          # Sonar matches neither root against the files it indexed, so a report carrying
+          # either would import zero files. The platform coverage collector writes absolute
+          # workspace paths; a coverlet-era report carried the /_ root that
+          # ContinuousIntegrationBuild substitutes to keep the build reproducible. Both are
+          # reduced to repository-relative paths, and a report carrying neither is refused.
           report = Path('artifacts/sonar/SonarQube.xml')
           content = report.read_text(encoding='utf-8')
-          rewritten = content.replace('path="/_/', 'path="')
+          workspace = 'path="' + str(Path.cwd()) + '/'
+          rewritten = content.replace('path="/_/', 'path="').replace(workspace, 'path="')
           if rewritten == content:
-              raise SystemExit('coverage report carries no deterministic source root to rewrite')
+              raise SystemExit('coverage report carries no rewritable source root')
           report.write_text(rewritten, encoding='utf-8')
           PY
           python3 scripts/check-analysis-config.py --require-analysis-inputs

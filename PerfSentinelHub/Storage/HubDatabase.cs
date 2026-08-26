@@ -296,6 +296,11 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     // heartbeats from a reachable source while the finding itself went
     // quiet has presumably been fixed. A quiet endpoint or an unreachable
     // fleet proves nothing, so those stay `not_observed`.
+    // The heartbeat must come from a source that observed THIS finding: a
+    // sibling source running the same endpoint without ever carrying the
+    // finding proves nothing about the source that did. The LEFT JOIN on
+    // source_state is load-bearing: a push-only source that never failed
+    // has no row there, and an INNER JOIN would wrongly demote it.
     private const string StatusExpression = """
         CASE
           WHEN findings.last_seen_ms >= $status_now - $status_grace THEN 'active'
@@ -306,6 +311,11 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               AND eh.endpoint = findings.endpoint
               AND eh.last_seen_any_ms >= findings.last_seen_ms + $status_grace
               AND hs.unreachable_since_ms IS NULL
+              AND EXISTS (
+                SELECT 1 FROM finding_sources AS fs
+                WHERE fs.signature = findings.signature
+                  AND fs.source_id = eh.source_id
+              )
           ) THEN 'likely_resolved'
           ELSE 'not_observed'
         END
@@ -344,10 +354,12 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             SELECT
               f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
               fs.source_id, fs.source_name, fs.environment, fs.producer_version,
-              fs.last_seen_ms, ss.unreachable_since_ms, f.status
+              fs.last_seen_ms, ss.unreachable_since_ms, f.status,
+              fl.origin_first_seen_ms, fl.depth
             FROM selected AS f
             LEFT JOIN finding_sources AS fs ON fs.signature = f.signature
             LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
+            LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
             ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
             """;
         foreach (var (name, value) in parameters)
@@ -375,6 +387,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                         reader.GetString(4),
                         reader.GetString(11),
                         sources);
+                    if (!reader.IsDBNull(12))
+                        finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
                     bySignature.Add(signature, finding);
                     rows.Add(finding);
                 }
@@ -392,68 +406,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             }
         }
 
-        await AttachLineageAsync(connection, rows, bySignature, cancellationToken);
         return rows;
-    }
-
-    // The lineage table holds one row per detected mutation, so loading it
-    // whole and walking in memory beats one recursive query per page row.
-    // The cap is a runaway guard far above any plausible mutation count;
-    // findings past it simply show no lineage.
-    private const int LineageReadCap = 100_000;
-    private const int LineageDepthCap = 32;
-
-    private static async Task AttachLineageAsync(
-        SqliteConnection connection,
-        List<StoredFinding> rows,
-        Dictionary<string, StoredFinding> bySignature,
-        CancellationToken cancellationToken)
-    {
-        if (rows.Count == 0)
-            return;
-
-        var links = new Dictionary<string, (string Predecessor, long FirstSeenMs)>(StringComparer.Ordinal);
-        await using (var command = connection.CreateCommand())
-        {
-            command.CommandText = $"""
-                SELECT successor_signature, predecessor_signature, predecessor_first_seen_ms
-                FROM finding_lineage LIMIT {LineageReadCap};
-                """;
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-                links[reader.GetString(0)] = (reader.GetString(1), reader.GetInt64(2));
-        }
-
-        if (links.Count == 0)
-            return;
-
-        foreach (var (signature, finding) in bySignature)
-        {
-            var lineage = WalkLineage(signature, links);
-            if (lineage is not null)
-                finding.Lineage = lineage;
-        }
-
-        // Local function keeps the walk next to its only caller.
-        static LineageInfo? WalkLineage(
-            string signature,
-            Dictionary<string, (string Predecessor, long FirstSeenMs)> links)
-        {
-            if (!links.TryGetValue(signature, out var link))
-                return null;
-
-            var predecessors = 0;
-            var originalFirstSeen = long.MaxValue;
-            var cursor = signature;
-            while (predecessors < LineageDepthCap && links.TryGetValue(cursor, out link))
-            {
-                predecessors++;
-                originalFirstSeen = Math.Min(originalFirstSeen, link.FirstSeenMs);
-                cursor = link.Predecessor;
-            }
-
-            return new LineageInfo(originalFirstSeen, predecessors);
-        }
     }
 
     private static void AddFilter(
@@ -485,8 +438,10 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     /// <summary>
     /// The lone stored finding the incoming one most likely mutated from:
     /// same service, detector and endpoint, different template hash, seen
-    /// within the lineage window. Null for an already-known signature, and
-    /// null with several candidates, where naming one would be a guess.
+    /// within the lineage window. Null for an already-known signature (the
+    /// steady-state path, answered by a cheap primary-key probe before any
+    /// candidate scan), and null with several candidates, where naming one
+    /// would be a guess.
     /// </summary>
     private static async Task<LineageCandidate?> FindLineagePredecessorAsync(
         SqliteConnection connection,
@@ -495,11 +450,23 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         long observedAtMs,
         CancellationToken cancellationToken)
     {
+        await using (var known = connection.CreateCommand())
+        {
+            known.Transaction = transaction;
+            known.CommandText = "SELECT 1 FROM findings WHERE signature = $signature;";
+            known.Parameters.AddWithValue("$signature", finding.Signature);
+            if (await known.ExecuteScalarAsync(cancellationToken) is not null)
+                return null;
+        }
+
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT candidate.signature, candidate.first_seen_ms
+            SELECT candidate.signature, candidate.first_seen_ms,
+                   lineage.origin_first_seen_ms, lineage.depth
             FROM findings AS candidate
+            LEFT JOIN finding_lineage AS lineage
+              ON lineage.successor_signature = candidate.signature
             WHERE candidate.service = $service
               AND candidate.finding_type = $finding_type
               AND candidate.endpoint = $endpoint
@@ -511,7 +478,6 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               -- Already superseded: without this, the second mutation in a
               -- chain always sees two candidates and never links.
               AND candidate.signature NOT IN (SELECT predecessor_signature FROM finding_lineage)
-              AND NOT EXISTS (SELECT 1 FROM findings WHERE signature = $signature)
             LIMIT 2;
             """;
         command.Parameters.AddWithValue("$service", finding.Service);
@@ -520,7 +486,6 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
         command.Parameters.AddWithValue("$window_start", observedAtMs - LineageWindowMs);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
-        command.Parameters.AddWithValue("$signature", finding.Signature);
 
         LineageCandidate? candidate = null;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -528,7 +493,12 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         {
             if (candidate is not null)
                 return null;
-            candidate = new LineageCandidate(reader.GetString(0), reader.GetInt64(1));
+            var firstSeen = reader.GetInt64(1);
+            // Inherit the predecessor's own chain when it has one, so the
+            // origin and depth live on this row and survive every purge.
+            var origin = reader.IsDBNull(2) ? firstSeen : Math.Min(reader.GetInt64(2), firstSeen);
+            var depth = reader.IsDBNull(3) ? 1 : reader.GetInt32(3) + 1;
+            candidate = new LineageCandidate(reader.GetString(0), firstSeen, origin, depth);
         }
 
         return candidate;
@@ -548,17 +518,20 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         command.CommandText = """
             INSERT OR IGNORE INTO finding_lineage(
               successor_signature, predecessor_signature, predecessor_first_seen_ms,
-              linked_at_ms, method)
-            VALUES ($successor, $predecessor, $predecessor_first_seen, $linked_at, 'endpoint_template');
+              origin_first_seen_ms, depth, linked_at_ms, method)
+            VALUES ($successor, $predecessor, $predecessor_first_seen,
+              $origin_first_seen, $depth, $linked_at, 'endpoint_template');
             """;
         command.Parameters.AddWithValue("$successor", successorSignature);
         command.Parameters.AddWithValue("$predecessor", predecessor.Signature);
         command.Parameters.AddWithValue("$predecessor_first_seen", predecessor.FirstSeenMs);
+        command.Parameters.AddWithValue("$origin_first_seen", predecessor.OriginFirstSeenMs);
+        command.Parameters.AddWithValue("$depth", predecessor.Depth);
         command.Parameters.AddWithValue("$linked_at", observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private sealed record LineageCandidate(string Signature, long FirstSeenMs);
+    private sealed record LineageCandidate(string Signature, long FirstSeenMs, long OriginFirstSeenMs, int Depth);
 
     private static async Task UpsertFindingAsync(
         SqliteConnection connection,

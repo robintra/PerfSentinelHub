@@ -268,6 +268,84 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal(1000L, successor.Lineage.OriginalFirstSeenMs);
     }
 
+    /// <summary>
+    /// The chain's origin is denormalized at link time, so purging the
+    /// intermediate hop must not shorten the surviving finding's lineage.
+    /// </summary>
+    [Fact]
+    public async Task Lineage_survives_the_purge_of_an_intermediate_hop()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        await database.UpsertBatchAsync(source, batch, 1000, cancellationToken);
+        var second = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:v2",
+            TemplateHash = "hash-v2",
+        };
+        await database.UpsertBatchAsync(source, new ParsedBatch([second], 0), 2000, cancellationToken);
+        var third = second with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:v3",
+            TemplateHash = "hash-v3",
+        };
+        await database.UpsertBatchAsync(source, new ParsedBatch([third], 0), 3000, cancellationToken);
+
+        // Purge v1 and v2 (last_seen 1000 and 2000), keep v3.
+        await database.PurgeAsync(2500, cancellationToken);
+
+        var rows = await database.QueryFindingsAsync(
+            new PerfSentinelHub.Api.FindingQuery(null, null, null, 100), cancellationToken);
+        var survivor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
+        Assert.NotNull(survivor.Lineage);
+        Assert.Equal(2, survivor.Lineage!.Predecessors);
+        Assert.Equal(1000L, survivor.Lineage.OriginalFirstSeenMs);
+    }
+
+    /// <summary>
+    /// A heartbeat from a source that never carried the finding proves
+    /// nothing about the source that did: the status must stay
+    /// not_observed while the witnessing source is silent.
+    /// </summary>
+    [Fact]
+    public async Task Status_ignores_heartbeats_from_sources_that_never_saw_the_finding()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_786_190_000_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            clock);
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var witnessing = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        await database.UpsertBatchAsync(
+            witnessing, batch, clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
+
+        clock.Advance(TimeSpan.FromDays(8));
+        // A sibling source heartbeats the same service and endpoint through
+        // a finding of its own, while production-a stays silent.
+        var sibling = new SourceSnapshot("production-b", "Production B", "production", "0.11.2");
+        var other = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:other",
+            TemplateHash = "other-hash",
+        };
+        await database.UpsertBatchAsync(
+            sibling,
+            new ParsedBatch([other], 0),
+            clock.GetUtcNow().ToUnixTimeMilliseconds(),
+            cancellationToken);
+
+        var rows = await database.QueryFindingsAsync(
+            new PerfSentinelHub.Api.FindingQuery(null, null, null, 100), cancellationToken);
+        Assert.Equal(
+            "not_observed",
+            Assert.Single(rows, row => row.Signature == batch.Findings[0].Signature).Status);
+    }
+
     [Fact]
     public async Task Status_derives_from_heartbeats_and_source_reachability()
     {

@@ -168,10 +168,11 @@ predecessor at import time, when exactly one stored finding shares the service, 
 endpoint with a different template hash, was seen within the last 30 days and strictly before
 the incoming batch, and is not itself already superseded. Ambiguity records nothing: naming one
 of several candidates would be a guess. A linked finding's envelope carries a `lineage` object
-with `original_first_seen` (the earliest birth along the chain, copied at link time so it
-survives the predecessors' retention purge) and `predecessors` (the chain length). The heuristic
-is conservative and non-destructive: the two rows stay separate findings, and the predecessor
-ages out through normal retention.
+with `original_first_seen` (the earliest birth along the chain) and `predecessors` (the chain
+length). Both are denormalized onto the newest link at link time, so a finding's full lineage
+survives the retention purge of every earlier hop. The heuristic is conservative and
+non-destructive: the two rows stay separate findings, and the predecessor ages out through
+normal retention.
 
 ## Freshness and recovery
 

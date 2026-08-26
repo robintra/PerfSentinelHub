@@ -52,19 +52,28 @@ internal static class Schema
         """;
 
     // Lineage between a finding and the one it most likely mutated from: same
-    // service, detector and endpoint, different template hash. The predecessor's
-    // first_seen is copied at link time so the chain's origin survives the
-    // predecessor's retention purge; the successor's row cascades away with it.
+    // service, detector and endpoint, different template hash. The chain's
+    // origin and depth are denormalized onto each row at link time (copied
+    // from the predecessor's own row when it has one), so a finding's full
+    // lineage survives the retention purge of every earlier hop: the
+    // intermediate hops' rows cascade away with their findings, this row
+    // does not need them. The heartbeat index serves the status CASE's
+    // (service, endpoint) probe, which the PK cannot (it leads with
+    // source_id).
     internal const string V2 = """
         CREATE TABLE IF NOT EXISTS finding_lineage (
           successor_signature TEXT NOT NULL REFERENCES findings(signature) ON DELETE CASCADE,
           predecessor_signature TEXT NOT NULL,
           predecessor_first_seen_ms INTEGER NOT NULL,
+          origin_first_seen_ms INTEGER NOT NULL,
+          depth INTEGER NOT NULL,
           linked_at_ms INTEGER NOT NULL,
           method TEXT NOT NULL,
           PRIMARY KEY(successor_signature, predecessor_signature)
         );
         CREATE INDEX IF NOT EXISTS ix_lineage_predecessor
           ON finding_lineage(predecessor_signature);
+        CREATE INDEX IF NOT EXISTS ix_heartbeats_service_endpoint
+          ON endpoint_heartbeats(service, endpoint, last_seen_any_ms);
         """;
 }

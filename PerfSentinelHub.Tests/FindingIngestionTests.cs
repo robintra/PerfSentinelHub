@@ -269,6 +269,46 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     /// <summary>
+    /// CREATE TABLE IF NOT EXISTS is a no-op on an existing table, so a
+    /// database written before the denormalization must be upgraded in
+    /// place rather than left with the old three-column lineage table.
+    /// </summary>
+    [Fact]
+    public async Task Initialize_adds_the_lineage_columns_to_a_pre_denormalization_database()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using (var seed = new SqliteConnection($"Data Source={_databasePath}"))
+        {
+            await seed.OpenAsync(cancellationToken);
+            await using var create = seed.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE finding_lineage (
+                  successor_signature TEXT NOT NULL,
+                  predecessor_signature TEXT NOT NULL,
+                  predecessor_first_seen_ms INTEGER NOT NULL,
+                  linked_at_ms INTEGER NOT NULL,
+                  method TEXT NOT NULL,
+                  PRIMARY KEY(successor_signature, predecessor_signature)
+                );
+                INSERT INTO finding_lineage VALUES ('v2', 'v1', 1000, 2000, 'endpoint_template');
+                """;
+            await create.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var check = connection.CreateCommand();
+        check.CommandText =
+            "SELECT origin_first_seen_ms, depth FROM finding_lineage WHERE successor_signature = 'v2';";
+        await using var reader = await check.ExecuteReaderAsync(cancellationToken);
+        Assert.True(await reader.ReadAsync(cancellationToken));
+        Assert.Equal(1000L, reader.GetInt64(0));
+        Assert.Equal(1, reader.GetInt32(1));
+    }
+
+    /// <summary>
     /// The chain's origin is denormalized at link time, so purging the
     /// intermediate hop must not shorten the surviving finding's lineage.
     /// </summary>

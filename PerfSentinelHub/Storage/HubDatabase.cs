@@ -50,6 +50,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
+            await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
+
             await using (var version = connection.CreateCommand())
             {
                 version.Transaction = transaction;
@@ -70,6 +72,42 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         {
             _initializeGate.Release();
         }
+    }
+
+    /// <summary>
+    /// CREATE TABLE IF NOT EXISTS never alters a table that already
+    /// exists, so a database created before the lineage origin was
+    /// denormalized keeps the old three-column shape and every insert
+    /// fails on the missing columns. Add them when absent and backfill
+    /// from the row itself: every pre-existing link is a single hop, so
+    /// its origin is the predecessor's own first_seen and its depth is 1.
+    /// </summary>
+    private static async Task EnsureLineageColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var columns = new HashSet<string>(StringComparer.Ordinal);
+        await using (var probe = connection.CreateCommand())
+        {
+            probe.Transaction = transaction;
+            probe.CommandText = "SELECT name FROM pragma_table_info('finding_lineage');";
+            await using var reader = await probe.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                columns.Add(reader.GetString(0));
+        }
+
+        if (columns.Count == 0 || columns.Contains("origin_first_seen_ms"))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+            ALTER TABLE finding_lineage ADD COLUMN origin_first_seen_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE finding_lineage ADD COLUMN depth INTEGER NOT NULL DEFAULT 1;
+            UPDATE finding_lineage SET origin_first_seen_ms = predecessor_first_seen_ms;
+            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)

@@ -306,6 +306,18 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.Equal(1000L, reader.GetInt64(0));
         Assert.Equal(1, reader.GetInt32(1));
+        await reader.DisposeAsync();
+
+        // The columns existing is not enough: the upgraded table must
+        // accept the insert the production path issues.
+        await using var insert = connection.CreateCommand();
+        insert.CommandText = """
+            INSERT INTO finding_lineage(
+              successor_signature, predecessor_signature, predecessor_first_seen_ms,
+              origin_first_seen_ms, depth, linked_at_ms, method)
+            VALUES ('v3', 'v2', 2000, 1000, 2, 3000, 'endpoint_template');
+            """;
+        Assert.Equal(1, await insert.ExecuteNonQueryAsync(cancellationToken));
     }
 
     /// <summary>

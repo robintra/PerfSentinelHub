@@ -97,7 +97,9 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                 columns.Add(reader.GetString(0));
         }
 
-        if (columns.Count == 0 || columns.Contains("origin_first_seen_ms"))
+        // Schema.V2's CREATE TABLE ran earlier in this transaction, so the
+        // table exists; only its column set is in question.
+        if (columns.Contains("origin_first_seen_ms"))
             return;
 
         await using var alter = connection.CreateCommand();

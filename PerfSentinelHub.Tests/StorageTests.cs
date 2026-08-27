@@ -92,6 +92,62 @@ public sealed class StorageTests
         Assert.Equal("0.11.3", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    [Fact]
+    public async Task Initialize_adds_the_lineage_columns_to_a_pre_migration_database()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Roll one linked row back to the shape finding_lineage had before the
+        // origin and depth columns existed. Dropping them beats hand-writing
+        // the old DDL: Schema.V1's CREATE TABLE IF NOT EXISTS would leave a
+        // duplicated definition behind and it would drift silently.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO findings(
+                  signature, finding_json, service, finding_type, severity, endpoint,
+                  template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                  max_confidence, max_confidence_rank)
+                VALUES ('successor', '{}', 'order-service', 'n_plus_one_sql', 'warning',
+                  'GET /orders', 'hash-b', 'trace', 500, 900, 'daemon_staging', 2);
+                INSERT INTO finding_lineage(
+                  successor_signature, predecessor_signature, predecessor_first_seen_ms,
+                  origin_first_seen_ms, depth, linked_at_ms, method)
+                VALUES ('successor', 'predecessor', 100, 100, 1, 500, 'endpoint_template');
+                ALTER TABLE finding_lineage DROP COLUMN origin_first_seen_ms;
+                ALTER TABLE finding_lineage DROP COLUMN depth;
+                """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // A NEW instance, because InitializeAsync short-circuits on an
+        // in-process flag: the upgrade only ever happens in a fresh process
+        // opening a file an older binary wrote.
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // And once more, since a third boot must not replay the ALTER: the
+        // probe short-circuits, and a repeated ALTER throws "duplicate column".
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+            SELECT origin_first_seen_ms, depth FROM finding_lineage
+            WHERE successor_signature = 'successor';
+            """;
+        await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+        Assert.True(await reader.ReadAsync(cancellationToken));
+        // Backfilled from the only date the old row carried, not left at the
+        // column default: a zero origin would date every pre-migration chain
+        // to 1970.
+        Assert.Equal(100, reader.GetInt64(0));
+        Assert.Equal(1, reader.GetInt32(1));
+    }
+
     private sealed class TestDatabase : IDisposable
     {
         private TestDatabase(string path)

@@ -98,7 +98,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         }
 
         // Schema.V2's CREATE TABLE ran earlier in this transaction, so the
-        // table exists; only its column set is in question.
+        // table exists. Only its column set is in question.
         if (columns.Contains("origin_first_seen_ms"))
             return;
 

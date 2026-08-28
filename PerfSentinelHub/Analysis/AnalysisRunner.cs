@@ -48,6 +48,9 @@ public sealed partial class AnalysisRunner(
     public string ReportPath(string runId) =>
         Path.Combine(_analysis.ReportDirectory, $"{runId}.html");
 
+    /// <summary>Removes a report whose lifetime ran out. Missing is fine.</summary>
+    public void DeleteReport(string runId) => DeleteQuietly(ReportPath(runId));
+
     public async Task<RunOutcome> RunAsync(
         AnalysisRun run,
         SourceOptions source,
@@ -186,7 +189,7 @@ public sealed partial class AnalysisRunner(
         }
     }
 
-    [LoggerMessage(1201, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
+    [LoggerMessage(1401, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, string runId, string errorCode);
 }
 

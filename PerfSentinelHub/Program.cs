@@ -1,6 +1,8 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -29,7 +31,13 @@ if (args is ["backup", ..])
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, HubJsonContext.Default));
+{
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, HubJsonContext.Default);
+    // Matches the envelope perf-sentinel itself emits, so one contract reads
+    // the same on both sides. Every pre-existing field is a single word and
+    // serialises identically under either policy.
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+});
 builder.Services.TryAddEnumerable(
     ServiceDescriptor.Singleton<IValidateOptions<HubOptions>, HubOptionsValidator>());
 builder.Services.AddOptions<HubOptions>()
@@ -37,6 +45,8 @@ builder.Services.AddOptions<HubOptions>()
     .ValidateOnStart();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
+builder.Services.AddSingleton<EngineProbe>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<EngineProbe>());
 builder.Services.AddSingleton<ImportGate>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {

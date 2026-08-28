@@ -43,3 +43,15 @@ public sealed record FindingSourceObservation(
     string ProducerVersion,
     long LastSeenMs,
     long? UnreachableSinceMs);
+
+/// <summary>
+/// Last known collection state for one configured source. Every field is
+/// nullable because a source that has never been polled, and a push-only
+/// source before its first import, both have no row at all.
+/// </summary>
+public sealed record SourceState(
+    long? LastAttemptMs,
+    long? LastSuccessMs,
+    long? UnreachableSinceMs,
+    string? ProducerVersion,
+    string? LastErrorCode);

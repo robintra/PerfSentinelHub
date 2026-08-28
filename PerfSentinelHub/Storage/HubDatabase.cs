@@ -332,6 +332,36 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         CancellationToken cancellationToken) =>
         QueryAsync(new FindingQuery(null, null, null, _maxReadLimit), traceId, cancellationToken);
 
+    /// <summary>
+    /// Collection state for every source that has one, keyed by source id.
+    /// A configured source missing from the result has never been observed.
+    /// </summary>
+    public async Task<Dictionary<string, SourceState>> QuerySourceStatesAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT source_id, last_attempt_ms, last_success_ms,
+                   unreachable_since_ms, producer_version, last_error_code
+            FROM source_state;
+            """;
+
+        var states = new Dictionary<string, SourceState>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            states[reader.GetString(0)] = new SourceState(
+                reader.IsDBNull(1) ? null : reader.GetInt64(1),
+                reader.IsDBNull(2) ? null : reader.GetInt64(2),
+                reader.IsDBNull(3) ? null : reader.GetInt64(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5));
+        }
+
+        return states;
+    }
+
     // Derived at read time, never stored: a finding whose endpoint still
     // heartbeats from a reachable source while the finding itself went
     // quiet has presumably been fixed. A quiet endpoint or an unreachable

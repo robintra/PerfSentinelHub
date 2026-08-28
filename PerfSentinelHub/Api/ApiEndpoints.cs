@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -14,13 +15,54 @@ public static partial class ApiEndpoints
     {
         var version = typeof(ApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown";
 
-        app.MapGet("/api/status", () => new StatusResponse("perf-sentinel-hub", version));
+        app.MapGet("/api/status", (EngineProbe engine, IOptions<HubOptions> hubOptions) =>
+        {
+            var analysis = hubOptions.Value.Analysis;
+            return new StatusResponse(
+                "perf-sentinel-hub",
+                version,
+                engine.Version,
+                // No queue exists until analysis runs do. Zero is the truth here.
+                QueueDepth: 0,
+                analysis.Workers,
+                new StatusLimits(
+                    analysis.MaxTracesCap,
+                    (int)analysis.Timeout.TotalSeconds,
+                    (int)analysis.ReportRetention.TotalHours));
+        });
+        app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/findings", GetFindingsAsync);
         app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync);
         app.MapGet("/health/live", TypedResults.Ok);
         app.MapGet("/health/ready", (HubDatabase database) =>
             database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+    }
+
+    private static async Task<IReadOnlyList<SourceResponse>> GetSourcesAsync(
+        HubDatabase database,
+        IOptions<HubOptions> options,
+        CancellationToken cancellationToken)
+    {
+        var states = await database.QuerySourceStatesAsync(cancellationToken);
+        return options.Value.Sources.Select(source =>
+        {
+            states.TryGetValue(source.Id, out var state);
+            return new SourceResponse(
+                source.Id,
+                source.Name,
+                source.Environment,
+                source.Kind,
+                // A source that has never failed is reachable, including one
+                // that has never been observed at all: the Hub has no evidence
+                // against it, and a trace backend is never polled.
+                state?.UnreachableSinceMs is null,
+                state?.LastAttemptMs,
+                state?.LastSuccessMs,
+                state?.UnreachableSinceMs,
+                state?.ProducerVersion,
+                state?.LastErrorCode);
+        }).ToArray();
     }
 
     private static async Task<IResult> ImportFindingsAsync(

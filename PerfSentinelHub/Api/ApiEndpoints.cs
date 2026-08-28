@@ -53,6 +53,7 @@ public static partial class ApiEndpoints
                 source.Name,
                 source.Environment,
                 source.Kind,
+                source.RetentionHours,
                 // A source that has never failed is reachable, including one
                 // that has never been observed at all: the Hub has no evidence
                 // against it, and a trace backend is never polled.

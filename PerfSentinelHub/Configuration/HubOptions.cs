@@ -51,6 +51,11 @@ public sealed record SourceOptions
     // traces and detects nothing, so it is never polled and only ever read by
     // an analysis run.
     public string Kind { get; set; } = SourceKinds.Daemon;
+    // How far back this backend keeps traces, declared here because no backend
+    // API exposes it. Bounds the launcher's time-range picker. Declared and not
+    // measured, so it carries the same caveat as the environment: it keeps a
+    // stale claim until someone edits it.
+    public int? RetentionHours { get; set; }
     public Uri? BaseUrl { get; set; }
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
@@ -131,10 +136,25 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add($"Source '{source.Id}' kind must be 'daemon', 'tempo' or 'jaeger_query'.");
         if (source.Kind != SourceKinds.Daemon && source.ImportApiKey is not null)
             errors.Add($"Source '{source.Id}' is not a daemon and cannot carry an import API key.");
+        ValidateRetentionHours(source, errors);
         ValidateBaseUrl(source, errors);
         ValidateAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
             errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
+    }
+
+    private static void ValidateRetentionHours(SourceOptions source, List<string> errors)
+    {
+        if (source.RetentionHours is not { } retentionHours)
+            return;
+
+        // A daemon takes no window, so nothing would ever read the value. A
+        // setting with no consumer is worse than a missing one: someone tunes
+        // it and nothing happens.
+        if (source.Kind == SourceKinds.Daemon)
+            errors.Add($"Source '{source.Id}' is a daemon and takes no trace retention.");
+        else if (retentionHours is < 1 or > 87_600)
+            errors.Add($"Source '{source.Id}' retention must be between 1 hour and 10 years.");
     }
 
     private static void ValidateBaseUrl(SourceOptions source, List<string> errors)

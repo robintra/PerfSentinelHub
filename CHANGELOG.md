@@ -13,6 +13,10 @@ All notable changes to PerfSentinelHub are recorded here.
 - Sources declare a `Kind` of `daemon`, `tempo` or `jaeger_query`. A trace backend serves no
   findings endpoint, so it is never polled and cannot carry an import key. Polling one would have
   marked a healthy source unreachable on every interval.
+- A trace backend can declare `RetentionHours`, how far back it keeps traces. No backend API
+  exposes it, so a client asking for a window beyond it waits for a full run before getting
+  nothing useful back. A daemon cannot carry one, since it takes no window at all and the value
+  would have no reader.
 - `Hub:Analysis` configures the perf-sentinel binary the Hub runs, along with the worker count and
   the limits a run is held to. The binary's version is read once at startup, and a missing or
   unusable binary leaves it null rather than stopping the Hub, since collection and the read API

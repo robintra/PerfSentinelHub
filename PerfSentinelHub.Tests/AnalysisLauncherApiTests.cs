@@ -72,6 +72,7 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
                         Name = "Victoria Traces",
                         Environment = "production",
                         Kind = SourceKinds.JaegerQuery,
+                        RetentionHours = 2160,
                         BaseUrl = new Uri("http://127.0.0.1:10428")
                     }
                 ])));
@@ -80,6 +81,9 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
         var source = await ReadSourceAsync(client, "victoria", cancellationToken);
 
         Assert.Equal(SourceKinds.JaegerQuery, source.GetProperty("kind").GetString());
+        // Bounds the picker: asking for more than the backend keeps returns
+        // nothing useful after a full run.
+        Assert.Equal(2160, source.GetProperty("retention_hours").GetInt32());
         // A backend stores traces and detects nothing, so it has no producer
         // version to compare against the engine.
         Assert.Equal(JsonValueKind.Null, source.GetProperty("producer_version").ValueKind);

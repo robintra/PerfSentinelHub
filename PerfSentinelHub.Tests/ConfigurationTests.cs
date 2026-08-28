@@ -162,6 +162,25 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Trace_retention_belongs_to_a_backend_and_stays_in_range()
+    {
+        SourceOptions[] invalid =
+        [
+            // A daemon takes no window, so nothing would read the value.
+            ValidSource() with { RetentionHours = 24 },
+            ValidSource() with { Kind = SourceKinds.Tempo, RetentionHours = 0 },
+            ValidSource() with { Kind = SourceKinds.Tempo, RetentionHours = 87_601 }
+        ];
+
+        Assert.All(invalid, source => Assert.False(
+            new HubOptionsValidator().Validate(null, ValidOptions() with { Sources = [source] }).Succeeded));
+        Assert.True(new HubOptionsValidator().Validate(null, ValidOptions() with
+        {
+            Sources = [ValidSource() with { Kind = SourceKinds.Tempo, RetentionHours = 24 }]
+        }).Succeeded);
+    }
+
+    [Fact]
     public void Invalid_analysis_options_are_rejected()
     {
         AnalysisOptions[] invalid =

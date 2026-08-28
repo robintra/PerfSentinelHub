@@ -120,6 +120,7 @@ and `sources`.
 | `Sources[].Name` | none | Non-empty |
 | `Sources[].Environment` | none | Non-empty |
 | `Sources[].Kind` | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled and only a daemon may carry an import key |
+| `Sources[].RetentionHours` | none | Trace backends only, 1 hour to 10 years. How far back this backend keeps traces, declared because no backend API exposes it |
 | `Sources[].BaseUrl` | none | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
 | `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
 | `Sources[].ImportApiKey` | none | Optional push credential; at least 32 characters, supplied through a Secret |
@@ -148,7 +149,8 @@ while its daemon pushes successfully.
 - `GET /api/sources` lists every configured source with its kind and its last known collection
   state. Timestamps are null for a source that has never been observed, which a reader must not
   confuse with the epoch, and `producer_version` is null for a trace backend because a backend
-  stores traces and detects nothing.
+  stores traces and detects nothing. `retention_hours` is a declared value, not a measured one,
+  and carries the same caveat as the environment: it keeps a stale claim until someone edits it.
 - `GET /api/findings` accepts `service`, `finding_type`, `severity`, `limit`, `status`, and the
   daemon-compatible `include_acked` query parameter. `include_acked` defaults to `true`;
   `include_acked=false` hides envelopes carrying a non-null `acknowledged_by`.

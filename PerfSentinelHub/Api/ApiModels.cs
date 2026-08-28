@@ -27,6 +27,8 @@ public sealed record SourceResponse(
     string Name,
     string Environment,
     string Kind,
+    // Declared in the Hub's configuration, null when nobody did.
+    int? RetentionHours,
     bool Reachable,
     long? LastAttemptMs,
     long? LastSuccessMs,

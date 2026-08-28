@@ -70,15 +70,16 @@ public sealed class AnalysisRunnerTests : IDisposable
 
         await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
-        var arguments = await File.ReadAllTextAsync(
+        var arguments = (await File.ReadAllTextAsync(
             Path.Combine(_workspace, "reports", "render-args.txt"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).TrimEnd();
         // Passing the flag at all opts the sink out of size targeting, which is
         // the point: every finding reaches the report, the trees are capped.
-        Assert.Contains("--max-traces-embedded 50", arguments, StringComparison.Ordinal);
-        // The sink keeps the trees the top findings point at, so the ranking
-        // decides which 50 survive, not only how the list reads.
-        Assert.Contains("--sort impact", arguments, StringComparison.Ordinal);
+        // EndsWith pins the exact value: a bare Contains("50") also matches
+        // 500. And no --sort: impact is the 0.17.0 engine's own default, and
+        // the released 0.16.0 rejects the flag outright.
+        Assert.EndsWith("--max-traces-embedded 50", arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("--sort", arguments, StringComparison.Ordinal);
     }
 
     [Fact]

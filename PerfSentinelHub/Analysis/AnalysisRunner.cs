@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -99,7 +98,10 @@ public sealed partial class AnalysisRunner(
             if (!await RenderAsync(run.Id, reportJson, configPath, timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
-            summary.KeptFindings = await ReadKeptFindingsAsync(run.Id, timeout.Token);
+            // KeptFindings stays unset: the render always passes
+            // --max-traces-embedded, which opts the sink out of findings
+            // trimming, so reading the whole rendered file back to look for
+            // a trimmed_findings that cannot exist was pure allocation.
             summary.ReportBytes = RenderedBytes(run.Id);
             return new RunOutcome(AnalysisStatuses.Succeeded, null, binaryVersion, summary);
         }
@@ -178,14 +180,12 @@ public sealed partial class AnalysisRunner(
                 // Always passed. The flag opts the sink out of size targeting,
                 // so every finding reaches the report and only the span trees
                 // are capped. A wide sweep otherwise loses the tail of the list.
+                // No --sort: impact is the engine's own default from 0.17.0,
+                // and the released 0.16.0 rejects the flag outright, so
+                // passing it would break every run on the binary most
+                // deployments hold today for a value it already gets.
                 "--max-traces-embedded",
-                _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture),
-                // Ranks the findings by aggregate avoidable I/O, which also
-                // decides which span trees survive the cap above: the sink
-                // keeps the trees the top findings point at. Passed here
-                // rather than on the query so a daemon snapshot, which never
-                // goes through one, is ranked the same way.
-                "--sort", "impact"
+                _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture)
             };
             if (configPath is not null)
             {
@@ -199,36 +199,16 @@ public sealed partial class AnalysisRunner(
                 MaxReportJsonBytes,
                 _analysis.ReportDirectory,
                 cancellationToken);
+            // A refused render is deterministic (bad flag, unreadable input),
+            // and its stderr names the cause. Without this line the run is
+            // stored as binary_failed with zero diagnostic anywhere.
+            if (!result.Succeeded)
+                LogRenderFailed(logger, runId, result.ExitCode, result.StandardError);
             return result.Succeeded;
         }
         finally
         {
             TryDelete(inputPath);
-        }
-    }
-
-    /// <summary>
-    /// Reads back what the sink kept, which only the rendered file records. Null
-    /// when nothing was dropped: the engine omits the field entirely then.
-    ///
-    /// In practice null on every run since the Hub started passing
-    /// `--max-traces-embedded`, which opts the sink out of trimming findings.
-    /// Kept because the field is the engine's to emit, not the Hub's to assume.
-    /// </summary>
-    private async Task<int?> ReadKeptFindingsAsync(string runId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // The whole file, because the payload sits at no fixed offset. It is
-            // bounded by the sink's own budget, a few megabytes at worst.
-            var html = await File.ReadAllTextAsync(ReportPath(runId), cancellationToken);
-            var match = TrimmedFindings().Match(html);
-            return match.Success && int.TryParse(match.Groups[1].ValueSpan, out var kept) ? kept : null;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // The count is a caveat on the result, not the result.
-            return null;
         }
     }
 
@@ -247,8 +227,6 @@ public sealed partial class AnalysisRunner(
         }
     }
 
-    [GeneratedRegex("\"trimmed_findings\"\\s*:\\s*\\{\\s*\"kept\"\\s*:\\s*(\\d+)")]
-    private static partial Regex TrimmedFindings();
 
     private static RunOutcome Failed(string errorCode) =>
         new(AnalysisStatuses.Failed, errorCode, null, null);
@@ -288,6 +266,10 @@ public sealed partial class AnalysisRunner(
         // the operator to check a healthy backend.
         if (Contains(standardError, "timed out"))
             return AnalysisErrorCodes.Timeout;
+        // The engine's own body cap (0.17.0 wording): the launcher's
+        // output_too_large gloss already says exactly the right remedy.
+        if (Contains(standardError, "byte cap perf-sentinel applies"))
+            return AnalysisErrorCodes.OutputTooLarge;
         if (Contains(standardError, "connection refused") || Contains(standardError, "dns error") ||
             Contains(standardError, "error sending request"))
             return AnalysisErrorCodes.SourceUnreachable;
@@ -316,6 +298,13 @@ public sealed partial class AnalysisRunner(
 
     [LoggerMessage(1600, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, string runId, string errorCode);
+
+    [LoggerMessage(
+        1601,
+        LogLevel.Warning,
+        "Render for run {RunId} exited {ExitCode}: {StandardError}")]
+    private static partial void LogRenderFailed(
+        ILogger logger, string runId, int exitCode, string standardError);
 }
 
 internal sealed class EngineFailedException(string errorCode)

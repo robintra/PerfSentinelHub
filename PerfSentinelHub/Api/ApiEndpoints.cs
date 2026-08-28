@@ -15,15 +15,18 @@ public static partial class ApiEndpoints
     {
         var version = typeof(ApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown";
 
-        app.MapGet("/api/status", (EngineProbe engine, IOptions<HubOptions> hubOptions) =>
+        app.MapGet("/api/status", async (
+            EngineProbe engine,
+            HubDatabase database,
+            IOptions<HubOptions> hubOptions,
+            CancellationToken cancellationToken) =>
         {
             var analysis = hubOptions.Value.Analysis;
             return new StatusResponse(
                 "perf-sentinel-hub",
                 version,
                 engine.Version,
-                // No queue exists until analysis runs do. Zero is the truth here.
-                QueueDepth: 0,
+                await database.CountPendingRunsAsync(cancellationToken),
                 analysis.Workers,
                 new StatusLimits(
                     analysis.MaxTracesCap,

@@ -29,6 +29,9 @@ public sealed record AnalysisOptions
     // Where rendered reports live. Must be writable: the container is
     // read-only everywhere else.
     public string ReportDirectory { get; set; } = "/data/reports";
+    // Header a reverse proxy sets with the established identity. The Hub has
+    // no account surface and records the value as a claim, never verifies it.
+    public string IdentityHeader { get; set; } = "X-Forwarded-User";
     public int Workers { get; set; } = 2;
     public int MaxTracesCap { get; set; } = 2000;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
@@ -117,6 +120,9 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
         if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
             errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
+        if (string.IsNullOrWhiteSpace(analysis.IdentityHeader) ||
+            analysis.IdentityHeader.Any(character => char.IsControl(character) || character == ' '))
+            errors.Add("Hub:Analysis:IdentityHeader must be a header name.");
         if (analysis.Workers is < 1 or > 16)
             errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
         if (analysis.MaxTracesCap is < 1 or > 100_000)

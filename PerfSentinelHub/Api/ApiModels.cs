@@ -45,3 +45,7 @@ public sealed record FindingQuery(
     int Limit,
     bool IncludeAcked = true,
     string? Status = null);
+
+public sealed record SubmittedAnalysis(string Id, string Status);
+
+public sealed record AnalysisProblem(string Detail);

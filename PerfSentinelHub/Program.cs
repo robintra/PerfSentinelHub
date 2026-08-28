@@ -48,6 +48,8 @@ builder.Services.AddSingleton<HubDatabase>();
 builder.Services.AddSingleton<EngineProbe>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<EngineProbe>());
 builder.Services.AddSingleton<ImportGate>();
+builder.Services.AddSingleton<AnalysisRunner>();
+builder.Services.AddHostedService<AnalysisWorker>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AutomaticDecompression = DecompressionMethods.All,
@@ -64,6 +66,7 @@ await app.Services.GetRequiredService<HubDatabase>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 
 app.MapHubApi();
+app.MapAnalysisApi();
 
 await app.RunAsync();
 return 0;

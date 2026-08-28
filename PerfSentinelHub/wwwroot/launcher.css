@@ -600,18 +600,20 @@ button { font: inherit; }
 .band-seg[data-seg="warn"] { width: 35%; background: var(--band-warn); }
 .band-seg[data-seg="crit"] { width: 40%; background: var(--band-crit); }
 
-/* The bands read as fills, not as text. In dark the -fg tones are already
-   light and carry perfectly. In light they are their opposites, near-black
-   greens and browns meant to be read on white, and an unmixed fill turns the
-   rule into three dark slabs. The tokens stay the source, only their
-   application is lightened, which is what the handoff leaves open. */
-:root { --band-ok: color-mix(in srgb, var(--ok-fg) 62%, #ffffff); }
-:root { --band-warn: color-mix(in srgb, var(--warn-fg) 62%, #ffffff); }
-:root { --band-crit: color-mix(in srgb, var(--crit-fg) 62%, #ffffff); }
+/* The bands are fills, not text, and the -fg tones are text colours: in light
+   they are near-black greens and browns. The dashboard hit the same problem and
+   answered it with a saturated semantic set of its own, outside the token
+   palette, at html_template.html "Saturated semantic flat". These are those
+   exact values, so the rule reads the same on both sides of the handoff. */
+:root {
+  --band-ok: #0ba671;
+  --band-warn: #d97c24;
+  --band-crit: #bf4136;
+}
 :root[data-theme="dark"] {
-  --band-ok: var(--ok-fg);
-  --band-warn: var(--warn-fg);
-  --band-crit: var(--crit-fg);
+  --band-ok: #0d8a60;
+  --band-warn: #b06a24;
+  --band-crit: #a8443b;
 }
 .band-track input[type="range"] {
   position: absolute;

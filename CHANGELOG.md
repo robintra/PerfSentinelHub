@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- `GET /api/sources` joins each configured source to its last known collection state, and
+  `GET /api/status` now also reports the engine version, worker count, queue depth and the trace
+  cap, timeout and report retention a run is held to. Together they are what a human interface
+  needs to show a source list and state the cost of a run before it starts.
+- Sources declare a `Kind` of `daemon`, `tempo` or `jaeger_query`. A trace backend serves no
+  findings endpoint, so it is never polled and cannot carry an import key. Polling one would have
+  marked a healthy source unreachable on every interval.
+- `Hub:Analysis` configures the perf-sentinel binary the Hub runs, along with the worker count and
+  the limits a run is held to. The binary's version is read once at startup, and a missing or
+  unusable binary leaves it null rather than stopping the Hub, since collection and the read API
+  do not depend on it.
+
+### Changed
+
+- JSON responses use snake_case property names, matching the envelope perf-sentinel itself emits.
+  Every pre-existing field is a single word and serialises identically under either policy, so no
+  response changed shape.
+
 ## [0.1.0] - 2026-08-12
 
 ### Added

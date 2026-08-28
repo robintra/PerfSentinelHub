@@ -110,10 +110,16 @@ and `sources`.
 | `Hub:ResolutionGrace` | `7.00:00:00` (7 days) | Positive, below `Retention` |
 | `Hub:DefaultReadLimit` | `1000` | 1–`MaxReadLimit` |
 | `Hub:MaxReadLimit` | `10000` | 1–10000 |
+| `Hub:Analysis:EngineBinaryPath` | none | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
+| `Hub:Analysis:Workers` | `2` | 1–16 |
+| `Hub:Analysis:MaxTracesCap` | `2000` | 1–100000 |
+| `Hub:Analysis:Timeout` | `00:05:00` | Positive, at most one hour |
+| `Hub:Analysis:ReportRetention` | `1.00:00:00` (24 hours) | Positive duration |
 | `Hub:Sources` | none | At least one source |
 | `Sources[].Id` | none | Non-empty and unique |
 | `Sources[].Name` | none | Non-empty |
 | `Sources[].Environment` | none | Non-empty |
+| `Sources[].Kind` | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled and only a daemon may carry an import key |
 | `Sources[].BaseUrl` | none | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
 | `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
 | `Sources[].ImportApiKey` | none | Optional push credential; at least 32 characters, supplied through a Secret |
@@ -136,7 +142,13 @@ while its daemon pushes successfully.
 
 ## Read API
 
-- `GET /api/status` reports the Hub service and version.
+- `GET /api/status` reports the Hub service and version, the version of the perf-sentinel binary
+  it would run (`engine_version`, null when none is configured), and what a run costs: the worker
+  count, the current queue depth, and the trace cap, timeout and report retention it enforces.
+- `GET /api/sources` lists every configured source with its kind and its last known collection
+  state. Timestamps are null for a source that has never been observed, which a reader must not
+  confuse with the epoch, and `producer_version` is null for a trace backend because a backend
+  stores traces and detects nothing.
 - `GET /api/findings` accepts `service`, `finding_type`, `severity`, `limit`, `status`, and the
   daemon-compatible `include_acked` query parameter. `include_acked` defaults to `true`;
   `include_acked=false` hides envelopes carrying a non-null `acknowledged_by`.

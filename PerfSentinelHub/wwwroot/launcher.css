@@ -1,0 +1,357 @@
+/* perf-sentinel Hub launcher.
+   Colours come from tokens.css and are never retouched. Everything else is
+   hardcoded per component, as in the dashboard's own stylesheet, so a class
+   here maps onto a .ps-* rule there. */
+
+html, body { margin: 0; padding: 0; background: var(--bg); }
+* { box-sizing: border-box; }
+/* `hidden` loses to an explicit display value, and several elements here
+   set one. */
+[hidden] { display: none !important; }
+body {
+  font-family: var(--font-ui);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+a { color: var(--brand-text); text-decoration: none; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+
+/* The wordmark pair swaps on the resolved theme, exactly as the dashboard
+   template does. Only one is ever displayed. */
+[data-logo] { display: none; }
+[data-theme="light"] [data-logo="light"] { display: block; }
+[data-theme="dark"] [data-logo="dark"] { display: block; }
+
+/* -------------------------------------------------------------- shell */
+
+.shell-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  min-height: 60px;
+  padding: 9px 22px;
+  /* Opaque, unlike the dashboard's translucent bar: this one sits over a
+     scrolling form rather than over its own content. */
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-wordmark { display: flex; align-items: center; gap: 9px; }
+.shell-wordmark img { height: 30px; width: auto; }
+.shell-wordmark-suffix {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-3);
+}
+
+.shell-tabs { display: flex; align-items: center; gap: 6px; }
+.shell-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.shell-tab svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.shell-tab:hover { background: color-mix(in srgb, var(--brand) 16%, transparent); text-decoration: none; }
+.shell-tab[aria-current="page"] {
+  border-color: var(--btn-bd);
+  background: var(--accent-bg);
+  color: var(--brand-text);
+}
+.shell-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--crit-bg);
+  color: var(--crit-fg);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* One wrapping unit, so the whole cluster drops to a second row intact below
+   roughly 1130px. An earlier revision let the identity shrink to a sliver,
+   which is worse than hiding it. */
+.shell-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.shell-cluster > * { flex: 0 0 auto; }
+
+.shell-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.shell-version-label { color: var(--text-3); }
+.shell-version-value { color: var(--text-2); }
+.shell-version-rule { width: 1px; height: 14px; background: var(--border-2); }
+.shell-version-skew { display: inline-flex; align-items: center; gap: 5px; color: var(--warn-fg); }
+.shell-version-skew svg { width: 12px; height: 12px; }
+
+.shell-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.shell-identity svg { width: 13px; height: 13px; }
+
+.shell-theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 96px;
+  height: 34px;
+  border: 1px solid var(--btn-bd);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--btn-fg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.shell-theme:hover { border-color: var(--brand); background: var(--accent-bg); }
+.shell-theme-glyph { display: inline-flex; color: var(--brand-text); }
+.shell-theme-glyph svg { width: 15px; height: 15px; }
+/* Only on click. A re-resolution caused by the OS must not animate, or the
+   theme spins by itself at sunset. */
+.shell-theme[data-spin="a"] .shell-theme-glyph svg { animation: psSpinA .44s cubic-bezier(.34, 1.5, .5, 1); }
+.shell-theme[data-spin="b"] .shell-theme-glyph svg { animation: psSpinB .44s cubic-bezier(.34, 1.5, .5, 1); }
+@keyframes psSpinA { from { transform: rotate(-120deg) scale(.6); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes psSpinB { from { transform: rotate(-120deg) scale(.6); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.shell-main {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 30px 22px 56px;
+}
+
+.shell-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 9px 22px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.shell-footer-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.shell-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.shell-steps li { display: inline-flex; align-items: center; gap: 7px; }
+.shell-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------- shared pieces */
+
+.overline {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.page-title { margin: 6px 0 0; font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
+.page-sub { margin: 8px 0 0; font-size: 13.5px; color: var(--text-2); max-width: 78ch; }
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-2);
+}
+/* Declared, not measured. The dashed outline is the design's device for a
+   claim the Hub cannot verify, and it belongs wherever such a value appears. */
+.chip-declared {
+  border: 1px dashed var(--border-2);
+  background: transparent;
+  color: var(--text-3);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.status-pill[data-status="queued"] { background: var(--surface-3); color: var(--text-2); }
+.status-pill[data-status="running"] { background: var(--pill); color: var(--pill-fg); }
+.status-pill[data-status="succeeded"] { background: var(--ok-bg); color: var(--ok-fg); }
+.status-pill[data-status="empty"] { background: var(--warn-bg); color: var(--warn-fg); }
+.status-pill[data-status="failed"] { background: var(--crit-bg); color: var(--crit-fg); }
+.status-pill[data-status="interrupted"] { background: var(--info-bg); color: var(--info-fg); }
+.status-pill[data-status="expired"] { background: transparent; color: var(--text-3); opacity: .8; }
+.status-pill[data-status="running"] { animation: psBreathe 2s ease-in-out infinite; }
+@keyframes psBreathe { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
+
+.empty-state {
+  padding: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  background: var(--surface);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* Skeletons take a real row's height so the list does not jump when it fills. */
+.skeleton {
+  border-radius: 10px;
+  background: var(--surface-3);
+  animation: psShimmer 1.4s ease-in-out infinite;
+}
+@keyframes psShimmer { 0%, 100% { opacity: .5 } 50% { opacity: .9 } }
+
+.banner {
+  display: flex;
+  gap: 11px;
+  padding: 14px 16px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.banner svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 2px; }
+.banner[data-tone="warn"] { background: var(--warn-bg); color: var(--warn-fg); }
+.banner[data-tone="crit"] { background: var(--crit-bg); color: var(--crit-fg); }
+.banner[data-tone="info"] { background: var(--info-bg); color: var(--info-fg); }
+.banner[data-tone="ok"] { background: var(--ok-bg); color: var(--ok-fg); }
+.banner[data-tone="muted"] { background: var(--surface-3); color: var(--text-2); }
+
+/* Under reduced motion the badge holds at full opacity: it still reads
+   "running", so the pulse carried no information of its own. */
+@media (prefers-reduced-motion: reduce) {
+  .shell-theme-glyph svg { animation: none !important; }
+  .status-pill[data-status="running"] { animation: none; opacity: 1; }
+  .skeleton { animation: none; }
+}
+
+/* ------------------------------------------------------ screen: sources */
+
+/* The table's columns are homogeneous over a small, closed set, which is what
+   a table is for. It scrolls inside its own container rather than widening
+   the page. */
+.sources-wrap { margin-top: 20px; overflow-x: auto; }
+.table { width: 100%; min-width: 940px; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; }
+.table th {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  text-align: left;
+  color: var(--text-3);
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-2);
+}
+.table td { padding: 12px; vertical-align: top; color: var(--text-2); border-bottom: 1px solid var(--border); }
+.table td:first-child, .table th:first-child { padding-left: 18px; }
+.table td:last-child, .table th:last-child { padding-right: 18px; }
+.table tr[data-unreachable] { background: var(--crit-bg); }
+.table-strong { font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--text); }
+.table-mono { font-family: var(--font-mono); }
+.table-muted { color: var(--text-3); }
+
+.health { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; }
+.health-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.health[data-health="ok"] { color: var(--ok-fg); }
+.health[data-health="crit"] { color: var(--crit-fg); }
+
+.skew-pill {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.skew-pill[data-dir="behind"] { background: var(--warn-bg); color: var(--warn-fg); }
+.skew-pill[data-dir="ahead"] { background: var(--info-bg); color: var(--info-fg); }
+
+.sources-note { margin-top: 14px; font-size: 12px; color: var(--text-3); max-width: 78ch; }
+
+.skeleton-stack { display: flex; flex-direction: column; gap: 1px; }
+/* A real row's height, so the list does not jump when it fills. */
+.skeleton-row { height: 45px; }

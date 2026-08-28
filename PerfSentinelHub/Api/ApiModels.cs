@@ -3,6 +3,9 @@ namespace PerfSentinelHub.Api;
 public sealed record StatusResponse(
     string Service,
     string Version,
+    // Who the reverse proxy says is calling. Null when no proxy set the header,
+    // which is the whole truth the Hub has: it never verifies the claim.
+    string? Identity,
     string? EngineVersion,
     int QueueDepth,
     int Workers,

@@ -65,6 +65,12 @@ var app = builder.Build();
 await app.Services.GetRequiredService<HubDatabase>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 
+// The launcher and the reports it opens are served from the same origin: the
+// theme handoff between them goes through sessionStorage, with no URL
+// parameter and no postMessage.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapHubApi();
 app.MapAnalysisApi();
 

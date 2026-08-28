@@ -137,6 +137,15 @@ public sealed class AnalysisApiTests : IDisposable
         using var status = await _client.GetAsync("/api/status", cancellationToken);
         var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         Assert.Equal("0.16.0", payload.GetProperty("engine_version").GetString());
+        // The browser never sees the header the proxy adds, so the identity has
+        // to come back from the server or the topbar cannot show it.
+        Assert.Equal(JsonValueKind.Null, payload.GetProperty("identity").ValueKind);
+
+        using var identified = new HttpRequestMessage(HttpMethod.Get, "/api/status");
+        identified.Headers.Add("X-Forwarded-User", "operator@example.internal");
+        using var response = await _client.SendAsync(identified, cancellationToken);
+        var claimed = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal("operator@example.internal", claimed.GetProperty("identity").GetString());
 
         using var sources = await _client.GetAsync("/api/sources", cancellationToken);
         var listed = await sources.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);

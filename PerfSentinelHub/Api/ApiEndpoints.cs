@@ -16,6 +16,7 @@ public static partial class ApiEndpoints
         var version = typeof(ApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown";
 
         app.MapGet("/api/status", async (
+            HttpRequest request,
             EngineProbe engine,
             HubDatabase database,
             IOptions<HubOptions> hubOptions,
@@ -25,6 +26,7 @@ public static partial class ApiEndpoints
             return new StatusResponse(
                 "perf-sentinel-hub",
                 version,
+                KnownIdentity(request, analysis),
                 engine.Version,
                 await database.CountPendingRunsAsync(cancellationToken),
                 analysis.Workers,

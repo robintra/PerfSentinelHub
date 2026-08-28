@@ -156,15 +156,19 @@ public static partial class ApiEndpoints
     /// The identity a reverse proxy established upstream. The Hub has no
     /// account surface and does not verify it, so it is recorded as a claim.
     /// </summary>
-    private static string Identity(HttpRequest request, AnalysisOptions analysis)
+    private static string Identity(HttpRequest request, AnalysisOptions analysis) =>
+        KnownIdentity(request, analysis) ?? "unknown";
+
+    /// <summary>Null when no proxy established one, rather than a placeholder.</summary>
+    internal static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
     {
         if (!request.Headers.TryGetValue(analysis.IdentityHeader, out var values) ||
             values.Count != 1 ||
             values[0] is not { Length: > 0 } identity)
-            return "unknown";
+            return null;
 
         var trimmed = identity.Length > MaxIdentityChars ? identity[..MaxIdentityChars] : identity;
-        return trimmed.Any(char.IsControl) ? "unknown" : trimmed;
+        return trimmed.Any(char.IsControl) ? null : trimmed;
     }
 
     private static string NewRunId() =>

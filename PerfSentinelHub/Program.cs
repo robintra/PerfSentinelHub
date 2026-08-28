@@ -48,6 +48,7 @@ builder.Services.AddSingleton<HubDatabase>();
 builder.Services.AddSingleton<EngineProbe>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<EngineProbe>());
 builder.Services.AddSingleton<ImportGate>();
+builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<AnalysisRunner>();
 builder.Services.AddHostedService<AnalysisWorker>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler

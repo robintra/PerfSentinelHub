@@ -39,6 +39,7 @@ public static partial class ApiEndpoints
                     .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))]);
         });
         app.MapGet("/api/sources", GetSourcesAsync);
+        app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
         app.MapGet("/api/findings", GetFindingsAsync);
         app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync);

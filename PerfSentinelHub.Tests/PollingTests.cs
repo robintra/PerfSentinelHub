@@ -261,25 +261,4 @@ public sealed class PollingTests : IDisposable
         "Fixtures",
         "daemon-findings-0.11.2.json");
 
-    private sealed class FakeDaemon(WebApplication app, Uri baseUrl) : IAsyncDisposable
-    {
-        public Uri BaseUrl { get; } = baseUrl;
-
-        public static async Task<FakeDaemon> StartAsync(
-            RequestDelegate handler,
-            CancellationToken cancellationToken)
-        {
-            var builder = WebApplication.CreateSlimBuilder();
-            builder.WebHost.UseUrls("http://127.0.0.1:0");
-            var app = builder.Build();
-            app.Map("/api/status", handler);
-            app.Map("/api/findings", handler);
-            await app.StartAsync(cancellationToken);
-            var addresses = app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!;
-            return new FakeDaemon(app, new Uri(addresses.Addresses.Single()));
-        }
-
-        public async ValueTask DisposeAsync() => await app.DisposeAsync();
-    }
 }

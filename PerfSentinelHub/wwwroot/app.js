@@ -2484,7 +2484,7 @@
   }
 
   /**
-   * A disclosure, and the only one in the product. It holds settings that
+   * A disclosure, and the only one in this form. It holds settings that
    * change what the analysis looks for, which is a different question from
    * every other control on this screen, so it is folded away rather than
    * mixed in.

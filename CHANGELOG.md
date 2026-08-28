@@ -6,6 +6,24 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Added
 
+- `GET /api/sources/{sourceId}/daemon` reads one daemon's applied settings and its own account of
+  its state: the `[daemon]` section relayed verbatim, the detection thresholds and carbon scoring
+  its export carries, three gauges against their caps, and the tuning hints the daemon writes
+  about itself. None of that is in `/metrics`, which carries the counters behind the hints but
+  neither the settings nor the sentences. Read on demand rather than polled, because settings
+  never change without a restart the Hub has no signal for and a stale gauge would defeat the
+  point. The Hub derives one thing, whether a gauge crossed 90 % of its cap, on the same line the
+  daemon's own monitor draws. Every recommendation is the daemon's.
+- The fleet health screen unfolds a daemon's row onto that view, and the launcher prints the run
+  it would submit as an engine command line for an operator who would rather use a terminal. The
+  command is built from the object the form posts rather than from the form, so the two cannot
+  drift, and values are quoted for a POSIX shell. Detection overrides have no flag, so a run that
+  changed one prints the `.perf-sentinel.toml` it needs beside the command. An authenticated
+  source prints `--auth-header-env` and never its token.
+- `GET /api/sources` now also carries `base_url`, `engine_subcommand` and `auth_header_name`, the
+  three things a command line needs. The header's name and never its value: the value stays in
+  the Hub's configuration.
+
 - `GET /api/sources` joins each configured source to its last known collection state, and
   `GET /api/status` now also reports the engine version, worker count, queue depth and the trace
   cap, timeout and report retention a run is held to. Together they are what a human interface

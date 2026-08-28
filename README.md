@@ -157,6 +157,18 @@ while its daemon pushes successfully.
   daemon-compatible `include_acked` query parameter. `include_acked` defaults to `true`;
   `include_acked=false` hides envelopes carrying a non-null `acknowledged_by`.
 - `GET /api/findings/{traceId}` returns findings for a sample trace.
+- `GET /api/sources/{sourceId}/daemon` reads one daemon's applied settings and its own account of
+  its state, on demand rather than from the poll: settings never change without a restart the Hub
+  has no signal for, and the gauges are the point. It answers `404` for an unknown source and
+  `400` for a trace backend, which runs no daemon. A daemon that does not answer is reported as
+  an observation, `state: "unreachable"` with an error code, and never as a `502`: the Hub is
+  relaying a source's health, not failing itself. `config` is the daemon's `[daemon]` section
+  relayed verbatim, and is null with `config_unavailable_reason: "api_disabled"` when that daemon
+  serves no query API, which is a configuration statement rather than a fault. `detection_config`,
+  `scoring_config` and `energy_model` come from the daemon's export instead, where `/api/config`
+  does not carry them. `warnings` is the daemon's own tuning advisor verbatim: the Hub relays
+  those sentences and writes none of its own. The only thing it derives is `state`, from whether
+  a gauge crossed 90 % of its cap, the same line the daemon's own monitor draws.
 
 Responses preserve each daemon finding as an opaque, additive JSON document and add durable
 `first_seen`, `last_seen`, `max_confidence`, `status`, optional `lineage`, and source freshness
@@ -253,6 +265,20 @@ Four screens: start an analysis, follow one run, list recent runs, and read flee
 adapts to the selected source's `kind` rather than offering an independent live-or-historical
 switch, since a switch would let the operator compose impossible states such as a three-hour window
 against a daemon that keeps ten minutes.
+
+The launcher also prints the run as an engine command line, so an operator can take it to a
+terminal instead. It is built from the very object the form posts, never from the form, so the
+printed command and the submitted run cannot drift. It is one command and not the two the Hub
+runs: the JSON output and the render step exist so the Hub can build a dashboard, and a terminal
+needs neither. Values are quoted for a POSIX shell with single quotes, which is the only form that
+holds for a service name carrying `$` or a quote. Detection overrides have no command-line flag,
+so a run that changed one carries `-c .perf-sentinel.toml` and the file is printed beside the
+command. An authenticated source prints `--auth-header-env` rather than its token, which the Hub
+holds and never discloses.
+
+On the fleet health screen, a daemon's row unfolds into the settings it is running with, the
+gauges it reports against their caps, and the hints it writes about its own tuning, none of which
+`/metrics` carries. It ends with the `perf-sentinel query monitor` command for the same view live.
 
 The theme is tri-state (system, light, dark). Only the resolved light or dark ever reaches the DOM,
 so stylesheets see two values and never three. The position is stored under `perf-sentinel:theme`

@@ -18,8 +18,8 @@ public sealed class AnalysisStorageTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = await OpenAsync(cancellationToken);
-        await database.TryInsertRunAsync(Run("second", Now + 1000), cancellationToken);
-        await database.TryInsertRunAsync(Run("first", Now), cancellationToken);
+        Assert.True(await database.TryInsertRunAsync(Run("second", Now + 1000), cancellationToken));
+        Assert.True(await database.TryInsertRunAsync(Run("first", Now), cancellationToken));
 
         var claimed = await database.TryClaimNextRunAsync(Now + 5000, cancellationToken);
 
@@ -37,8 +37,8 @@ public sealed class AnalysisStorageTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = await OpenAsync(cancellationToken);
-        await database.TryInsertRunAsync(Run("queued", Now), cancellationToken);
-        await database.TryInsertRunAsync(Run("started", Now + 1), cancellationToken);
+        Assert.True(await database.TryInsertRunAsync(Run("queued", Now), cancellationToken));
+        Assert.True(await database.TryInsertRunAsync(Run("started", Now + 1), cancellationToken));
         await database.TryClaimNextRunAsync(Now + 100, cancellationToken);
 
         var interrupted = await database.InterruptRunningRunsAsync(Now + 200, cancellationToken);
@@ -98,7 +98,7 @@ public sealed class AnalysisStorageTests : IDisposable
         long? expiresAtMs,
         CancellationToken cancellationToken)
     {
-        await database.TryInsertRunAsync(Run(id, Now), cancellationToken);
+        Assert.True(await database.TryInsertRunAsync(Run(id, Now), cancellationToken));
         await database.CompleteRunAsync(
             id, status, Now, expiresAtMs, "0.16.0", null, """{"empty":false}""", cancellationToken);
     }

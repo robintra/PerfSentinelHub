@@ -77,6 +77,7 @@ public static partial class ApiEndpoints
     private static async Task ListAnalysesAsync(
         HttpContext context,
         HubDatabase database,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var limit = DefaultRunLimit;
@@ -90,13 +91,15 @@ public static partial class ApiEndpoints
         }
 
         var runs = await database.ListRunsAsync(limit, cancellationToken);
-        await AnalysisRunWriter.WriteArrayAsync(context.Response, runs, cancellationToken);
+        await AnalysisRunWriter.WriteArrayAsync(
+            context.Response, runs, loggerFactory.CreateLogger("AnalysisApi"), cancellationToken);
     }
 
     private static async Task<IResult> GetAnalysisAsync(
         string id,
         HttpContext context,
         HubDatabase database,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!IsRunId(id))
@@ -105,7 +108,8 @@ public static partial class ApiEndpoints
         if (run is null)
             return TypedResults.NotFound();
 
-        await AnalysisRunWriter.WriteObjectAsync(context.Response, run, cancellationToken);
+        await AnalysisRunWriter.WriteObjectAsync(
+            context.Response, run, loggerFactory.CreateLogger("AnalysisApi"), cancellationToken);
         return TypedResults.Empty;
     }
 

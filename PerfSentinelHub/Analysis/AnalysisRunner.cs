@@ -61,14 +61,11 @@ public sealed partial class AnalysisRunner(
         if (!Directory.Exists(_analysis.ReportDirectory))
             return 0;
 
-        var swept = 0;
-        foreach (var path in Directory.EnumerateFiles(_analysis.ReportDirectory, "*.input.json"))
-        {
-            DeleteQuietly(path);
-            swept++;
-        }
-
-        return swept;
+        // Counted on the delete, not on the listing: a read-only volume would
+        // otherwise have the log announce removals that never happened.
+        return Directory
+            .EnumerateFiles(_analysis.ReportDirectory, "*.input.json")
+            .Count(TryDelete);
     }
 
     public async Task<RunOutcome> RunAsync(
@@ -197,15 +194,19 @@ public sealed partial class AnalysisRunner(
     private static bool Contains(string haystack, string needle) =>
         haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
-    private static void DeleteQuietly(string path)
+    private static void DeleteQuietly(string path) => TryDelete(path);
+
+    private static bool TryDelete(string path)
     {
         try
         {
             File.Delete(path);
+            return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // The run's outcome does not depend on the scratch file going away.
+            return false;
         }
     }
 

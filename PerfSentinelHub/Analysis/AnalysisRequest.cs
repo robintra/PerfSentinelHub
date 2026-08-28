@@ -23,7 +23,14 @@ public sealed record AnalysisRequest
     private const int MaxTraceIdLength = 64;
     private const int DefaultMaxTraces = 100;
 
-    private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
+    private static readonly JsonElement EmptyObject = ParseEmptyObject();
+
+    /// <summary>Clone detaches the element, so the document's pooled buffer goes back.</summary>
+    private static JsonElement ParseEmptyObject()
+    {
+        using var document = JsonDocument.Parse("{}");
+        return document.RootElement.Clone();
+    }
 
     /// <summary>
     /// Parses and validates a submitted request against the source it targets.

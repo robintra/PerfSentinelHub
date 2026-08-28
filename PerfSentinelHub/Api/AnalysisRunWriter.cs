@@ -9,18 +9,19 @@ namespace PerfSentinelHub.Api;
 /// are re-emitted verbatim rather than round-tripped through a model: their
 /// shape varies with the source kind and belongs to the launcher's contract.
 /// </summary>
-public static class AnalysisRunWriter
+public static partial class AnalysisRunWriter
 {
     public static async Task WriteArrayAsync(
         HttpResponse response,
         IReadOnlyList<AnalysisRun> runs,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
         writer.WriteStartArray();
         foreach (var run in runs)
-            WriteRun(writer, run);
+            WriteRun(writer, run, logger);
         writer.WriteEndArray();
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
@@ -29,11 +30,12 @@ public static class AnalysisRunWriter
     public static async Task WriteObjectAsync(
         HttpResponse response,
         AnalysisRun run,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
-        WriteRun(writer, run);
+        WriteRun(writer, run, logger);
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
@@ -71,7 +73,7 @@ public static class AnalysisRunWriter
         return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    private static void WriteRun(Utf8JsonWriter writer, AnalysisRun run)
+    private static void WriteRun(Utf8JsonWriter writer, AnalysisRun run, ILogger logger)
     {
         writer.WriteStartObject();
         writer.WriteString("id", run.Id);
@@ -80,7 +82,7 @@ public static class AnalysisRunWriter
         writer.WriteString("source_name", run.SourceName);
         writer.WriteString("environment", run.Environment);
         writer.WriteString("kind", run.Kind);
-        WriteRawOrNull(writer, "request", run.RequestJson);
+        WriteRawOrNull(writer, "request", run.RequestJson, run.Id, logger);
         writer.WriteString("requested_by", run.RequestedBy);
         writer.WriteNumber("created_at_ms", run.CreatedAtMs);
         WriteNumberOrNull(writer, "started_at_ms", run.StartedAtMs);
@@ -88,7 +90,7 @@ public static class AnalysisRunWriter
         WriteNumberOrNull(writer, "expires_at_ms", run.ExpiresAtMs);
         WriteStringOrNull(writer, "producer_version", run.ProducerVersion);
         WriteStringOrNull(writer, "error_code", run.ErrorCode);
-        WriteRawOrNull(writer, "result", run.ResultJson);
+        WriteRawOrNull(writer, "result", run.ResultJson, run.Id, logger);
         writer.WriteEndObject();
     }
 
@@ -97,7 +99,12 @@ public static class AnalysisRunWriter
     /// the writer has started would abort a body already partly flushed, and
     /// the client would see a truncated array behind a 200.
     /// </summary>
-    private static void WriteRawOrNull(Utf8JsonWriter writer, string name, string? json)
+    private static void WriteRawOrNull(
+        Utf8JsonWriter writer,
+        string name,
+        string? json,
+        string runId,
+        ILogger logger)
     {
         JsonDocument? document = null;
         try
@@ -105,8 +112,11 @@ public static class AnalysisRunWriter
             if (json is not null)
                 document = JsonDocument.Parse(json);
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            // Answering null keeps the body valid, but silence would leave a
+            // succeeded run showing no result with nothing saying why.
+            LogUnreadableColumn(logger, exception, runId, name);
             document = null;
         }
 
@@ -122,6 +132,14 @@ public static class AnalysisRunWriter
             document.RootElement.WriteTo(writer);
         }
     }
+
+    [LoggerMessage(1401, LogLevel.Error,
+        "Run {RunId} has unreadable JSON in its {Column} column, served as null.")]
+    private static partial void LogUnreadableColumn(
+        ILogger logger,
+        Exception exception,
+        string runId,
+        string column);
 
     private static void WriteNumberOrNull(Utf8JsonWriter writer, string name, long? value)
     {

@@ -868,11 +868,10 @@
 
     // The container carries the pill radius and clips its children, so only the
     // outer ends are rounded and the two inner joins stay square.
-    const widths = bandWidths(cap);
     const segments = el("div", { class: "band-segs", "aria-hidden": "true" },
-      ["ok", "warn", "crit"].map(function (tone, index) {
-        const segment = el("span", { class: "band-seg", "data-seg": tone });
-        segment.style.width = widths[index];
+      bands(cap).map(function (band) {
+        const segment = el("span", { class: "band-seg", "data-seg": band.tone });
+        segment.style.width = band.width;
         return segment;
       }));
 
@@ -898,42 +897,53 @@
   }
 
   /**
-   * Each label sits at the right edge of its own band, so it marks a boundary.
-   * The last one is the service's cap, not a constant, and the columns follow
-   * the same proportions.
+   * The bands that exist at this cap, each with the boundary it ends at and
+   * its share of the rule. A cap at or below a boundary means that band never
+   * occurs: it is dropped rather than drawn at zero width under a label
+   * repeating the cap.
    */
+  function bands(cap) {
+    const all = [["ok", 500, "safe"], ["warn", 1200, "heavy"], ["crit", Infinity, ""]];
+    const kept = all.filter(function (band) { return band[1] < cap; });
+    // The last stripe ends at the cap and takes the tone of whichever band the
+    // cap itself falls in. Always painting it crit would turn a Hub capped at
+    // 500 into one entirely red rule over a range that is all comfortable.
+    const last = all[kept.length];
+    kept.push([last[0], cap, "cap"]);
+
+    let previous = 0;
+    return kept.map(function (band) {
+      const share = (band[1] - previous) / cap;
+      previous = band[1];
+      return {
+        tone: band[0],
+        label: group(band[1]) + " " + band[2],
+        width: (share * 100).toFixed(2) + "%"
+      };
+    });
+  }
+
+  /** Each label sits at the right edge of its own band, so it marks a boundary. */
   function bandScale(cap) {
-    const safe = Math.min(500, cap);
-    const heavy = Math.min(1200, cap);
-    const grid = el("div", { class: "band-scale-grid" }, [
-      el("span", { text: group(safe) + " safe" }),
-      el("span", { text: group(heavy) + " heavy" }),
-      el("span", { text: group(cap) + " cap" })
-    ]);
-    grid.style.gridTemplateColumns = bandWidths(cap).join(" ");
+    const current = bands(cap);
+    const grid = el("div", { class: "band-scale-grid" }, current.map(function (band) {
+      return el("span", { text: band.label });
+    }));
+    grid.style.gridTemplateColumns = current.map(function (band) { return band.width; }).join(" ");
     return el("div", { class: "band-scale" }, [
       el("span", { class: "band-scale-start", text: "1" }),
       grid
     ]);
   }
 
-  /** The three segment widths, as percentages of the configured cap. */
-  function bandWidths(cap) {
-    const safe = Math.min(500, cap) / cap;
-    const heavy = Math.min(1200, cap) / cap;
-    return [
-      (safe * 100).toFixed(2) + "%",
-      ((heavy - safe) * 100).toFixed(2) + "%",
-      ((1 - heavy) * 100).toFixed(2) + "%"
-    ];
-  }
-
   function group(value) {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
   }
 
+  // render() returns early when the status is missing, so every caller runs
+  // with one in hand.
   function tracesCap() {
-    return state.status ? state.status.limits.max_traces_cap : 2000;
+    return state.status.limits.max_traces_cap;
   }
 
   /**
@@ -1562,12 +1572,17 @@
       location.hash = "#/run/" + result.payload.id;
     }).catch(function (error) {
       // Silence here reads as a broken button: the operator clicked and
-      // nothing moved.
+      // nothing moved. The note carries the run's arguments, so the error
+      // borrows the line and hands it back.
       const note = button.parentNode && button.parentNode.querySelector(".outcome-note");
-      if (note) {
-        note.textContent = String(error.message || error);
-        note.setAttribute("data-error", "true");
-      }
+      if (!note) return;
+      const original = note.textContent;
+      note.textContent = String(error.message || error);
+      note.setAttribute("data-error", "true");
+      setTimeout(function () {
+        note.textContent = original;
+        note.removeAttribute("data-error");
+      }, 6000);
     });
   }
 

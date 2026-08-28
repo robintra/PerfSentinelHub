@@ -119,7 +119,10 @@ public sealed partial class AnalysisWorker(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             LogRunCrashed(logger, exception, run.Id);
-            outcome = new RunOutcome(AnalysisStatuses.Failed, AnalysisErrorCodes.Internal, null, null);
+            // The only throw that reaches here is a stored request the Hub
+            // cannot read, which is the request's fault and not the Hub's:
+            // internal would tell the operator to retry an identical failure.
+            outcome = new RunOutcome(AnalysisStatuses.Failed, AnalysisErrorCodes.InvalidRequest, null, null);
         }
 
         var finishedAtMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
@@ -174,15 +177,15 @@ public sealed partial class AnalysisWorker(
     [LoggerMessage(1303, LogLevel.Warning, "Run {RunId} targets source {SourceId}, which is no longer configured.")]
     private static partial void LogSourceGone(ILogger logger, string runId, string sourceId);
 
-    [LoggerMessage(1307, LogLevel.Information, "Removed {Count} scratch file(s) a previous process left behind.")]
-    private static partial void LogScratchSwept(ILogger logger, int count);
-
-    [LoggerMessage(1306, LogLevel.Error, "Run {RunId} threw outside the runner and was failed as internal.")]
-    private static partial void LogRunCrashed(ILogger logger, Exception exception, string runId);
-
     [LoggerMessage(1304, LogLevel.Information, "Deleted {Count} expired report(s).")]
     private static partial void LogReportsExpired(ILogger logger, int count);
 
     [LoggerMessage(1305, LogLevel.Error, "The expired-report sweep failed, retrying at the next pass.")]
     private static partial void LogSweepFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(1306, LogLevel.Error, "Run {RunId} threw outside the runner and was failed as invalid.")]
+    private static partial void LogRunCrashed(ILogger logger, Exception exception, string runId);
+
+    [LoggerMessage(1307, LogLevel.Information, "Removed {Count} scratch file(s) a previous process left behind.")]
+    private static partial void LogScratchSwept(ILogger logger, int count);
 }

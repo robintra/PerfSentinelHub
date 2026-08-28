@@ -500,11 +500,16 @@ button { font: inherit; }
 
 /* One 6px rule in three segments with the range input laid transparently over
    it, so the operator drags the real control. */
-.band-track { position: relative; display: flex; height: 22px; align-items: center; margin-top: 14px; }
-.band-seg { height: 6px; }
-.band-seg[data-seg="ok"] { flex: 0 0 25%; background: var(--ok-bd); border-radius: 3px 0 0 3px; }
-.band-seg[data-seg="warn"] { flex: 0 0 35%; background: var(--warn-bd); }
-.band-seg[data-seg="crit"] { flex: 0 0 40%; background: var(--crit-bd); border-radius: 0 3px 3px 0; }
+/* Three separated segments, not one striped rule: the gaps are what make the
+   three bands read as three. The range input lays over the whole track. */
+.band-track { position: relative; display: flex; gap: 4px; height: 22px; align-items: center; margin-top: 14px; }
+.band-seg { height: 6px; border-radius: 3px; }
+/* The -fg tones, not -bd. In dark, --warn-bd and --crit-bd are near-identical
+   browns and the middle band would not read as the orange its own sentence
+   names. */
+.band-seg[data-seg="ok"] { flex: 1 1 25%; background: var(--ok-fg); }
+.band-seg[data-seg="warn"] { flex: 1 1 35%; background: var(--warn-fg); }
+.band-seg[data-seg="crit"] { flex: 1 1 40%; background: var(--crit-fg); }
 .band-track input[type="range"] { position: absolute; inset: 0; width: 100%; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; }
 .band-track input[type="range"]::-webkit-slider-runnable-track { height: 22px; background: transparent; }
 .band-track input[type="range"]::-webkit-slider-thumb {
@@ -521,6 +526,16 @@ button { font: inherit; }
 }
 .band-scale { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .band-body { margin: 12px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-2); }
+
+.sink {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+}
+.sink-rows { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; margin: 12px 0 0; }
+.sink-rows dt { font-family: var(--font-mono); font-size: 12px; color: var(--text); text-align: right; }
+.sink-rows dd { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-2); }
 
 .checkbox { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); cursor: pointer; }
 .checkbox input { margin-top: 2px; accent-color: var(--brand); }
@@ -564,3 +579,123 @@ button { font: inherit; }
 .submit:disabled { background: var(--surface-3); color: var(--text-3); opacity: .7; cursor: not-allowed; }
 .submit-sentence { margin: 0; max-width: 62ch; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
 .submit-sentence[data-blocked="true"] { color: var(--text-3); }
+
+/* ------------------------------------------------------- screen: one run */
+
+.back-link { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-2); }
+.back-link:hover { color: var(--brand-text); text-decoration: none; }
+.run-head { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.run-id { font-family: var(--font-mono); font-size: 13px; color: var(--text-3); }
+
+.run-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; margin-top: 24px; }
+@media (max-width: 900px) { .run-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.log-sub { margin: 6px 0 12px; font-size: 12px; color: var(--text-3); }
+.log { display: flex; flex-direction: column; gap: 2px; }
+.log-row { display: grid; grid-template-columns: 112px 12px minmax(0, 1fr); align-items: baseline; gap: 8px; padding: 7px 0; }
+.log-time { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.log-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--text-3); }
+.log-dot[data-event="succeeded"] { background: var(--ok-fg); }
+.log-dot[data-event="failed"] { background: var(--crit-fg); }
+.log-dot[data-event="interrupted"] { background: var(--info-fg); }
+.log-dot[data-event="running"], .log-dot[data-event="waiting"] { background: var(--pill-fg); }
+.log-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.log-name { font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
+.log-detail { font-size: 12.5px; color: var(--text-2); }
+.log-note { margin: 16px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-3); max-width: 62ch; }
+
+.rail { display: flex; flex-direction: column; gap: 14px; }
+.rail-card { padding: 18px 20px; }
+.elapsed-figure { margin: 10px 0 0; font-family: var(--font-mono); font-size: 40px; line-height: 1; color: var(--text); }
+.elapsed-figure[data-running="true"] { color: var(--brand-text); }
+.elapsed-unit { margin: 0 8px 0 3px; font-size: 15px; color: var(--text-3); }
+.rail-note { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+
+/* The only bar in the product. It measures a known ceiling, not progress
+   toward an unknown total. */
+.ceiling { height: 3px; margin-top: 14px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.ceiling-fill { display: block; height: 100%; background: var(--brand); }
+.ceiling-fill[data-near="true"] { background: var(--warn-fg); }
+
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; margin: 12px 0 0; }
+.facts dt { font-size: 11.5px; color: var(--text-3); }
+.facts dd { margin: 0; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.outcome { margin-top: 24px; padding: 20px 22px; border-radius: var(--r); background: var(--surface); }
+.outcome[data-tone="ok"] { background: var(--ok-bg); }
+.outcome[data-tone="warn"] { background: var(--warn-bg); }
+.outcome[data-tone="crit"] { background: var(--crit-bg); }
+.outcome[data-tone="info"] { background: var(--info-bg); }
+.outcome[data-tone="muted"] { background: var(--surface); }
+.outcome-body { margin: 10px 0 0; font-size: 13.5px; line-height: 1.6; max-width: 78ch; }
+.outcome-foot { margin: 14px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--text-3); max-width: 78ch; }
+.outcome .banner { margin-top: 16px; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+.warning-kind { margin: 0; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.warning-message { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; }
+
+.counts { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 14px; }
+.count { display: flex; align-items: baseline; gap: 6px; }
+.count-n { font-family: var(--font-mono); font-size: 21px; }
+.count-l { font-size: 11.5px; opacity: .8; }
+
+.outcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 20px; }
+.outcome-actions .submit { text-decoration: none; }
+.outcome-lifetime { font-family: var(--font-mono); font-size: 11.5px; opacity: .8; }
+
+/* ---------------------------------------------------- screen: recent runs */
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.run-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.run-card {
+  display: block;
+  padding: 15px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: inherit;
+}
+.run-card:hover { box-shadow: 0 0 0 1.5px var(--btn-bd); text-decoration: none; }
+/* Expired rows stay in the list, keeping their parameters: the most common
+   next action is to run the same thing again. */
+.run-card[data-status="expired"] { opacity: .62; }
+.run-card-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.run-card-name { font-size: 13.5px; font-weight: 600; }
+.run-card-id { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
+.run-card-args {
+  margin: 11px 0 0;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.run-card-facts { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 11px; font-size: 11.5px; }
+.fact-k { color: var(--text-3); }
+.fact-v { margin-left: 6px; font-family: var(--font-mono); color: var(--text-2); }
+
+/* ----------------------------------------------- screen: dashboard handoff */
+
+/* The report gets the whole viewport under a slim bar: the surface changes
+   visibly so the operator knows they left the launcher. */
+body[data-screen="report"] .shell-main { max-width: none; padding: 0; }
+body[data-screen="report"] .shell-footer { display: none; }
+.report-shell { display: flex; flex-direction: column; height: calc(100vh - 61px); }
+.report-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 22px;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border-2);
+}
+.report-path { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
+.report-engine { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
+.report-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg); }
+
+.field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.field-gloss { font-weight: 400; font-size: 11.5px; color: var(--text-3); }

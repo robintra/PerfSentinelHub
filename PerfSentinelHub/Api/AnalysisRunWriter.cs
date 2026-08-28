@@ -58,9 +58,6 @@ public static partial class AnalysisRunWriter
             writer.WriteNumber("info", summary.Info);
             writer.WriteNumber("traces_analyzed", summary.TracesAnalyzed);
             writer.WriteBoolean("quality_gate_passed", summary.QualityGatePassed);
-            // Present only when the sink dropped findings to fit its budget.
-            if (summary.KeptFindings is { } kept)
-                writer.WriteNumber("kept_findings", kept);
             // Absent on a run whose file could not be measured.
             if (summary.ReportBytes is { } bytes)
                 writer.WriteNumber("report_bytes", bytes);

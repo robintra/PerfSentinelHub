@@ -53,7 +53,7 @@ public sealed record AnalysisRequest
         error = null;
         // An omitted request is the empty object, which is exactly what a
         // daemon takes. Anything present but not an object is still refused.
-        if (payload.ValueKind == JsonValueKind.Undefined || payload.ValueKind == JsonValueKind.Null)
+        if (payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
             payload = EmptyObject;
         if (payload.ValueKind != JsonValueKind.Object)
         {
@@ -104,10 +104,10 @@ public sealed record AnalysisRequest
             arguments.Add(configPath);
         }
 
-        if (TraceId is { } traceId)
+        if (TraceId is not null)
         {
             arguments.Add("--trace-id");
-            arguments.Add(traceId);
+            arguments.Add(TraceId);
             return arguments;
         }
 

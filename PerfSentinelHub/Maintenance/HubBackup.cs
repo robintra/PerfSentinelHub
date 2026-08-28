@@ -15,13 +15,13 @@ public static class HubBackup
     {
         if (!File.Exists(databasePath))
         {
-            Console.Error.WriteLine($"No database at '{databasePath}'.");
+            await Console.Error.WriteLineAsync($"No database at '{databasePath}'.");
             return 1;
         }
 
         if (File.Exists(destinationPath))
         {
-            Console.Error.WriteLine($"Refusing to overwrite existing '{destinationPath}'.");
+            await Console.Error.WriteLineAsync($"Refusing to overwrite existing '{destinationPath}'.");
             return 1;
         }
 
@@ -44,14 +44,14 @@ public static class HubBackup
         }
         catch (SqliteException exception)
         {
-            Console.Error.WriteLine($"Backup failed: {exception.Message}");
+            await Console.Error.WriteLineAsync($"Backup failed: {exception.Message}");
             // SQLite never unlinks a partial output, and a leftover would
             // make the overwrite guard refuse every retry at this path.
             TryDeletePartial(destinationPath);
             return 1;
         }
 
-        Console.WriteLine($"Backup written to '{destinationPath}'.");
+        await Console.Out.WriteLineAsync($"Backup written to '{destinationPath}'.");
         return 0;
     }
 
@@ -63,9 +63,11 @@ public static class HubBackup
         }
         catch (IOException)
         {
+            // A failed best-effort cleanup must not hide the backup failure.
         }
         catch (UnauthorizedAccessException)
         {
+            // A failed best-effort cleanup must not hide the backup failure.
         }
     }
 }

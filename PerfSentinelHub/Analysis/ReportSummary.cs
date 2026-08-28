@@ -24,14 +24,6 @@ public sealed record ReportSummary(
     IReadOnlyList<ResultWarning> Warnings)
 {
     /// <summary>
-    /// How many findings the rendered report actually holds, when the sink had
-    /// to drop some to fit its budget. Null when nothing was dropped. It cannot
-    /// come from the summary above: that is parsed from the engine's pre-trim
-    /// output, and only the rendered artefact knows what survived.
-    /// </summary>
-    public int? KeptFindings { get; set; }
-
-    /// <summary>
     /// The rendered file's size on disk. Recorded rather than measured later:
     /// the report is deleted when its retention runs out, and the launcher
     /// shows past weights so an operator sees what this source's traces cost
@@ -99,7 +91,6 @@ public sealed record ReportSummary(
                 case "critical": critical++; break;
                 case "warning": warning++; break;
                 case "info": info++; break;
-                default: break;
             }
         }
 
@@ -125,7 +116,7 @@ public sealed record ReportSummary(
     /// Prefers the structured `warning_details` and falls back to the legacy
     /// `warnings` array of plain strings, the way the engine's own renderers do.
     /// </summary>
-    private static IReadOnlyList<ResultWarning> ReadWarnings(JsonElement root)
+    private static List<ResultWarning> ReadWarnings(JsonElement root)
     {
         var warnings = new List<ResultWarning>();
         if (root.TryGetProperty("warning_details", out var details) &&

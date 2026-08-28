@@ -278,13 +278,12 @@ button { font: inherit; }
 }
 .status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
 .status-pill[data-status="queued"] { background: var(--surface-3); color: var(--text-2); }
-.status-pill[data-status="running"] { background: var(--pill); color: var(--pill-fg); }
+.status-pill[data-status="running"] { background: var(--pill); color: var(--pill-fg); animation: psBreathe 2s ease-in-out infinite; }
 .status-pill[data-status="succeeded"] { background: var(--ok-bg); color: var(--ok-fg); }
 .status-pill[data-status="empty"] { background: var(--warn-bg); color: var(--warn-fg); }
 .status-pill[data-status="failed"] { background: var(--crit-bg); color: var(--crit-fg); }
 .status-pill[data-status="interrupted"] { background: var(--info-bg); color: var(--info-fg); }
 .status-pill[data-status="expired"] { background: transparent; color: var(--text-3); opacity: .8; }
-.status-pill[data-status="running"] { animation: psBreathe 2s ease-in-out infinite; }
 @keyframes psBreathe { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
 
 .empty-state {
@@ -432,7 +431,7 @@ button { font: inherit; }
 .notice-sub { margin-top: 6px !important; font-size: 12.5px !important; font-weight: 400 !important; line-height: 1.55 !important; max-width: 62ch; color: var(--text-2) !important; }
 
 .field { margin-bottom: 18px; }
-.field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px; margin-bottom: 7px; font-size: 12px; font-weight: 500; color: var(--text-2); }
+.field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 7px; font-size: 12px; font-weight: 500; color: var(--text-2); }
 .field-note { margin: 7px 0 0; font-size: 11.5px; color: var(--text-3); }
 
 .input {
@@ -787,7 +786,6 @@ body[data-screen="report"] .shell-footer { display: none; }
 .report-engine { font-size: 11.5px; color: var(--text-3); }
 .report-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg); }
 
-.field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
 .field-gloss { font-family: var(--font-mono); font-weight: 400; font-size: 10.5px; color: var(--text-3); }
 
 /* ------------------------------------------- screens 2 and 3, prototype pass */

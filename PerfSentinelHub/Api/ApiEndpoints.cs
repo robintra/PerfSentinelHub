@@ -35,9 +35,8 @@ public static partial class ApiEndpoints
                     (int)analysis.Timeout.TotalSeconds,
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded),
-                DetectionOverrides.Schema
-                    .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))
-                    .ToArray());
+                [.. DetectionOverrides.Schema
+                    .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))]);
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/findings", GetFindingsAsync);
@@ -54,7 +53,7 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         var states = await database.QuerySourceStatesAsync(cancellationToken);
-        return options.Value.Sources.Select(source =>
+        return [.. options.Value.Sources.Select(source =>
         {
             states.TryGetValue(source.Id, out var state);
             return new SourceResponse(
@@ -72,7 +71,7 @@ public static partial class ApiEndpoints
                 state?.UnreachableSinceMs,
                 state?.ProducerVersion,
                 state?.LastErrorCode);
-        }).ToArray();
+        })];
     }
 
     private static async Task<IResult> ImportFindingsAsync(

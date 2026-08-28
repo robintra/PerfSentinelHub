@@ -15,7 +15,7 @@ if (args is ["backup", ..])
     // discard the bare tokens and boot the full server instead.
     if (args is not ["backup", var backupDestination])
     {
-        Console.Error.WriteLine("Usage: PerfSentinelHub backup <destination>");
+        await Console.Error.WriteLineAsync("Usage: PerfSentinelHub backup <destination>");
         return 2;
     }
 
@@ -76,9 +76,3 @@ app.MapAnalysisApi();
 
 await app.RunAsync();
 return 0;
-
-// Exposed for WebApplicationFactory<Program> integration tests.
-// ReSharper disable once ClassNeverInstantiated.Global
-#pragma warning disable ASP0027
-public partial class Program;
-#pragma warning restore ASP0027

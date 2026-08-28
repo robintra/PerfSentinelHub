@@ -37,16 +37,7 @@ public static partial class FindingEnvelopeWriter
 
             using var document = envelope;
             writer.WriteStartObject();
-            // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
-            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
-            foreach (var property in document.RootElement.EnumerateObject())
-            {
-                if (property.Name is "first_seen" or "last_seen" or "max_confidence" or "sources"
-                    or "status" or "lineage")
-                    continue;
-
-                property.WriteTo(writer);
-            }
+            WriteOriginalProperties(writer, document.RootElement);
 
             writer.WriteNumber("first_seen", row.FirstSeenMs);
             writer.WriteNumber("last_seen", row.LastSeenMs);
@@ -92,4 +83,16 @@ public static partial class FindingEnvelopeWriter
 
     [LoggerMessage(1800, LogLevel.Error, "Finding {Signature} has an unreadable envelope and was skipped.")]
     private static partial void LogUnreadableEnvelope(ILogger logger, Exception exception, string signature);
+
+    private static void WriteOriginalProperties(Utf8JsonWriter writer, JsonElement envelope)
+    {
+        // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
+        foreach (var property in envelope.EnumerateObject())
+        {
+            if (property.Name is not ("first_seen" or "last_seen" or "max_confidence" or "sources"
+                or "status" or "lineage"))
+                property.WriteTo(writer);
+        }
+    }
 }

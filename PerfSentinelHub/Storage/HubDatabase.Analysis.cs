@@ -79,6 +79,9 @@ public sealed partial class HubDatabase
         }
     }
 
+    // These values map one-for-one to the columns that complete a persisted run;
+    // grouping them would only move the same flat database contract into a DTO.
+#pragma warning disable S107
     public async Task CompleteRunAsync(
         string id,
         string status,
@@ -118,6 +121,7 @@ public sealed partial class HubDatabase
             _writeGate.Release();
         }
     }
+#pragma warning restore S107
 
     public async Task<IReadOnlyList<AnalysisRun>> ListRunsAsync(int limit, CancellationToken cancellationToken)
     {

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Configuration;
@@ -26,7 +27,6 @@ public static partial class ApiEndpoints
     private static async Task<IResult> SubmitAnalysisAsync(
         HttpRequest request,
         HubDatabase database,
-        AnalysisRunner runner,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -64,13 +64,11 @@ public static partial class ApiEndpoints
                 return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
 
             var run = NewRun(source, requestElement, Identity(request, hubOptions.Analysis), nowMs);
-            if (!await database.TryInsertRunAsync(run, cancellationToken))
-            {
-                request.HttpContext.Response.Headers.RetryAfter = "1";
-                return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
-            }
+            if (await database.TryInsertRunAsync(run, cancellationToken))
+                return TypedResults.Accepted($"/api/analyses/{run.Id}", new SubmittedAnalysis(run.Id, run.Status));
 
-            return TypedResults.Accepted($"/api/analyses/{run.Id}", new SubmittedAnalysis(run.Id, run.Status));
+            request.HttpContext.Response.Headers.RetryAfter = "1";
+            return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -169,11 +167,10 @@ public static partial class ApiEndpoints
         KnownIdentity(request, analysis) ?? "unknown";
 
     /// <summary>Null when no proxy established one, rather than a placeholder.</summary>
-    internal static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
+    private static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
     {
         if (!request.Headers.TryGetValue(analysis.IdentityHeader, out var values) ||
-            values.Count != 1 ||
-            values[0] is not { Length: > 0 } identity)
+            values is not [{ Length: > 0 } identity])
             return null;
 
         var trimmed = identity.Length > MaxIdentityChars ? identity[..MaxIdentityChars] : identity;
@@ -189,11 +186,11 @@ public static partial class ApiEndpoints
     /// 404s anyway, so no test can pin it from outside.
     /// </summary>
     private static bool IsRunId(string id) =>
-        id.Length == RunIdHexChars && id.All(character => char.IsAsciiHexDigitLower(character));
+        id.Length == RunIdHexChars && id.All(char.IsAsciiHexDigitLower);
 
     // The typed overload keeps NativeAOT trimming safe: the reflection-based
     // one is flagged by IL2026 and IL3050 at build time.
-    private static IResult Problem(int statusCode, string detail) =>
+    private static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string detail) =>
         TypedResults.Json(
             new AnalysisProblem(detail),
             HubJsonContext.Default.AnalysisProblem,

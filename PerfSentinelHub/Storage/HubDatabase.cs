@@ -15,6 +15,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private const int PurgeChunkSize = 5_000;
     private const string SourceIdParameter = "$source_id";
+    private const string ServiceParameter = "$service";
     private const string ObservedAtParameter = "$observed_at";
     private const string FirstSeenParameter = "$first_seen";
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
@@ -398,7 +399,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     {
         var where = new StringBuilder("WHERE 1 = 1");
         var parameters = new List<(string Name, object Value)>();
-        AddFilter(where, parameters, "service", "$service", query.Service);
+        AddFilter(where, parameters, "service", ServiceParameter, query.Service);
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
@@ -409,6 +410,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         await using var command = connection.CreateCommand();
         // The status is computed before LIMIT so a status filter fills its
         // page instead of returning whatever survived a post-filter.
+        // Every interpolated fragment is assembled above from private constants;
+        // external values remain bound parameters.
+#pragma warning disable S2077
         command.CommandText = $"""
             WITH statused AS (
               SELECT findings.*, {StatusExpression} AS status
@@ -432,6 +436,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
             ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
             """;
+#pragma warning restore S2077
         foreach (var (name, value) in parameters)
             command.Parameters.AddWithValue(name, value);
         command.Parameters.AddWithValue("$limit", query.Limit);
@@ -441,38 +446,36 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
         var rows = new List<StoredFinding>();
         var bySignature = new Dictionary<string, StoredFinding>(StringComparer.Ordinal);
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
         {
-            while (await reader.ReadAsync(cancellationToken))
+            var signature = reader.GetString(0);
+            if (!bySignature.TryGetValue(signature, out var finding))
             {
-                var signature = reader.GetString(0);
-                if (!bySignature.TryGetValue(signature, out var finding))
-                {
-                    var sources = new List<FindingSourceObservation>();
-                    finding = new StoredFinding(
-                        signature,
-                        reader.GetString(1),
-                        reader.GetInt64(2),
-                        reader.GetInt64(3),
-                        reader.GetString(4),
-                        reader.GetString(11),
-                        sources);
-                    if (!reader.IsDBNull(12))
-                        finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
-                    bySignature.Add(signature, finding);
-                    rows.Add(finding);
-                }
+                var sources = new List<FindingSourceObservation>();
+                finding = new StoredFinding(
+                    signature,
+                    reader.GetString(1),
+                    reader.GetInt64(2),
+                    reader.GetInt64(3),
+                    reader.GetString(4),
+                    reader.GetString(11),
+                    sources);
+                if (!reader.IsDBNull(12))
+                    finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
+                bySignature.Add(signature, finding);
+                rows.Add(finding);
+            }
 
-                if (!reader.IsDBNull(5))
-                {
-                    finding.Sources.Add(new FindingSourceObservation(
-                        reader.GetString(5),
-                        reader.GetString(6),
-                        reader.GetString(7),
-                        reader.GetString(8),
-                        reader.GetInt64(9),
-                        reader.IsDBNull(10) ? null : reader.GetInt64(10)));
-                }
+            if (!reader.IsDBNull(5))
+            {
+                finding.Sources.Add(new FindingSourceObservation(
+                    reader.GetString(5),
+                    reader.GetString(6),
+                    reader.GetString(7),
+                    reader.GetString(8),
+                    reader.GetInt64(9),
+                    reader.IsDBNull(10) ? null : reader.GetInt64(10)));
             }
         }
 
@@ -550,7 +553,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
               AND candidate.signature NOT IN (SELECT predecessor_signature FROM finding_lineage)
             LIMIT 2;
             """;
-        command.Parameters.AddWithValue("$service", finding.Service);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
@@ -648,7 +651,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             """;
         command.Parameters.AddWithValue("$signature", finding.Signature);
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
-        command.Parameters.AddWithValue("$service", finding.Service);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
         command.Parameters.AddWithValue("$severity", finding.Severity);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
@@ -713,7 +716,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
               last_seen_any_ms = MAX(endpoint_heartbeats.last_seen_any_ms, excluded.last_seen_any_ms);
             """;
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
-        command.Parameters.AddWithValue("$service", finding.Service);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);

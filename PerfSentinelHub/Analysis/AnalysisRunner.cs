@@ -43,6 +43,7 @@ public sealed partial class AnalysisRunner(
     // The intermediate report JSON. Well past any real run, small enough that
     // a runaway engine cannot exhaust the container's memory.
     private const long MaxReportJsonBytes = 256L * 1024 * 1024;
+    private static readonly string[] ScratchFilePatterns = ["*.input.json", "*.config.toml"];
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
 
@@ -66,7 +67,7 @@ public sealed partial class AnalysisRunner(
         // is still open lets entries be skipped. Counted on the delete, not on
         // the listing, so a read-only volume cannot have the log announce
         // removals that never happened.
-        return new[] { "*.input.json", "*.config.toml" }
+        return ScratchFilePatterns
             .SelectMany(pattern => Directory.GetFiles(_analysis.ReportDirectory, pattern))
             .Count(TryDelete);
     }
@@ -92,16 +93,9 @@ public sealed partial class AnalysisRunner(
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             var summary = ReportSummary.TryParse(reportJson, out var binaryVersion);
-            if (summary is null)
+            if (summary is null || !await RenderAsync(run.Id, reportJson, configPath, timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
-            if (!await RenderAsync(run.Id, reportJson, configPath, timeout.Token))
-                return Failed(AnalysisErrorCodes.BinaryFailed);
-
-            // KeptFindings stays unset: the render always passes
-            // --max-traces-embedded, which opts the sink out of findings
-            // trimming, so reading the whole rendered file back to look for
-            // a trimmed_findings that cannot exist was pure allocation.
             summary.ReportBytes = RenderedBytes(run.Id);
             return new RunOutcome(AnalysisStatuses.Succeeded, null, binaryVersion, summary);
         }
@@ -154,10 +148,9 @@ public sealed partial class AnalysisRunner(
             MaxReportJsonBytes,
             _analysis.ReportDirectory,
             cancellationToken);
-        if (result.Succeeded)
-            return result.StandardOutput;
-
-        throw new EngineFailedException(ClassifyEngineFailure(result.StandardError));
+        return result.Succeeded
+            ? result.StandardOutput
+            : throw new EngineFailedException(ClassifyEngineFailure(result.StandardError));
     }
 
     private async Task<bool> RenderAsync(

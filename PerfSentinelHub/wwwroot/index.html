@@ -16,11 +16,12 @@
        chosen over there comes back here within the tab. */
     stored = sessionStorage.getItem("perf-sentinel:theme") || localStorage.getItem("perf-sentinel:theme");
   } catch (e) { stored = null; }
-    const position = stored === "light" || stored === "dark" ? stored : "auto";
-    document.documentElement.dataset.theme = position === "auto"
-        ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
-        : position;
-    document.documentElement.dataset.themePosition = position;
+  const position = stored === "light" || stored === "dark" ? stored : "auto";
+  let theme = position;
+  if (position === "auto")
+    theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.themePosition = position;
 })();
 </script>
 <link rel="stylesheet" href="fonts.css">

@@ -142,11 +142,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static void ValidateSource(SourceOptions source, HashSet<string> ids, List<string> errors)
     {
-        if (string.IsNullOrWhiteSpace(source.Id) ||
-            source.Id.Length > 64 ||
-            source.Id.Any(character =>
-                !char.IsAsciiLetterOrDigit(character) && character != '.' && character != '_' && character != '-') ||
-            !ids.Add(source.Id))
+        if (!IsValidSourceId(source.Id) || !ids.Add(source.Id))
             errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
         if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
             errors.Add($"Source '{source.Id}' requires a name and environment.");
@@ -225,4 +221,9 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static bool IsInvalidImportApiKey(string value) =>
         value.Length < 32 || string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl);
+
+    private static bool IsValidSourceId(string id) =>
+        !string.IsNullOrWhiteSpace(id) &&
+        id.Length <= 64 &&
+        id.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
 }

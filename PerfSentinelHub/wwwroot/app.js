@@ -29,7 +29,23 @@
     status: null,
     sources: null,
     sourcesError: false,
-    loading: true
+    loading: true,
+    form: {
+      sourceId: null,
+      mode: "service",
+      service: "",
+      traceId: "",
+      rangeMode: "relative",
+      lookback: "1h",
+      fromMs: Date.now() - 3600000,
+      toMs: Date.now(),
+      customQty: 90,
+      customUnit: "m",
+      pickerOpen: false,
+      maxTraces: 100,
+      ackUnreachable: false,
+      ackHeavy: false
+    }
   };
 
   // ------------------------------------------------------------ DOM helpers
@@ -133,6 +149,10 @@
       state.sourcesError = results[1] === "error";
       state.sources = state.sourcesError ? null : results[1];
       state.loading = false;
+      if (state.sources && state.form.sourceId === null) {
+        const usable = state.sources.find(function (source) { return source.reachable; });
+        state.form.sourceId = (usable || state.sources[0] || {}).id || null;
+      }
       renderShell();
       render();
     });
@@ -201,6 +221,7 @@
 
     const main = document.getElementById("main");
     if (state.screen === "sources") main.replaceChildren(renderSourcesScreen());
+    else if (state.screen === "new") main.replaceChildren(renderNewScreen());
     else main.replaceChildren(renderPlaceholder());
   }
 
@@ -334,9 +355,609 @@
     return el("div", { class: "skeleton-stack" }, rows);
   }
 
+
+  // ---------------------------------------------------- screen: new analysis
+
+  const QUICK_RANGES = [
+    "15m", "30m", "1h", "3h", "6h", "12h", "24h", "2d", "7d", "30d", "90d", "180d"
+  ];
+
+  function selectedSource() {
+    return (state.sources || []).find(function (source) { return source.id === state.form.sourceId; }) || null;
+  }
+
+  /** Changing source clears both acknowledgements and closes the picker: they
+      were answers about a different source. */
+  function selectSource(id) {
+    state.form.sourceId = id;
+    state.form.ackUnreachable = false;
+    state.form.ackHeavy = false;
+    state.form.pickerOpen = false;
+    render();
+  }
+
+  function setMode(mode) {
+    state.form.mode = mode;
+    // Switching clears the other field, and a trace ID takes no window at all,
+    // so the picker cannot stay open behind a hidden control.
+    if (mode === "trace") {
+      state.form.service = "";
+      state.form.pickerOpen = false;
+    } else {
+      state.form.traceId = "";
+    }
+    render();
+  }
+
+  function setMaxTraces(value) {
+    state.form.maxTraces = value;
+    // Dropping back below the ceiling withdraws the question that was asked
+    // about it.
+    if (!PSL.weightBand(value).needsAck) state.form.ackHeavy = false;
+    render();
+  }
+
+  function renderNewScreen() {
+    const section = el("section", {}, [
+      el("p", { class: "overline", text: "// new analysis" }),
+      el("h1", { class: "page-title", text: "Run an analysis" })
+    ]);
+
+    if (state.loading) {
+      section.appendChild(el("div", { class: "new-grid" }, [
+        el("div", { class: "card skeleton", style: "height:280px" }),
+        el("div", { class: "card skeleton", style: "height:280px" })
+      ]));
+      return section;
+    }
+    if (state.sourcesError) {
+      section.appendChild(hubUnreachableBanner());
+      return section;
+    }
+    if (!state.sources || state.sources.length === 0) {
+      section.appendChild(el("div", { class: "empty-state", text: "This Hub has no configured source." }));
+      return section;
+    }
+
+    section.appendChild(el("div", { class: "new-grid" }, [sourcePanel(), parametersPanel()]));
+    section.appendChild(costBand());
+    section.appendChild(submitRow());
+    return section;
+  }
+
+  function hubUnreachableBanner() {
+    return el("div", { class: "banner", "data-tone": "crit" }, [
+      svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7.5v5M12 15.8v.2" }]], 16),
+      el("div", {
+        text: "The Hub is not answering. This is the Hub itself and not any one source, so nothing "
+          + "can be launched from here until it is back."
+      })
+    ]);
+  }
+
+  function sourcePanel() {
+    const list = el("div", { class: "card source-panel", role: "radiogroup", "aria-label": "Source" },
+      state.sources.map(sourceRadio));
+    return el("div", {}, [
+      list,
+      el("p", {
+        class: "panel-note",
+        text: "The environment is declared by the source's own configuration, never measured. A "
+          + "misconfigured deployment can label production as staging."
+      })
+    ]);
+  }
+
+  function sourceRadio(source) {
+    const selected = source.id === state.form.sourceId;
+    const now = Date.now();
+    const line1 = el("div", { class: "source-line" }, [
+      el("span", { class: "source-name", text: source.name }),
+      el("span", { class: "health", "data-health": source.reachable ? "ok" : "crit" }, [
+        el("span", { class: "health-dot" }),
+        el("span", {
+          text: source.reachable
+            ? "reachable"
+            : "unreachable " + PSL.dur(now - source.unreachable_since_ms)
+        })
+      ])
+    ]);
+
+    const line2 = el("div", { class: "source-line source-meta" }, [
+      el("span", { class: "chip", text: PSL.KIND_LABEL[source.kind] || source.kind }),
+      el("span", { class: "chip chip-declared", text: source.environment }),
+      el("span", { class: "source-version", text: producerLabel(source) })
+    ]);
+    const gap = PSL.skew(source.producer_version);
+    if (gap) line2.appendChild(el("span", { class: "skew-pill", "data-dir": gap.dir, text: gap.label }));
+
+    const button = el("button", {
+      type: "button",
+      class: "source-row",
+      role: "radio",
+      "aria-checked": selected ? "true" : "false"
+    }, [el("span", { class: "source-dot" }), el("span", {}, [line1, line2])]);
+    button.addEventListener("click", function () { selectSource(source.id); });
+    return button;
+  }
+
+  function producerLabel(source) {
+    if (source.producer_version) return "producer " + source.producer_version;
+    return source.kind === "daemon" ? "producer unknown" : "engine " + (state.status.engine_version || "none");
+  }
+
+  function parametersPanel() {
+    const source = selectedSource();
+    if (!source) {
+      return el("div", { class: "card params-panel" }, [
+        el("div", { class: "empty-state", text: "Pick a source to see what it takes." })
+      ]);
+    }
+
+    const head = el("div", { class: "panel-head" }, [
+      el("span", { class: "overline", text: source.kind === "daemon" ? "// parameters" : "// query" }),
+      el("span", { class: "panel-head-source", text: source.name })
+    ]);
+
+    const panel = el("div", { class: "card params-panel" }, [head]);
+    if (source.kind === "daemon") panel.appendChild(daemonNotice());
+    else backendControls(source).forEach(function (node) { panel.appendChild(node); });
+    if (!source.reachable) panel.appendChild(unreachableAck(source));
+    return panel;
+  }
+
+  function daemonNotice() {
+    return el("div", { class: "notice" }, [
+      svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 11v5M12 8.2v.2" }]], 16),
+      el("div", {}, [
+        el("p", { text: "No parameters. A daemon snapshot is whatever it holds in memory right now." }),
+        el("p", {
+          class: "notice-sub",
+          text: "The window is the daemon's own ring buffer, and asking for more would be a request "
+            + "the source cannot answer. What comes back is the slice it still holds."
+        })
+      ])
+    ]);
+  }
+
+  function backendControls(source) {
+    const nodes = [modeSwitch()];
+    if (state.form.mode === "trace") {
+      nodes.push(field("Trace ID", traceInput()));
+      nodes.push(el("p", {
+        class: "field-note",
+        text: "An ID resolves to exactly one trace, so neither the window nor the trace cap applies."
+      }));
+      return nodes;
+    }
+
+    nodes.push(field("Service name", serviceInput()));
+    nodes.push(field("Time range", rangeControl(source)));
+    nodes.push(maxTracesBlock());
+    return nodes;
+  }
+
+  function modeSwitch() {
+    const group = el("div", { class: "segmented", role: "radiogroup", "aria-label": "Selection mode" });
+    [["service", "Service"], ["trace", "Trace ID"]].forEach(function (entry) {
+      const button = el("button", {
+        type: "button",
+        role: "radio",
+        "aria-checked": state.form.mode === entry[0] ? "true" : "false",
+        text: entry[1]
+      });
+      button.addEventListener("click", function () { setMode(entry[0]); });
+      group.appendChild(button);
+    });
+    return el("div", { class: "field" }, [
+      group,
+      el("p", { class: "field-note", text: "One or the other, never both." })
+    ]);
+  }
+
+  function serviceInput() {
+    const input = el("input", {
+      type: "text",
+      class: "input",
+      value: state.form.service,
+      placeholder: "order-service",
+      spellcheck: "false"
+    });
+    input.addEventListener("input", function () {
+      state.form.service = input.value;
+      updateSubmit();
+    });
+    return input;
+  }
+
+  function traceInput() {
+    const input = el("input", {
+      type: "text",
+      class: "input",
+      value: state.form.traceId,
+      placeholder: "4bf92f3577b34da6a3ce929d0e0e4736",
+      spellcheck: "false"
+    });
+    input.addEventListener("input", function () {
+      state.form.traceId = input.value;
+      updateSubmit();
+    });
+    return input;
+  }
+
+  function field(label, control) {
+    return el("div", { class: "field" }, [el("label", { class: "field-label", text: label }), control]);
+  }
+
+  function windowLabel() {
+    if (state.form.rangeMode === "absolute") {
+      return PSL.dtHuman(state.form.fromMs) + " → " + PSL.dtHuman(state.form.toMs);
+    }
+    return "Last " + PSL.humanDur(state.form.lookback);
+  }
+
+  function windowSpanMs() {
+    return state.form.rangeMode === "absolute"
+      ? state.form.toMs - state.form.fromMs
+      : PSL.parseDur(state.form.lookback);
+  }
+
+  function rangeControl(source) {
+    const button = el("button", { type: "button", class: "pill-button", "aria-expanded": String(state.form.pickerOpen) }, [
+      svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7v5l3.5 2" }]], 14),
+      el("span", { text: windowLabel() }),
+      el("span", { class: "pill-button-span", text: PSL.dur(windowSpanMs()) })
+    ]);
+    button.addEventListener("click", function () {
+      state.form.pickerOpen = !state.form.pickerOpen;
+      render();
+    });
+
+    const wrap = el("div", { class: "range" }, [button]);
+    if (state.form.pickerOpen) wrap.appendChild(rangePicker());
+    wrap.appendChild(el("p", {
+      class: "field-note",
+      text: state.form.rangeMode === "absolute"
+        ? "Absolute, fixed at submission. It does not drift while the job waits in the queue."
+        : "Relative to the moment the run starts, so it drifts while the job waits in the queue."
+    }));
+    rangeConsequences(source).forEach(function (node) { wrap.appendChild(node); });
+    return wrap;
+  }
+
+  /** Consequences appear under the control, not after the run. */
+  function rangeConsequences(source) {
+    const notes = [];
+    const spanMs = windowSpanMs();
+    if (spanMs > 86400000) {
+      notes.push(consequence("A wider window returns no more data. The run still stops at the trace "
+        + "cap, so the result is a sample spread over the period rather than the period itself."));
+    }
+    if (spanMs > 7 * 86400000) {
+      notes.push(consequence("The whole scan has to finish inside the "
+        + (state.status.limits.analysis_timeout_seconds) + "-second ceiling, which is usually the "
+        + "limit met first. Expect a timeout rather than a result."));
+    }
+    if (source.retention_hours != null && spanMs > source.retention_hours * 3600000) {
+      notes.push(consequence("This source declares it keeps " + PSL.dur(source.retention_hours * 3600000)
+        + " of traces. A window beyond that comes back short, or is refused as "
+        + "source_rejected_request.", "warn"));
+    } else if (source.retention_hours == null && spanMs > 86400000) {
+      notes.push(consequence("Nobody declared how far back this source keeps traces, so the Hub "
+        + "cannot tell whether it can answer this window at all."));
+    }
+    return notes;
+  }
+
+  function consequence(text, tone) {
+    return el("p", { class: "consequence", "data-tone": tone || "muted", text: text });
+  }
+
+  function rangePicker() {
+    const backdrop = el("div", { class: "picker-backdrop" });
+    backdrop.addEventListener("click", function () { state.form.pickerOpen = false; render(); });
+
+    const from = el("input", { type: "datetime-local", class: "input", value: PSL.dtLocal(state.form.fromMs) });
+    const to = el("input", { type: "datetime-local", class: "input", value: PSL.dtLocal(state.form.toMs) });
+    const span = el("p", { class: "picker-span" });
+    const apply = el("button", { type: "button", class: "pill-button pill-primary", text: "Apply" });
+
+    function readAbsolute() {
+      const start = Date.parse(from.value);
+      const end = Date.parse(to.value);
+      const ordered = Number.isFinite(start) && Number.isFinite(end) && start < end;
+      const past = Number.isFinite(end) && end <= Date.now();
+      span.textContent = !ordered
+        ? "The start must come before the end."
+        : !past
+          ? "The end cannot be in the future."
+          : "Span " + PSL.dur(end - start);
+      span.setAttribute("data-invalid", ordered && past ? "false" : "true");
+      apply.disabled = !(ordered && past);
+      return { start: start, end: end, valid: ordered && past };
+    }
+    from.addEventListener("input", readAbsolute);
+    to.addEventListener("input", readAbsolute);
+    apply.addEventListener("click", function () {
+      const read = readAbsolute();
+      if (!read.valid) return;
+      state.form.rangeMode = "absolute";
+      state.form.fromMs = read.start;
+      state.form.toMs = read.end;
+      state.form.pickerOpen = false;
+      render();
+    });
+
+    const quick = el("div", { class: "picker-quick" }, QUICK_RANGES.map(function (value) {
+      const button = el("button", { type: "button", class: "picker-quick-item", text: "Last " + PSL.humanDur(value) });
+      button.addEventListener("click", function () {
+        state.form.rangeMode = "relative";
+        state.form.lookback = value;
+        state.form.pickerOpen = false;
+        render();
+      });
+      return button;
+    }));
+
+    const left = el("div", { class: "picker-pane" }, [
+      el("p", { class: "overline", text: "// absolute" }),
+      field("From", from),
+      field("To", to),
+      span,
+      apply,
+      el("p", { class: "overline picker-sep", text: "// relative" }),
+      customRelativeRow()
+    ]);
+
+    const panel = el("div", { class: "picker" }, [left, el("div", { class: "picker-pane picker-right" }, [
+      el("p", { class: "overline", text: "// quick" }), quick
+    ])]);
+    readAbsolute();
+    return el("div", {}, [backdrop, panel]);
+  }
+
+  function customRelativeRow() {
+    const qty = el("input", { type: "number", class: "input input-narrow", min: "1", value: String(state.form.customQty) });
+    const units = el("div", { class: "segmented segmented-sm", role: "radiogroup", "aria-label": "Unit" });
+    [["m", "m"], ["h", "h"], ["d", "d"]].forEach(function (entry) {
+      const button = el("button", {
+        type: "button",
+        role: "radio",
+        "aria-checked": state.form.customUnit === entry[0] ? "true" : "false",
+        text: entry[1]
+      });
+      button.addEventListener("click", function () {
+        state.form.customUnit = entry[0];
+        state.form.customQty = Math.max(1, Number(qty.value) || 1);
+        state.form.rangeMode = "relative";
+        state.form.lookback = state.form.customQty + state.form.customUnit;
+        state.form.pickerOpen = false;
+        render();
+      });
+      units.appendChild(button);
+    });
+    return el("div", { class: "picker-custom" }, [qty, units]);
+  }
+
+  function maxTracesBlock() {
+    const band = PSL.weightBand(state.form.maxTraces);
+    const number = el("input", { type: "number", class: "input input-narrow", min: "1", value: String(state.form.maxTraces) });
+    number.addEventListener("input", function () { setMaxTraces(Number(number.value)); });
+
+    const head = el("div", { class: "traces-head" }, [
+      number,
+      el("span", { class: "band-chip", style: bandStyle(band), text: band.label }),
+      el("span", { class: "traces-cap", text: "hard cap " + state.status.limits.max_traces_cap })
+    ]);
+
+    const slider = el("input", {
+      type: "range",
+      "data-band": "true",
+      min: "1",
+      max: String(state.status.limits.max_traces_cap),
+      value: String(Math.min(Math.max(state.form.maxTraces, 1), state.status.limits.max_traces_cap)),
+      "aria-label": "Maximum traces"
+    });
+    slider.addEventListener("input", function () { setMaxTraces(Number(slider.value)); });
+
+    const track = el("div", { class: "band-track" }, [
+      el("span", { class: "band-seg", "data-seg": "ok" }),
+      el("span", { class: "band-seg", "data-seg": "warn" }),
+      el("span", { class: "band-seg", "data-seg": "crit" }),
+      slider
+    ]);
+
+    const scale = el("div", { class: "band-scale" }, [
+      el("span", { text: "1" }), el("span", { text: "500 safe" }),
+      el("span", { text: "1 200 heavy" }), el("span", { text: "2 000 cap" })
+    ]);
+
+    const block = el("div", { class: "field" }, [
+      el("label", { class: "field-label", text: "Maximum traces" }),
+      head, track, scale,
+      el("p", { class: "band-body", text: band.body })
+    ]);
+    if (band.needsAck) block.appendChild(heavyAck());
+    return block;
+  }
+
+  function bandStyle(band) {
+    return "color:" + band.fg + ";background:" + band.bg + ";border-color:" + band.bd;
+  }
+
+  function heavyAck() {
+    return checkbox(
+      state.form.ackHeavy,
+      "I understand the report will be trimmed and will still look complete.",
+      function (checked) { state.form.ackHeavy = checked; updateSubmit(); });
+  }
+
+  function unreachableAck(source) {
+    return el("div", { class: "ack-block" }, [
+      el("p", {
+        class: "ack-title",
+        text: "This source has been unreachable for " + PSL.dur(Date.now() - source.unreachable_since_ms) + "."
+      }),
+      checkbox(
+        state.form.ackUnreachable,
+        "Run it anyway. The most likely outcome is source_unreachable.",
+        function (checked) { state.form.ackUnreachable = checked; updateSubmit(); })
+    ]);
+  }
+
+  function checkbox(checked, label, onChange) {
+    const input = el("input", { type: "checkbox" });
+    input.checked = checked;
+    input.addEventListener("change", function () { onChange(input.checked); });
+    const wrap = el("label", { class: "checkbox" }, [input, el("span", { text: label })]);
+    return wrap;
+  }
+
+  /** Reported by the service, not assumed: the button is a promise of cost. */
+  function costBand() {
+    const limits = state.status.limits;
+    const queue = state.status.queue_depth;
+    const cells = [
+      [String(limits.max_traces_cap), "traces", "Hard cap per run", "The service rejects anything above it."],
+      [String(limits.analysis_timeout_seconds), "s", "Timeout", "Then the run is killed, marked timeout."],
+      [String(state.status.workers), "workers",
+        queue === 1 ? "1 job queued now" : queue + " jobs queued now",
+        "That many runs at a time across the whole Hub."],
+      [String(limits.report_retention_hours), "h", "Report retention", "Then the file is deleted. Links die."]
+    ];
+    return el("section", { class: "cost" }, [
+      el("p", { class: "overline", text: "// what this run costs" }),
+      el("p", { class: "cost-sub", text: "Reported by the service, not assumed." }),
+      el("div", { class: "cost-grid" }, cells.map(function (cell) {
+        return el("div", { class: "cost-cell" }, [
+          el("p", { class: "cost-figure" }, [
+            el("span", { text: cell[0] }),
+            el("span", { class: "cost-unit", text: cell[1] })
+          ]),
+          el("p", { class: "cost-label", text: cell[2] }),
+          el("p", { class: "cost-note", text: cell[3] })
+        ]);
+      }))
+    ]);
+  }
+
+  /**
+   * What blocks the run, or null when nothing does. Mirrors the server's own
+   * rules so the operator is told before spending a round trip.
+   */
+  function submitBlocker() {
+    const source = selectedSource();
+    if (!source) return "Pick a source.";
+    if (!state.status.engine_version) return "This Hub has no analysis engine configured.";
+    if (!source.reachable && !state.form.ackUnreachable) return "Confirm you want to run against an unreachable source.";
+    if (source.kind === "daemon") return null;
+    if (state.form.mode === "trace") {
+      return state.form.traceId.trim() ? null : "Enter a trace ID.";
+    }
+    if (!state.form.service.trim()) return "Enter a service name.";
+    const band = PSL.weightBand(state.form.maxTraces);
+    if (band.key === "over") return "The trace cap is above what the service accepts.";
+    if (band.key === "invalid") return "A run needs at least one trace.";
+    return band.needsAck && !state.form.ackHeavy ? "Confirm the report will be trimmed." : null;
+  }
+
+  /** Restates the request in a sentence, so the button is not a leap of faith. */
+  function submitSentence() {
+    const source = selectedSource();
+    if (!source) return "";
+    if (source.kind === "daemon") {
+      return "Takes a snapshot of whatever " + source.name + " holds in memory right now. "
+        + queuePhrase();
+    }
+    if (state.form.mode === "trace") {
+      return "Fetches one trace by ID from " + source.name + ". " + queuePhrase();
+    }
+    return "Reads up to " + state.form.maxTraces + " traces for "
+      + (state.form.service.trim() || "a service") + " across "
+      + (state.form.rangeMode === "absolute" ? "the selected window" : "the last " + PSL.humanDur(state.form.lookback))
+      + " of " + source.name + ". " + queuePhrase();
+  }
+
+  function queuePhrase() {
+    const queue = state.status.queue_depth;
+    if (queue === 0) return "Nothing is queued ahead of it.";
+    return queue === 1 ? "Queued behind 1 job." : "Queued behind " + queue + " jobs.";
+  }
+
+  function submitRow() {
+    const button = el("button", { type: "button", class: "submit", id: "submit" }, [
+      svg([["path", { d: "M7 5l12 7-12 7z" }]], 16),
+      el("span", { text: "Run analysis" })
+    ]);
+    button.addEventListener("click", submit);
+    const row = el("div", { class: "submit-row" }, [
+      button,
+      el("p", { class: "submit-sentence", id: "submit-sentence" })
+    ]);
+    queueMicrotask(updateSubmit);
+    return row;
+  }
+
+  function updateSubmit() {
+    const button = document.getElementById("submit");
+    const sentence = document.getElementById("submit-sentence");
+    if (!button || !sentence) return;
+    const blocker = submitBlocker();
+    button.disabled = blocker !== null;
+    button.title = blocker || "";
+    sentence.textContent = blocker || submitSentence();
+    sentence.setAttribute("data-blocked", blocker ? "true" : "false");
+  }
+
+  function buildRequest(source) {
+    if (source.kind === "daemon") return {};
+    if (state.form.mode === "trace") return { trace_id: state.form.traceId.trim() };
+    const request = { service: state.form.service.trim(), max_traces: state.form.maxTraces };
+    if (state.form.rangeMode === "absolute") {
+      request.from_ms = state.form.fromMs;
+      request.to_ms = state.form.toMs;
+    } else {
+      request.lookback = state.form.lookback;
+    }
+    return request;
+  }
+
+  function submit() {
+    const source = selectedSource();
+    if (!source || submitBlocker()) return;
+    const button = document.getElementById("submit");
+    button.disabled = true;
+
+    fetch("/api/analyses", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source_id: source.id, request: buildRequest(source) })
+    }).then(function (response) {
+      return response.json().then(function (payload) { return { ok: response.ok, payload: payload }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error(result.payload.detail || "The Hub refused the request.");
+      location.hash = "#/run/" + result.payload.id;
+    }).catch(function (error) {
+      const sentence = document.getElementById("submit-sentence");
+      if (sentence) {
+        sentence.textContent = String(error.message || error);
+        sentence.setAttribute("data-blocked", "true");
+      }
+      updateSubmit();
+    });
+  }
+
   // ------------------------------------------------------------------ boot
 
   initTheme();
+  // Escape closes the picker. Without it the only ways out are Apply, a quick
+  // range or a click outside, and a keyboard user has none of them.
+  globalThis.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && state.form.pickerOpen) {
+      state.form.pickerOpen = false;
+      render();
+    }
+  });
   render();
   loadShell();
   globalThis.addEventListener("hashchange", render);

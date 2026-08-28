@@ -32,6 +32,17 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         throw new InvalidStatusException();
     }
 
+    /// <summary>
+    /// The daemon's own rendered report, whatever it holds in memory right
+    /// now. Carries its own timeout: an export is heavier than a status read,
+    /// and reporting a slow daemon as unreachable would name the wrong owner.
+    /// </summary>
+    public Task<byte[]> FetchReportSnapshotAsync(
+        SourceOptions source,
+        TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        SendAsync(source, "api/export/report", cancellationToken, timeout);
+
     public Task<byte[]> FetchFindingsAsync(
         SourceOptions source,
         CancellationToken cancellationToken) =>
@@ -40,10 +51,11 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     private async Task<byte[]> SendAsync(
         SourceOptions source,
         string path,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? overrideTimeout = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_timeout);
+        timeout.CancelAfter(overrideTimeout ?? _timeout);
         using var request = new HttpRequestMessage(HttpMethod.Get, RequestUri(source, path));
         if (source.AuthHeaderName is not null)
             request.Headers.TryAddWithoutValidation(source.AuthHeaderName, source.AuthHeaderValue);

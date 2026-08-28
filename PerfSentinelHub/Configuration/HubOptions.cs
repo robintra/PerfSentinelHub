@@ -26,6 +26,9 @@ public sealed record AnalysisOptions
     // Absent means the Hub keeps collecting findings but cannot run an
     // analysis: the launcher reads a null engine version and says so.
     public string? EngineBinaryPath { get; set; }
+    // Where rendered reports live. Must be writable: the container is
+    // read-only everywhere else.
+    public string ReportDirectory { get; set; } = "/data/reports";
     public int Workers { get; set; } = 2;
     public int MaxTracesCap { get; set; } = 2000;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
@@ -112,6 +115,8 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         if (analysis.EngineBinaryPath is { } path &&
             (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)))
             errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
+        if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
+            errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
         if (analysis.Workers is < 1 or > 16)
             errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
         if (analysis.MaxTracesCap is < 1 or > 100_000)

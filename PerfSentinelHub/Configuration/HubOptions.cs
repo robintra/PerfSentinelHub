@@ -125,8 +125,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
         if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
             errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
-        if (string.IsNullOrWhiteSpace(analysis.IdentityHeader) ||
-            analysis.IdentityHeader.Any(character => char.IsControl(character) || character == ' '))
+        if (IsInvalidIdentityHeader(analysis.IdentityHeader))
             errors.Add("Hub:Analysis:IdentityHeader must be a header name.");
         if (analysis.Workers is < 1 or > 16)
             errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
@@ -221,6 +220,10 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static bool IsInvalidImportApiKey(string value) =>
         value.Length < 32 || string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl);
+
+    private static bool IsInvalidIdentityHeader(string value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.Any(character => char.IsControl(character) || character == ' ');
 
     private static bool IsValidSourceId(string id) =>
         !string.IsNullOrWhiteSpace(id) &&

@@ -31,11 +31,11 @@ public sealed partial class SourcePoller(
 
         try
         {
-            var version = await client.FetchStatusAsync(source, cancellationToken);
+            var status = await client.FetchStatusAsync(source, cancellationToken);
             var payload = await client.FetchFindingsAsync(source, cancellationToken);
             var batch = FindingParser.Parse(payload);
             await database.UpsertBatchAsync(
-                new SourceSnapshot(source.Id, source.Name, source.Environment, version),
+                new SourceSnapshot(source.Id, source.Name, source.Environment, status.Version),
                 batch,
                 observedAtMs,
                 cancellationToken);
@@ -48,7 +48,11 @@ public sealed partial class SourcePoller(
             var isPossiblyTruncated = batch.Findings.Count + batch.RejectedCount == DaemonClient.FindingsLimit;
             if (isPossiblyTruncated)
                 LogPossiblyTruncated(logger, source.Id);
-            return new PollResult(batch.Findings.Count, batch.RejectedCount, version, isPossiblyTruncated);
+            return new PollResult(
+                batch.Findings.Count,
+                batch.RejectedCount,
+                status.Version,
+                isPossiblyTruncated);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -63,7 +67,8 @@ public sealed partial class SourcePoller(
         }
     }
 
-    private static string ErrorCode(Exception exception) => exception switch
+    // Shared with the daemon view: one classification for both readers.
+    internal static string ErrorCode(Exception exception) => exception switch
     {
         DaemonTimeoutException => "timeout",
         ResponseTooLargeException => "response_too_large",

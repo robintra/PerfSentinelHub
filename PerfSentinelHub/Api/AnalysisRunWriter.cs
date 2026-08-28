@@ -61,6 +61,9 @@ public static partial class AnalysisRunWriter
             // Present only when the sink dropped findings to fit its budget.
             if (summary.KeptFindings is { } kept)
                 writer.WriteNumber("kept_findings", kept);
+            // Absent on a run whose file could not be measured.
+            if (summary.ReportBytes is { } bytes)
+                writer.WriteNumber("report_bytes", bytes);
             writer.WriteStartArray("warnings");
             foreach (var warning in summary.Warnings)
             {

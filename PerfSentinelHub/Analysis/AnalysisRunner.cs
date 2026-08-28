@@ -99,6 +99,7 @@ public sealed partial class AnalysisRunner(
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             summary.KeptFindings = await ReadKeptFindingsAsync(run.Id, timeout.Token);
+            summary.ReportBytes = RenderedBytes(run.Id);
             return new RunOutcome(AnalysisStatuses.Succeeded, null, binaryVersion, summary);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -203,6 +204,21 @@ public sealed partial class AnalysisRunner(
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // The count is a caveat on the result, not the result.
+            return null;
+        }
+    }
+
+    /// <summary>The rendered file's size, null when it cannot be read.</summary>
+    private long? RenderedBytes(string runId)
+    {
+        try
+        {
+            var info = new FileInfo(ReportPath(runId));
+            return info.Exists ? info.Length : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A weight is context on the result, not the result.
             return null;
         }
     }

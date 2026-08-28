@@ -270,6 +270,11 @@
     render();
     if (state.loading) return;
     if (screen === "recent") loadRuns();
+    // The launcher shows what past runs weighed, so it needs the same list.
+    // Reloaded on every entry, not once: coming back from a run that just
+    // finished must show that run's weight. onRoute fires on hashchange
+    // alone, so the render inside loadRuns cannot bring us back here.
+    else if (screen === "new") loadRuns();
     else if (screen === "run" || screen === "report") {
       const id = currentRunId();
       if (id && (!state.run || state.run.id !== id)) loadRun(id);
@@ -951,7 +956,45 @@
       el("div", { id: "traces-ack" }, band.needsAck ? [heavyAck()] : [])
     ]);
     block.appendChild(sinkPanel());
+    const history = weightHistory();
+    if (history) block.appendChild(history);
     return block;
+  }
+
+  /**
+   * What this source's own runs weighed, at the count they asked for. A
+   * measurement rather than a model: a report's size follows how many spans
+   * its traces carry, which differs per service and which the launcher cannot
+   * know before the run. Absent until this source has a measured run.
+   */
+  function weightHistory() {
+    const source = selectedSource();
+    if (!source || !state.runs) return null;
+    const past = state.runs.filter(function (run) {
+      const result = run.result || {};
+      const request = run.request || {};
+      return run.source_id === source.id &&
+        run.status === "succeeded" &&
+        typeof result.report_bytes === "number" &&
+        typeof request.max_traces === "number";
+    }).slice(0, 3);
+    if (past.length === 0) return null;
+
+    return el("div", { class: "sink" }, [
+      el("div", { class: "sink-head" }, [
+        el("span", { class: "overline", text: "What your own runs weighed" }),
+        el("span", { class: "sink-sub", text: "Measured on this source, not predicted." })
+      ]),
+      el("dl", { class: "sink-rows" }, past.flatMap(function (run) {
+        return [
+          el("dt", { text: PSL.bytes(run.result.report_bytes) }),
+          el("dd", {
+            text: run.request.max_traces + " traces, " + run.result.findings + " findings, "
+              + PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms)) + " ago"
+          })
+        ];
+      }))
+    ]);
   }
 
   function capNote(band, cap) {

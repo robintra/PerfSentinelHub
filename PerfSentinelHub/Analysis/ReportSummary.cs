@@ -31,6 +31,14 @@ public sealed record ReportSummary(
     /// </summary>
     public int? KeptFindings { get; set; }
 
+    /// <summary>
+    /// The rendered file's size on disk. Recorded rather than measured later:
+    /// the report is deleted when its retention runs out, and the launcher
+    /// shows past weights so an operator sees what this source's traces cost
+    /// instead of an estimate the Hub cannot make.
+    /// </summary>
+    public long? ReportBytes { get; set; }
+
     // A remote server writes these strings and the launcher renders them.
     // Bounded here so one run cannot carry an unbounded payload into storage.
     private const int MaxWarnings = 20;

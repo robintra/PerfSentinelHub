@@ -307,12 +307,25 @@
     };
   }
 
+  /**
+   * A file size in the unit an operator reads. One decimal at most: the second
+   * would claim a precision a report does not have, its weight moves with what
+   * the run found.
+   * @param {number} n
+   */
+  function bytes(n) {
+    if (!Number.isFinite(n) || n < 0) return "";
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
   global.PSL = {
     setVersions,
     get ENGINE() { return ENGINE; },
     get HUB() { return HUB; },
     ERRORS, ERROR_TITLES, KIND_LABEL,
-    dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman,
+    dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand
   };
 })(globalThis);

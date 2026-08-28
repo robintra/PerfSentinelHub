@@ -57,6 +57,8 @@ public sealed class AnalysisRunnerTests : IDisposable
         Assert.Equal("snapshot_scope", Assert.Single(summary.Warnings).Kind);
 
         Assert.True(File.Exists(runner.ReportPath("run-1")));
+        // The weight is the file's own, so the launcher shows a measurement.
+        Assert.Equal(new FileInfo(runner.ReportPath("run-1")).Length, summary.ReportBytes);
         // The scratch input must not survive: it is a copy of the report.
         Assert.False(File.Exists(Path.Combine(_workspace, "reports", "run-1.input.json")));
     }

@@ -243,6 +243,14 @@
     else main.replaceChildren(renderRecentScreen());
   }
 
+  /** The label with a rule running out to its right, as every screen head has. */
+  function ruledOverline(text) {
+    return el("div", { class: "overline-ruled" }, [
+      el("span", { class: "overline", text: text }),
+      el("span", { class: "overline-rule", "aria-hidden": "true" })
+    ]);
+  }
+
   /** Loads whatever the route needs, then renders it. */
   function onRoute() {
     const screen = currentScreen();
@@ -261,12 +269,12 @@
 
   function renderSourcesScreen() {
     const section = el("section", {}, [
-      el("p", { class: "overline", text: "// fleet health" }),
-      el("h1", { class: "page-title", text: "Sources" }),
+      ruledOverline("// sources"),
+      el("h1", { class: "page-title", text: "Fleet health" }),
       el("p", {
         class: "page-sub",
-        text: "Every source this Hub is configured to read. The set is closed, bounded by "
-          + "configuration, so this is a table rather than cards."
+        text: "Everything on this screen is an observation except the environment column, which is "
+          + "declared. Sources are configured at deploy time, and the launcher cannot add one."
       })
     ]);
 
@@ -423,7 +431,7 @@
 
   function renderNewScreen() {
     const section = el("section", {}, [
-      el("p", { class: "overline", text: "// new analysis" }),
+      ruledOverline("// new analysis"),
       el("h1", { class: "page-title", text: "Run an analysis" })
     ]);
 
@@ -1078,11 +1086,6 @@
 
   // ------------------------------------------------------- screen: one run
 
-  const OUTCOME_TONE = {
-    succeeded: "ok", empty: "warn", failed: "crit", interrupted: "info",
-    expired: "muted", running: "info", queued: "muted"
-  };
-
   function renderRunScreen(id) {
     const run = state.run;
     const section = el("section", {}, [backLink()]);
@@ -1096,259 +1099,332 @@
     }
 
     const key = PSL.statusKey(run);
+    const view = runView(run, key);
     section.appendChild(el("div", { class: "run-head" }, [
       el("span", { class: "status-pill", "data-status": key, text: key }),
       el("span", { class: "run-id", text: run.id })
     ]));
-    section.appendChild(el("h1", { class: "page-title", text: runHeadline(run, key) }));
-    section.appendChild(el("p", { class: "page-sub", text: runSubline(run, key) }));
-    section.appendChild(el("div", { class: "run-grid" }, [eventLog(run, key), factsRail(run, key)]));
-    const outcome = outcomePanel(run, key);
-    if (outcome) section.appendChild(outcome);
+    section.appendChild(el("h1", { class: "page-title", text: view.headline }));
+    section.appendChild(el("p", { class: "page-sub", text: view.sub }));
+
+    const left = el("div", { class: "run-left" }, [eventLog(run, key)]);
+    const outcome = outcomePanel(run, key, view);
+    if (outcome) left.appendChild(outcome);
+    section.appendChild(el("div", { class: "run-grid" }, [left, factsRail(run, key)]));
     return section;
   }
 
   function backLink() {
-    const link = el("a", { class: "back-link", href: "#/new" }, [
-      svg([["path", { d: "M14 6l-6 6 6 6" }]], 14),
-      el("span", { text: "New analysis" })
+    const link = el("a", { class: "back-pill", href: "#/recent" }, [
+      svg([["path", { d: "M15 18l-6-6 6-6" }]], 13),
+      el("span", { text: "All analyses" })
     ]);
     return link;
   }
 
-  function runHeadline(run, key) {
-    if (key === "queued") return "Queued.";
-    if (key === "running") return "Running.";
-    if (key === "empty") return "It succeeded, and there is nothing in it.";
-    if (key === "succeeded") return "Done.";
-    if (key === "interrupted") return "The service restarted while this was running.";
-    if (key === "expired") return "This report is gone.";
-    return PSL.ERROR_TITLES[run.error_code] || "The run failed.";
+  /** Headline and sub-line per state, in the source's own terms. */
+  function runView(run, key) {
+    if (key === "queued") {
+      return {
+        headline: "Waiting for a worker.",
+        sub: "Every worker is busy. Nothing has been read from " + run.source_name
+          + " yet, so nothing has been spent."
+      };
+    }
+    if (key === "running") {
+      return {
+        headline: "Reading " + run.source_name + ".",
+        sub: "A worker holds this job. The next thing that happens is a result or a failure, with "
+          + "nothing in between."
+      };
+    }
+    if (key === "empty") {
+      return {
+        headline: "It succeeded, and there is nothing in it.",
+        sub: "This is not a failure and not an error. The source answered correctly, and the answer "
+          + "was zero traces."
+      };
+    }
+    if (key === "succeeded") {
+      const result = run.result || {};
+      const caveats = (result.warnings || []).length;
+      return {
+        headline: caveats > 0
+          ? result.findings + " findings, and " + (caveats === 1 ? "a caveat" : caveats + " caveats")
+            + " you should read first."
+          : result.findings + " findings.",
+        sub: "The report is ready and will be deleted in " + PSL.dur(run.expires_at_ms - Date.now()) + "."
+      };
+    }
+    if (key === "interrupted") {
+      return {
+        headline: "The service restarted while this was running.",
+        sub: "It stopped after " + PSL.dur((run.finished_at_ms || 0) - (run.started_at_ms || run.created_at_ms))
+          + " of work. This is a resumption, not an error to investigate."
+      };
+    }
+    if (key === "expired") {
+      return {
+        headline: "This report was deleted.",
+        sub: "Reports live " + state.status.limits.report_retention_hours + " hours. This one expired "
+          + PSL.dur(Date.now() - run.expires_at_ms) + " ago and the file is gone."
+      };
+    }
+    return {
+      headline: "Failed: " + String(run.error_code || "internal").replace(/_/g, " ") + ".",
+      sub: "The Hub does not expose the process's error output by design. It gives one code out of "
+        + "eight, and this is what that code means."
+    };
   }
 
-  function runSubline(run, key) {
-    if (key === "queued") return "Waiting for a worker. The execution ceiling has not started counting yet.";
-    if (key === "running") return "The engine reports nothing between start and finish. Expect one more line, not a stream.";
-    if (key === "interrupted") return "The Hub never replays an interrupted run on its own: a silent retry could fire a "
-      + "second heavy query at the backend that nobody asked for.";
-    return run.source_name + " · " + PSL.KIND_LABEL[run.kind];
-  }
-
-  /** A receipt, not a feed. Only what the Hub actually recorded. */
+  /**
+   * A receipt, not a feed. Every line is a timestamp the Hub wrote: the design
+   * calls for a `dequeued` line too, but this service records one instant for
+   * dequeue and start, and inventing a second would be interpolation.
+   */
   function eventLog(run, key) {
-    const rows = [logRow(run.created_at_ms, "accepted", "The request was validated and queued.")];
-    if (run.started_at_ms) rows.push(logRow(run.started_at_ms, "started", "A worker picked it up."));
-    if (run.finished_at_ms) {
-      rows.push(logRow(run.finished_at_ms, run.status,
-        run.error_code ? run.error_code : "The run ended."));
-    } else {
-      rows.push(logRow(null, run.started_at_ms ? "running" : "waiting", ""));
+    const rows = [logRow(run.created_at_ms, "accepted", "the request was validated and queued", "muted")];
+    if (run.started_at_ms) {
+      rows.push(logRow(run.started_at_ms, "started",
+        run.kind === "daemon" ? "reading the daemon's in-memory store" : "reading " + PSL.KIND_LABEL[run.kind],
+        "brand"));
+    }
+    if (key === "running") rows.push(logRow(null, "running", "no further event until the engine returns", "brand"));
+    if (key === "queued") rows.push(logRow(null, "waiting", "every worker is busy, nothing has been read yet", "muted"));
+    if (key === "succeeded" || key === "empty") {
+      rows.push(logRow(run.finished_at_ms, "succeeded",
+        "report written, retained " + state.status.limits.report_retention_hours + " h", "ok"));
+    }
+    if (key === "failed") rows.push(logRow(run.finished_at_ms, "failed", run.error_code, "crit"));
+    if (key === "interrupted") {
+      rows.push(logRow(run.finished_at_ms, "interrupted",
+        "the Hub restarted, the run was abandoned and not replayed", "info"));
+    }
+    if (key === "expired") {
+      rows.push(logRow(run.finished_at_ms, "succeeded", "report written", "muted"));
+      rows.push(logRow(run.expires_at_ms, "deleted",
+        "retention reached, the report no longer exists", "muted"));
     }
 
-    return el("div", {}, [
-      el("p", { class: "overline", text: "// service events" }),
-      el("p", { class: "log-sub", text: "Only what the Hub actually recorded." }),
+    return el("section", { class: "card log-card", "aria-label": "Service events" }, [
+      el("div", { class: "log-head" }, [
+        el("span", { class: "overline", text: "// service events" }),
+        el("span", { class: "log-head-note", text: "Only what the Hub actually recorded." })
+      ]),
       el("div", { class: "log" }, rows),
-      el("p", { class: "log-note", text: logClosing(key) })
+      el("div", { class: "log-foot" }, [el("p", { text: logClosing(run, key) })])
     ]);
   }
 
-  function logRow(ms, name, detail) {
-    // The name and the detail share the third column: four children over three
-    // columns would drop the detail onto a row of its own.
+  function logRow(ms, name, detail, tone) {
     return el("div", { class: "log-row" }, [
       el("span", { class: "log-time", text: ms ? PSL.clock(ms) : "…" }),
-      el("span", { class: "log-dot", "data-event": name }),
+      el("span", { class: "log-dot", "data-tone": tone }),
       el("span", { class: "log-text" }, [
-        el("span", { class: "log-name", text: name }),
+        el("span", { class: "log-name", "data-tone": tone, text: name }),
         el("span", { class: "log-detail", text: detail })
       ])
     ]);
   }
 
-  function logClosing(key) {
-    if (key === "running") {
-      return "There is no percentage and no arrival time. The engine emits no intermediate signal, so "
-        + "anything of the sort would be invented.";
+  function logClosing(run, key) {
+    if (key === "running" || key === "queued") {
+      return "The engine reports nothing between start and finish. There is no percentage to show "
+        + "and no arrival time to predict, so this screen shows neither. Only the events above, the "
+        + "time spent, and the ceiling at which the service gives up. Expect one more line, not a stream.";
     }
-    if (key === "queued") return "Nothing has started yet. The next line appears when a worker takes it.";
-    return "These lines were written as the run went. This is a receipt, and nothing more is coming.";
+    const instant = run.finished_at_ms && (run.finished_at_ms - run.created_at_ms) < 10000;
+    return instant
+      ? "This run was read and finished in one step, so every line above was written at once. It is "
+        + "a receipt of what happened, not a feed."
+      : "Every line above is a timestamp the Hub wrote. Nothing here is interpolated.";
   }
 
   function factsRail(run, key) {
-    const elapsedMs = (run.finished_at_ms || Date.now()) - (run.started_at_ms || run.created_at_ms);
-    const parts = PSL.durParts(run.started_at_ms ? elapsedMs : 0);
-    const figure = el("p", { class: "elapsed-figure", "data-running": key === "running" ? "true" : "false" });
-    parts.forEach(function (part) {
-      figure.appendChild(el("span", { text: part.n }));
-      if (part.u) figure.appendChild(el("span", { class: "elapsed-unit", text: part.u }));
+    const elapsedMs = key === "queued"
+      ? Date.now() - run.created_at_ms
+      : (run.finished_at_ms || Date.now()) - (run.started_at_ms || run.created_at_ms);
+    const figure = el("div", { class: "elapsed", "data-running": key === "running" ? "true" : "false" });
+    PSL.durParts(elapsedMs).forEach(function (part) {
+      figure.appendChild(el("span", { class: "elapsed-part" }, [
+        el("span", { class: "elapsed-n", text: part.n }),
+        el("span", { class: "elapsed-u", text: part.u })
+      ]));
     });
 
-    const elapsed = el("div", { class: "card rail-card" }, [
+    const elapsed = el("section", { class: "card rail-card" }, [
       el("p", { class: "overline", text: "// elapsed" }),
       figure
     ]);
+    // The only bar in the product, and only while running: it measures a known
+    // ceiling, not progress toward an unknown total.
     if (key === "running") elapsed.appendChild(ceilingRule(elapsedMs));
-    else if (key === "queued") {
-      elapsed.appendChild(el("p", {
-        class: "rail-note",
-        text: "The " + state.status.limits.analysis_timeout_seconds + "-second ceiling has not started "
-          + "counting. That is the whole difference between queued and running."
-      }));
-    }
+    elapsed.appendChild(el("p", { class: "rail-note", text: ceilingNote(key, elapsedMs) }));
 
-    return el("div", { class: "rail" }, [elapsed, requestCard(run)]);
+    return el("aside", { class: "rail" }, [elapsed, requestCard(run)]);
   }
 
-  /**
-   * The only bar in this product. It measures elapsed time against a known
-   * ceiling, which is a fact, not progress toward an unknown total.
-   */
   function ceilingRule(elapsedMs) {
     const ceilingMs = state.status.limits.analysis_timeout_seconds * 1000;
-    const ratio = Math.min(1, elapsedMs / ceilingMs);
-    const near = elapsedMs > ceilingMs * 0.8;
     const fill = el("span", { class: "ceiling-fill" });
-    fill.style.width = (ratio * 100).toFixed(1) + "%";
-    if (near) fill.setAttribute("data-near", "true");
-    return el("div", {}, [
-      el("div", { class: "ceiling" }, [fill]),
-      el("p", { class: "rail-note", text: "against the " + state.status.limits.analysis_timeout_seconds + " s ceiling" })
-    ]);
+    fill.style.width = Math.min(100, (elapsedMs / ceilingMs) * 100).toFixed(1) + "%";
+    if (elapsedMs > ceilingMs * 0.8) fill.setAttribute("data-near", "true");
+    return el("div", { class: "ceiling", "aria-hidden": "true" }, [fill]);
+  }
+
+  function ceilingNote(key, elapsedMs) {
+    const seconds = state.status.limits.analysis_timeout_seconds;
+    if (key === "queued") {
+      return "The " + seconds + "-second ceiling starts when a worker picks the job up, not now.";
+    }
+    if (key !== "running") return "Total time the run occupied a worker.";
+    const left = seconds * 1000 - elapsedMs;
+    return left <= 0
+      ? "Past the " + seconds + " s ceiling. The run should already have been killed and marked timeout."
+      : "Hard stop at " + seconds + " s, then the run is killed and marked timeout. "
+        + PSL.dur(left) + " of ceiling left.";
   }
 
   function requestCard(run) {
-    const rows = [
-      ["source", run.source_name],
-      ["type", PSL.KIND_LABEL[run.kind] || run.kind],
-      ["arguments", PSL.argsLine(run)],
-      ["requested by", run.requested_by],
-      [PSL.detector(run.kind) === "producer" ? "detected by producer" : "detected by engine",
-        run.producer_version || "not yet known"],
-      ["expires", run.expires_at_ms ? PSL.dtHuman(run.expires_at_ms) : "not until it succeeds"]
-    ];
-    return el("div", { class: "card rail-card" }, [
+    const request = run.request || {};
+    const facts = [["source", run.source_name, "ui"], ["type", PSL.KIND_LABEL[run.kind] || run.kind, "mono"]];
+    ["service", "trace_id", "lookback", "max_traces"].forEach(function (name) {
+      if (request[name] != null) facts.push([name, String(request[name]), "mono"]);
+    });
+    if (request.from_ms) facts.push(["window", PSL.dtHuman(request.from_ms) + " → " + PSL.dtHuman(request.to_ms), "mono"]);
+    if (!request.service && !request.trace_id) facts.push(["parameters", "none", "muted"]);
+    facts.push(["requested by", run.requested_by, "mono"]);
+    facts.push(["detected by", run.producer_version
+      ? PSL.detector(run.kind) + " " + run.producer_version
+      : "not yet known", PSL.skew(run.producer_version) ? "warn" : "mono"]);
+    facts.push(["expires", expiryText(run), run.expires_at_ms && run.expires_at_ms < Date.now() ? "crit" : "mono"]);
+
+    return el("section", { class: "request" }, [
       el("p", { class: "overline", text: "// request" }),
-      el("dl", { class: "facts" }, rows.flatMap(function (row) {
-        return [
-          el("dt", { text: row[0] }),
-          el("dd", { text: row[1], title: row[1] })
-        ];
+      el("div", { class: "request-grid" }, facts.map(function (fact) {
+        return el("div", { class: "fact-card" }, [
+          el("span", { class: "fact-card-k", text: fact[0] }),
+          el("span", { class: "fact-card-v", "data-tone": fact[2], text: fact[1], title: fact[1] })
+        ]);
       }))
     ]);
   }
 
-  function outcomePanel(run, key) {
-    if (key === "succeeded" || key === "empty") return successPanel(run, key);
-    if (key === "failed") return failurePanel(run);
-    if (key === "interrupted") return resumePanel(run);
-    if (key === "expired") return expiredPanel();
-    return null;
+  function expiryText(run) {
+    if (!run.expires_at_ms) return "not until it succeeds";
+    const delta = run.expires_at_ms - Date.now();
+    return delta > 0 ? "in " + PSL.dur(delta) : PSL.dur(-delta) + " ago";
   }
 
-  function successPanel(run, key) {
-    const result = run.result || {};
-    const panel = el("section", { class: "outcome", "data-tone": OUTCOME_TONE[key] }, [
-      el("p", { class: "overline", text: "// result" })
+  function outcomePanel(run, key, view) {
+    if (key === "running" || key === "queued") return null;
+    const spec = outcomeSpec(run, key);
+    const panel = el("section", { class: "outcome", "data-tone": spec.tone }, [
+      el("p", { class: "overline", text: "// " + spec.title }),
+      el("p", { class: "outcome-body", text: spec.body })
     ]);
-
-    if (key === "empty") {
-      panel.appendChild(el("p", {
-        class: "outcome-body",
-        text: "The source answered correctly with zero traces. The report exists and is blank, which "
-          + "is the expected outcome here rather than a rendering fault. A quality gate that passes "
-          + "on zero traces has not measured anything."
-      }));
-    } else {
-      panel.appendChild(countStrip(result));
-    }
-
-    // Above the link on purpose: they change how the numbers should be read.
-    (result.warnings || []).forEach(function (warning) {
-      panel.appendChild(el("div", { class: "banner", "data-tone": "warn" }, [
-        svg([["path", { d: "M12 4l9 16H3z" }], ["path", { d: "M12 10v4M12 17.4v.2" }]], 16),
-        el("div", {}, [
-          el("p", { class: "warning-kind", text: warning.kind }),
-          el("p", { class: "warning-message", text: warning.message })
-        ])
+    if (spec.counts) panel.appendChild(countStrip(spec.counts));
+    (spec.warnings || []).forEach(function (warning) {
+      panel.appendChild(el("div", { class: "outcome-warning" }, [
+        el("span", { class: "outcome-warning-kind", text: warning.kind }),
+        el("span", { class: "outcome-warning-message", text: warning.message })
       ]));
     });
-
-    panel.appendChild(actionRow(run, key));
+    panel.appendChild(actionRow(run, spec));
     return panel;
   }
 
-  function countStrip(result) {
-    const cells = [
-      [result.findings, "findings"], [result.critical, "critical"],
-      [result.warning, "warning"], [result.info, "info"],
-      [result.traces_analyzed, "traces"],
-      [result.quality_gate_passed ? "pass" : "fail", "gate"]
-    ];
-    return el("div", { class: "counts" }, cells.map(function (cell) {
+  function outcomeSpec(run, key) {
+    const result = run.result || {};
+    if (key === "succeeded") {
+      return {
+        tone: "ok", title: "result",
+        body: result.quality_gate_passed
+          ? "The quality gate passed. The dashboard holds the full detail."
+          : "The quality gate did not pass. The dashboard holds the full detail.",
+        counts: [
+          [String(result.findings), "findings", "text"],
+          [String(result.critical), "critical", "crit"],
+          [String(result.warning), "warning", "warn"],
+          [String(result.info), "info", "info"],
+          [String(result.traces_analyzed), "traces read", "text"],
+          [result.quality_gate_passed ? "pass" : "fail", "quality gate",
+            result.quality_gate_passed ? "ok" : "crit"]
+        ],
+        warnings: result.warnings,
+        primary: { label: "Open the dashboard", href: "#/report/" + run.id, filled: true },
+        note: "Opens on this origin. The link dies in " + PSL.dur(run.expires_at_ms - Date.now()) + "."
+      };
+    }
+    if (key === "empty") {
+      return {
+        tone: "warn", title: "empty result",
+        body: run.source_name + " had nothing for the engine to analyse. The report exists, and it is "
+          + "blank. Opening it will show an empty dashboard. That is the expected outcome, not a "
+          + "rendering fault.",
+        counts: [
+          [String(result.findings), "findings", "warn"],
+          [String(result.traces_analyzed), "traces read", "warn"],
+          [result.quality_gate_passed ? "pass" : "fail", "quality gate", "muted"]
+        ],
+        warnings: result.warnings,
+        primary: { label: "Wait and run it again", href: "#/new", filled: false },
+        secondary: { label: "Open the blank dashboard anyway", href: "#/report/" + run.id },
+        note: "A quality gate that passes on zero traces has not measured anything."
+      };
+    }
+    if (key === "failed") {
+      return {
+        tone: "crit", title: run.error_code || "internal",
+        body: run.source_name + ": " + (PSL.ERRORS[run.error_code] || "it failed for an unnamed reason."),
+        primary: { label: "Run it again", href: "#/new", filled: false },
+        secondary: { label: "Check the source", href: "#/sources" },
+        note: "Nothing was stored, so nothing expires."
+      };
+    }
+    if (key === "interrupted") {
+      return {
+        tone: "info", title: "resume",
+        body: "The Hub never replays an interrupted run on its own. A silent retry could fire a second "
+          + "heavy query at " + run.source_name + " without anyone asking for it, so the decision stays "
+          + "yours. The parameters are unchanged and ready to send again.",
+        primary: { label: "Resume with the same parameters", action: function () { resubmit(run); }, filled: true },
+        note: PSL.argsLine(run)
+      };
+    }
+    return {
+      tone: "muted", title: "expired",
+      body: "Retention is not configurable from here. Running the same analysis again produces a new "
+        + "report with a new clock. It will not reproduce the old one, because the source has moved "
+        + "on since then.",
+      primary: { label: "Run it again", href: "#/new", filled: false },
+      note: PSL.argsLine(run)
+    };
+  }
+
+  function countStrip(counts) {
+    return el("div", { class: "counts" }, counts.map(function (cell) {
       return el("div", { class: "count" }, [
-        el("span", { class: "count-n", text: String(cell[0]) }),
+        el("span", { class: "count-n", "data-tone": cell[2], text: cell[0] }),
         el("span", { class: "count-l", text: cell[1] })
       ]);
     }));
   }
 
-  function actionRow(run, key) {
-    const row = el("div", { class: "outcome-actions" });
-    if (key === "empty") {
-      const again = el("button", { type: "button", class: "submit", text: "Wait and run it again" });
-      again.addEventListener("click", function () { location.hash = "#/new"; });
-      row.appendChild(again);
-      // The dashboard names the cold start itself, so removing the link would
-      // hide the evidence.
-      row.appendChild(el("a", { class: "pill-button", href: "#/report/" + run.id, text: "Open the blank dashboard anyway" }));
-    } else {
-      row.appendChild(el("a", { class: "submit", href: "#/report/" + run.id, text: "Open the dashboard" }));
-    }
-    if (run.expires_at_ms) {
-      row.appendChild(el("span", {
-        class: "outcome-lifetime",
-        text: "deleted in " + PSL.dur(run.expires_at_ms - Date.now())
-      }));
-    }
+  function actionRow(run, spec) {
+    const row = el("div", { class: "outcome-actions" }, [actionButton(spec.primary, true)]);
+    if (spec.secondary) row.appendChild(actionButton(spec.secondary, false));
+    if (spec.note) row.appendChild(el("span", { class: "outcome-note", text: spec.note }));
     return row;
   }
 
-  function failurePanel(run) {
-    return el("section", { class: "outcome", "data-tone": "crit" }, [
-      el("p", { class: "overline", text: "// " + run.error_code }),
-      el("p", { class: "outcome-body", text: "The Hub asked, and " + (PSL.ERRORS[run.error_code] || "it failed.") }),
-      el("p", { class: "outcome-foot", text: "Raw output from the engine is never shown here, by design. This code is "
-        + "the whole vocabulary, and it is what to quote when asking for help." })
-    ]);
-  }
-
-  function resumePanel(run) {
-    const panel = el("section", { class: "outcome", "data-tone": "info" }, [
-      el("p", { class: "overline", text: "// interrupted" }),
-      el("p", {
-        class: "outcome-body",
-        text: "Nothing was stored and nothing was retried. Resubmitting is a decision, not a recovery."
-      })
-    ]);
-    const resume = el("button", { type: "button", class: "submit", text: "Resume with the same parameters" });
-    resume.addEventListener("click", function () { resubmit(run); });
-    panel.appendChild(el("div", { class: "outcome-actions" }, [
-      resume,
-      el("span", { class: "outcome-lifetime", text: PSL.argsLine(run) })
-    ]));
-    return panel;
-  }
-
-  function expiredPanel() {
-    return el("section", { class: "outcome", "data-tone": "muted" }, [
-      el("p", { class: "overline", text: "// expired" }),
-      el("p", {
-        class: "outcome-body",
-        text: "Reports live " + state.status.limits.report_retention_hours + " hours and this one is "
-          + "gone. Running the same parameters again produces a new report, not this one back."
-      })
-    ]);
+  function actionButton(spec, primary) {
+    const className = "action" + (primary && spec.filled ? " action-filled" : "")
+      + (primary ? "" : " action-secondary");
+    if (spec.href) return el("a", { class: className, href: spec.href, text: spec.label });
+    const button = el("button", { type: "button", class: className, text: spec.label });
+    button.addEventListener("click", spec.action);
+    return button;
   }
 
   function resubmit(run) {
@@ -1367,8 +1443,6 @@
       state.run = run;
       state.runError = false;
       render();
-      // A finished run needs no poll, and the job screen has no push channel
-      // to rely on.
       if (run.status === "pending" || run.status === "running") scheduleRunPoll(id);
     }).catch(function () {
       state.runError = true;
@@ -1387,12 +1461,12 @@
 
   function renderRecentScreen() {
     const section = el("section", {}, [
-      el("p", { class: "overline", text: "// recent analyses" }),
-      el("h1", { class: "page-title", text: "Recent" }),
+      ruledOverline("// recent analyses"),
+      el("h1", { class: "page-title", text: "The team's short memory" }),
       el("p", {
         class: "page-sub",
         text: "Reports are deleted " + state.status.limits.report_retention_hours + " hours after they "
-          + "succeed. This is not an audit trail, and a link shared yesterday is already dead."
+          + "succeed. This is not an audit trail, and a link you shared yesterday is already dead."
       })
     ]);
 
@@ -1401,17 +1475,28 @@
       return section;
     }
     if (state.runs.length === 0) {
-      section.appendChild(el("div", { class: "empty-state", text: "No analysis has been run yet." }));
+      section.appendChild(el("div", { class: "empty-state" }, [
+        el("p", { class: "empty-title", text: "Nothing here yet." }),
+        el("p", {
+          text: "Not “no results”. This list is the team's short memory, and after "
+            + state.status.limits.report_retention_hours + " idle hours retention returns it to "
+            + "exactly this state. That is normal, so it reads as normal."
+        })
+      ]));
       return section;
     }
 
-    const binaries = new Set(state.runs.map(function (run) { return run.producer_version; }).filter(Boolean));
-    if (binaries.size > 1) {
+    const binaries = Array.from(new Set(
+      state.runs.map(function (run) { return run.producer_version; }).filter(Boolean))).sort(PSL.vcmp);
+    if (binaries.length > 1) {
       section.appendChild(el("div", { class: "banner", "data-tone": "warn" }, [
-        svg([["path", { d: "M12 4l9 16H3z" }], ["path", { d: "M12 10v4M12 17.4v.2" }]], 16),
-        el("div", {
-          text: "These runs come from " + binaries.size + " different binaries, so their counts are not "
-            + "directly comparable. A detector added between minors changes what gets found, not only how much."
+        svg([["path", { d: "M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" }],
+          ["path", { d: "M12 9v4M12 17h.01" }]], 16),
+        el("p", {
+          text: "These analyses were produced by " + binaries.join(" and ") + ". Counts from "
+            + binaries.length + " binaries are not directly comparable: a detector added between "
+            + "minors changes what gets found, not only how much. The label on each card names which "
+            + "binary did the detecting."
         })
       ]));
     }
@@ -1423,39 +1508,58 @@
 
   function legendStrip() {
     const keys = ["queued", "running", "succeeded", "empty", "failed", "interrupted", "expired"];
-    return el("div", { class: "legend" }, keys.map(function (key) {
-      return el("span", { class: "status-pill", "data-status": key, text: key });
-    }));
+    const strip = el("div", { class: "legend" }, [el("span", { class: "overline", text: "legend" })]);
+    keys.forEach(function (key) {
+      strip.appendChild(el("span", {
+        class: "status-pill",
+        "data-status": key,
+        text: key === "empty" ? "succeeded · empty" : key
+      }));
+    });
+    return strip;
   }
 
   function runCard(run) {
     const key = PSL.statusKey(run);
     const card = el("a", { class: "run-card", "data-status": key, href: "#/run/" + run.id });
 
-    card.appendChild(el("div", { class: "run-card-line" }, [
-      el("span", { class: "status-pill", "data-status": key, text: key }),
+    card.appendChild(el("span", { class: "run-card-line" }, [
+      el("span", { class: "status-pill", "data-status": key, text: key === "empty" ? "succeeded · empty" : key }),
       el("span", { class: "run-card-name", text: run.source_name }),
       el("span", { class: "chip", text: PSL.KIND_LABEL[run.kind] || run.kind }),
-      el("span", { class: "chip chip-declared", text: run.environment }),
+      el("span", {
+        class: "chip chip-declared",
+        text: run.environment,
+        title: "Declared by the source's configuration, not measured."
+      }),
+      el("span", { class: "run-card-spacer" }),
       el("span", { class: "run-card-id", text: run.id })
     ]));
-    card.appendChild(el("p", { class: "run-card-args", text: PSL.argsLine(run), title: PSL.argsLine(run) }));
-
-    const facts = [
-      ["by", run.requested_by],
-      ["ran", run.finished_at_ms ? PSL.dur(run.finished_at_ms - (run.started_at_ms || run.created_at_ms)) : "—"],
-      [PSL.detector(run.kind), run.producer_version || "—"],
-      ["started", PSL.dtHuman(run.started_at_ms || run.created_at_ms)],
-      ["expires", run.expires_at_ms ? PSL.dtHuman(run.expires_at_ms) : "—"]
-    ];
-    if (run.error_code) facts.push(["error", run.error_code]);
-    card.appendChild(el("div", { class: "run-card-facts" }, facts.map(function (fact) {
-      return el("span", {}, [
+    card.appendChild(el("span", { class: "run-card-args", text: PSL.argsLine(run), title: PSL.argsLine(run) }));
+    card.appendChild(el("span", { class: "run-card-facts" }, cardFacts(run, key).map(function (fact) {
+      return el("span", { class: "fact" }, [
         el("span", { class: "fact-k", text: fact[0] }),
-        el("span", { class: "fact-v", text: fact[1] })
+        el("span", { class: "fact-v", "data-tone": fact[2] || "mono", text: fact[1] })
       ]);
     })));
     return card;
+  }
+
+  /** Durations relative to now, the way an operator reads a list: "3 s", not a clock. */
+  function cardFacts(run, key) {
+    const now = Date.now();
+    const started = run.started_at_ms || run.created_at_ms;
+    const ran = run.finished_at_ms
+      ? PSL.dur(run.finished_at_ms - started)
+      : key === "queued" ? "not started" : PSL.dur(now - started) + " so far";
+    const facts = [["by", run.requested_by], ["ran", ran]];
+    if (run.producer_version) facts.push([PSL.detector(run.kind), run.producer_version,
+      PSL.skew(run.producer_version) ? "warn" : "mono"]);
+    facts.push(["started", PSL.dur(now - started) + " ago"]);
+    facts.push(["expires", run.expires_at_ms ? expiryText(run) : "n/a",
+      run.expires_at_ms && run.expires_at_ms < now ? "crit" : "mono"]);
+    if (run.error_code) facts.push(["error", run.error_code, "crit"]);
+    return facts;
   }
 
   function loadRuns() {

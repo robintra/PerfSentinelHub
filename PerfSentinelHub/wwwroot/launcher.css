@@ -174,9 +174,9 @@ button { font: inherit; }
 }
 .shell-footer-title {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .14em;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--text-3);
 }
@@ -225,19 +225,22 @@ button { font: inherit; }
   overflow: hidden;
 }
 
+/* DM Sans, not mono: the prototype's chips read as labels, not as code. */
 .chip {
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: 8px;
   background: var(--surface-3);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--text-2);
+  white-space: nowrap;
 }
 /* Declared, not measured. The dashed outline is the design's device for a
    claim the Hub cannot verify, and it belongs wherever such a value appears. */
 .chip-declared {
+  padding: 1px 7px;
   border: 1px dashed var(--border-2);
   background: transparent;
   color: var(--text-3);
@@ -311,7 +314,7 @@ button { font: inherit; }
    a table is for. It scrolls inside its own container rather than widening
    the page. */
 .sources-wrap { overflow-x: auto; border-radius: var(--r); background: var(--surface); }
-.table { width: 100%; min-width: 940px; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; }
+.table { width: 100%; min-width: 1090px; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; }
 .table th {
   font-family: var(--font-ui);
   font-size: 11px;
@@ -320,18 +323,21 @@ button { font: inherit; }
   text-align: left;
   color: var(--text-3);
   padding: 11px 12px;
-  border-bottom: 1px solid var(--border-2);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
 }
+.table th[data-align="right"], .table td[data-align="right"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-th-soft { font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .8; }
 .table td { padding: 12px; vertical-align: top; color: var(--text-2); border-bottom: 1px solid var(--border); }
 .table td:first-child, .table th:first-child { padding-left: 18px; }
 .table td:last-child, .table th:last-child { padding-right: 18px; }
 .table tr[data-unreachable] { background: var(--crit-bg); }
-.table-strong { font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--text); }
+.table-strong { font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .table-mono { font-family: var(--font-mono); }
 .table-muted { color: var(--text-3); }
 
-.health { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; }
-.health-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.health { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; }
+.health-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .health[data-health="ok"] { color: var(--ok-fg); }
 .health[data-health="crit"] { color: var(--crit-fg); }
 
@@ -341,9 +347,9 @@ button { font: inherit; }
   padding: 2px 7px;
   border: 0;
   border-radius: 8px;
-  font-family: var(--font-ui);
   font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
 .skew-pill[data-dir="behind"] { background: var(--warn-bg); color: var(--warn-fg); }
 .skew-pill[data-dir="ahead"] { background: var(--info-bg); color: var(--info-fg); }
@@ -391,10 +397,12 @@ button { font: inherit; }
 .source-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .source-version { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
 
-.panel-note { margin: 12px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+.new-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel-note { margin: 13px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+.panel-note-rule { display: inline-block; width: 13px; height: 0; margin-right: 5px; border-top: 1px dashed var(--border-2); vertical-align: middle; }
 
 /* The card clips its content, but the time-range popover has to escape it. */
-.params-panel { padding: 16px; overflow: visible; }
+.params-panel { padding: 18px 18px 20px; overflow: visible; }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-head-source { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
 
@@ -659,15 +667,10 @@ button { font: inherit; }
 
 .band-body { margin: 0; font-size: 12px; line-height: 1.6; max-width: 80ch; }
 
-.sink {
-  margin-top: 16px;
-  padding: 16px 18px;
-  border-radius: var(--r-sm);
-  background: var(--surface-3);
-}
-.sink-rows { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; margin: 12px 0 0; }
-.sink-rows dt { font-family: var(--font-mono); font-size: 12px; color: var(--text); text-align: right; }
-.sink-rows dd { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.sink { margin-top: 14px; padding: 13px 15px; border-radius: 10px; background: var(--surface-3); }
+.sink-rows { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 7px 12px; margin: 9px 0 0; }
+.sink-rows dt { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--text-2); text-align: right; font-variant-numeric: tabular-nums; }
+.sink-rows dd { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
 
 .checkbox { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); cursor: pointer; }
 .checkbox input { margin-top: 2px; accent-color: var(--brand); }
@@ -686,35 +689,51 @@ button { font: inherit; }
 }
 .checkbox-pill input { width: 16px; height: 16px; margin: 0; accent-color: var(--brand); }
 
-.ack-block { margin-top: 16px; padding: 14px 16px; border-radius: var(--r-sm); background: var(--crit-bg); }
-.ack-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--crit-fg); }
-.ack-block .checkbox { color: var(--crit-fg); }
+/* Its own section under the cost band, not a note inside the form: it is a
+   statement about the source, not a parameter. */
+.notice-block {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 15px 17px;
+  border: 1px solid;
+  border-radius: var(--r);
+}
+.notice-block[data-tone="warn"] { background: var(--warn-bg); border-color: var(--warn-bd); color: var(--warn-fg); }
+.notice-block[data-tone="info"] { background: var(--info-bg); border-color: var(--info-bd); color: var(--info-fg); }
+.notice-block > svg { flex: 0 0 auto; margin-top: 2px; }
+.notice-block-text { min-width: 0; }
+.notice-block-title { margin: 0 0 5px; font-size: 13px; font-weight: 600; color: inherit; }
+.notice-block-body { margin: 0 0 4px; font-size: 12.5px; line-height: 1.55; color: inherit; opacity: .92; max-width: 78ch; }
+.notice-block .checkbox { margin-top: 10px; color: inherit; font-weight: 500; }
+.notice-block .checkbox input { width: 16px; height: 16px; }
+.code-inline { font-family: var(--font-mono); font-size: 12px; }
 
-.cost { margin-top: 26px; }
-.cost-sub { margin: 6px 0 14px; font-size: 12px; color: var(--text-3); }
+.cost { padding: 18px; }
+.cost-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.cost-sub { font-size: 11.5px; color: var(--text-3); }
 .cost-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
   gap: 1px;
   background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
+  border-radius: 10px;
   overflow: hidden;
 }
-.cost-cell { padding: 18px 20px; background: var(--surface); }
-.cost-figure { margin: 0; font-family: var(--font-mono); font-size: 21px; color: var(--text); }
-.cost-unit { margin-left: 5px; font-size: 12px; color: var(--text-3); }
-.cost-label { margin: 7px 0 0; font-size: 11px; color: var(--text-2); }
-.cost-note { margin: 4px 0 0; font-size: 10.5px; line-height: 1.45; color: var(--text-3); }
+.cost-cell { padding: 13px 14px; background: var(--surface-2); }
+.cost-figure { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin: 0 0 5px; font-family: var(--font-mono); font-size: 21px; font-weight: 600; letter-spacing: -.02em; color: var(--text); font-variant-numeric: tabular-nums; }
+.cost-unit { font-size: 12px; font-weight: 500; color: var(--text-3); }
+.cost-label { margin: 0 0 2px; font-size: 11px; font-weight: 500; color: var(--text-2); }
+.cost-note { margin: 0; font-size: 10.5px; line-height: 1.4; color: var(--text-3); }
 
-.submit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 26px; }
+.submit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
 .submit {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   height: 44px;
   padding: 0 22px;
-  border: 0;
+  border: 1px solid var(--brand);
   border-radius: 999px;
   background: var(--brand);
   color: #ffffff;
@@ -723,7 +742,7 @@ button { font: inherit; }
   cursor: pointer;
 }
 .submit:disabled { background: var(--surface-3); color: var(--text-3); opacity: .7; cursor: not-allowed; }
-.submit-sentence { margin: 0; max-width: 62ch; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.submit-sentence { margin: 0; max-width: 58ch; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 .submit-sentence[data-blocked="true"] { color: var(--text-3); }
 
 /* ----------------------------------------------- screen: dashboard handoff */
@@ -733,17 +752,19 @@ button { font: inherit; }
 body[data-screen="report"] .shell-main { max-width: none; padding: 0; }
 body[data-screen="report"] .shell-footer { display: none; }
 .report-shell { display: flex; flex-direction: column; height: calc(100vh - 61px); }
+.report-bar .pill-button { height: 30px; padding: 0 13px 0 10px; font-size: 12px; }
 .report-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  padding: 9px 22px;
+  padding: 11px 16px;
   background: var(--surface-3);
   border-bottom: 1px solid var(--border-2);
 }
-.report-path { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
-.report-engine { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
+.report-path { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
+.report-spacer { flex: 1; }
+.report-engine { font-size: 11.5px; color: var(--text-3); }
 .report-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg); }
 
 .field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }

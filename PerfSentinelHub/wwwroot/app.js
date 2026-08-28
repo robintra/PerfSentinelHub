@@ -326,8 +326,12 @@
     row.appendChild(el("td", {}, [el("span", { class: "chip", text: PSL.KIND_LABEL[source.kind] || source.kind })]));
     row.appendChild(el("td", {}, [el("span", { class: "chip chip-declared", text: source.environment })]));
     row.appendChild(el("td", {}, [healthCell(source, now)]));
-    row.appendChild(el("td", { text: source.last_success_ms ? PSL.dtHuman(source.last_success_ms) : "never" }));
     row.appendChild(el("td", {
+      "data-align": "right",
+      text: source.last_success_ms ? PSL.dur(now - source.last_success_ms) + " ago" : "never"
+    }));
+    row.appendChild(el("td", {
+      "data-align": "right",
       text: source.unreachable_since_ms ? PSL.dur(now - source.unreachable_since_ms) : "—"
     }));
     row.appendChild(producerCell(source));
@@ -362,12 +366,13 @@
         })
         : el("td", {
           class: "table-muted",
+          "data-align": "right",
           text: "n/a",
           title: "A trace backend stores traces and detects nothing, so it reports no producer version."
         });
     }
 
-    const cell = el("td", { class: "table-mono" }, [el("span", { text: source.producer_version })]);
+    const cell = el("td", { class: "table-mono", "data-align": "right" }, [el("span", { text: source.producer_version })]);
     const gap = PSL.skew(source.producer_version);
     if (gap) {
       cell.appendChild(el("span", {
@@ -451,9 +456,14 @@
       return section;
     }
 
-    section.appendChild(el("div", { class: "new-grid" }, [sourcePanel(), parametersPanel()]));
-    section.appendChild(costBand());
-    section.appendChild(submitRow());
+    const source = selectedSource();
+    const skew = source && PSL.skew(source.producer_version);
+    const right = el("div", { class: "new-column" }, [parametersPanel(), costBand()]);
+    if (skew) right.appendChild(skewNotice(source, skew));
+    if (source && !source.reachable) right.appendChild(unreachableNotice(source));
+    right.appendChild(submitRow());
+
+    section.appendChild(el("div", { class: "new-grid" }, [sourcePanel(), right]));
     return section;
   }
 
@@ -474,16 +484,16 @@
         el("span", { class: "panel-head-source", text: state.sources.length + " configured" })
       ]),
       el("div", { class: "source-list", role: "radiogroup", "aria-label": "Source" },
-        state.sources.map(sourceRadio))
+        state.sources.map(sourceRadio)),
+      el("p", { class: "panel-note" }, [
+        el("span", { class: "panel-note-rule", "aria-hidden": "true" }),
+        el("span", {
+          text: "A dashed outline marks a value the source declares about itself. The Hub never "
+            + "measures it. A misconfigured deployment can label production as staging."
+        })
+      ])
     ]);
-    return el("div", {}, [
-      list,
-      el("p", {
-        class: "panel-note",
-        text: "The environment is declared by the source's own configuration, never measured. A "
-          + "misconfigured deployment can label production as staging."
-      })
-    ]);
+    return list;
   }
 
   function sourceRadio(source) {
@@ -540,7 +550,6 @@
     const panel = el("div", { class: "card params-panel" }, [head]);
     if (source.kind === "daemon") panel.appendChild(daemonNotice());
     else backendControls(source).forEach(function (node) { panel.appendChild(node); });
-    if (!source.reachable) panel.appendChild(unreachableAck(source));
     return panel;
   }
 
@@ -908,7 +917,7 @@
       ["0 findings", "Traces carrying no finding are never embedded at all, at any size."]
     ];
     return el("div", { class: "sink" }, [
-      el("p", { class: "overline", text: "// what comes back, and what it drops first" }),
+      el("p", { class: "overline", text: "What comes back, and what it drops first" }),
       el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
         return [el("dt", { text: row[0] }), el("dd", { text: row[1] })];
       }))
@@ -928,17 +937,73 @@
     return node;
   }
 
-  function unreachableAck(source) {
-    return el("div", { class: "ack-block" }, [
-      el("p", {
-        class: "ack-title",
-        text: "This source has been unreachable for " + PSL.dur(Date.now() - source.unreachable_since_ms) + "."
-      }),
-      checkbox(
-        state.form.ackUnreachable,
-        "Run it anyway. The most likely outcome is source_unreachable.",
-        function (checked) { state.form.ackUnreachable = checked; updateSubmit(); })
+  /**
+   * A producer behind the engine is worth saying out loud: perf-sentinel is
+   * pre-1.0, so a detector added between minors does not run on the older
+   * binary at all, and its absence looks exactly like a clean service.
+   */
+  function skewNotice(source, skew) {
+    const engine = state.status.engine_version;
+    const behind = skew.dir === "behind";
+    return el("section", { class: "notice-block", "data-tone": behind ? "warn" : "info" }, [
+      warningGlyph(16),
+      el("div", { class: "notice-block-text" }, [
+        el("p", {
+          class: "notice-block-title",
+          text: source.name + " runs " + source.producer_version + ", " + skew.label + " the "
+            + engine + " binary embedded in the Hub."
+        }),
+        el("p", {
+          class: "notice-block-body",
+          text: behind
+            ? "perf-sentinel is pre-1.0, so detectors change between minors. A detector added in "
+              + engine + " does not run on this producer at all, and its absence looks exactly like "
+              + "a clean service. Read a low finding count from this source as unmeasured, not as healthy."
+            : "Envelopes are additive, so nothing breaks. Findings from a detector this Hub does not "
+              + "know about arrive unnamed. The Hub compares two version strings and cannot know "
+              + "whether this minor changed detection at all."
+        })
+      ])
     ]);
+  }
+
+  function unreachableNotice(source) {
+    const text = el("div", { class: "notice-block-text" }, [
+      el("p", {
+        class: "notice-block-title",
+        text: source.name + " has been unreachable for " + PSL.dur(Date.now() - source.unreachable_since_ms) + "."
+      })
+    ]);
+    if (source.last_success_ms) {
+      text.appendChild(el("p", {
+        class: "notice-block-body",
+        text: "Last successful contact " + PSL.dur(Date.now() - source.last_success_ms) + " ago."
+      }));
+    }
+    if (source.last_error_code) {
+      text.appendChild(el("p", { class: "notice-block-body" }, [
+        el("span", { text: "The last attempt returned " }),
+        el("span", { class: "code-inline", text: source.last_error_code }),
+        el("span", { text: ": " + (PSL.ERRORS[source.last_error_code] || "the Hub could not reach it.") })
+      ]));
+    }
+    text.appendChild(el("p", {
+      class: "notice-block-body",
+      text: "Running now will consume a worker slot and will almost certainly end with the same code."
+    }));
+    text.appendChild(checkbox(
+      state.form.ackUnreachable,
+      "Run it anyway",
+      function (checked) { state.form.ackUnreachable = checked; updateSubmit(); }));
+
+    return el("section", { class: "notice-block", "data-tone": "warn" }, [warningGlyph(17), text]);
+  }
+
+  function warningGlyph(size) {
+    return svg([
+      ["path", { d: "M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" }],
+      ["path", { d: "M12 9v4M12 17h.01" }]
+    ], size);
   }
 
   function checkbox(checked, label, onChange) {
@@ -961,9 +1026,11 @@
         "That many runs at a time across the whole Hub."],
       [String(limits.report_retention_hours), "h", "Report retention", "Then the file is deleted. Links die."]
     ];
-    return el("section", { class: "cost" }, [
-      el("p", { class: "overline", text: "// what this run costs" }),
-      el("p", { class: "cost-sub", text: "Reported by the service, not assumed." }),
+    return el("section", { class: "card cost" }, [
+      el("div", { class: "cost-head" }, [
+        el("span", { class: "overline", text: "// what this run costs" }),
+        el("span", { class: "cost-sub", text: "Reported by the service, not assumed." })
+      ]),
       el("div", { class: "cost-grid" }, cells.map(function (cell) {
         return el("div", { class: "cost-cell" }, [
           el("p", { class: "cost-figure" }, [
@@ -1022,7 +1089,7 @@
 
   function submitRow() {
     const button = el("button", { type: "button", class: "submit", id: "submit" }, [
-      svg([["path", { d: "M7 5l12 7-12 7z" }]], 16),
+      playGlyph(),
       el("span", { text: "Run analysis" })
     ]);
     button.addEventListener("click", submit);
@@ -1032,6 +1099,19 @@
     ]);
     queueMicrotask(updateSubmit);
     return row;
+  }
+
+  function playGlyph() {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    node.setAttribute("viewBox", "0 0 24 24");
+    node.setAttribute("width", "15");
+    node.setAttribute("height", "15");
+    node.setAttribute("fill", "currentColor");
+    node.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M7 4.5v15l13-7.5z");
+    node.appendChild(path);
+    return node;
   }
 
   function updateSubmit() {
@@ -1586,7 +1666,8 @@
         svg([["path", { d: "M14 6l-6 6 6 6" }]], 14),
         el("span", { text: "Back to the launcher" })
       ]),
-      el("span", { class: "report-path", text: "/reports/" + id + ".html" }),
+      el("span", { class: "report-path", text: "report / " + id }),
+      el("span", { class: "report-spacer" }),
       el("span", { class: "report-engine", text: reportLifetime(id) })
     ]);
     return el("div", { class: "report-shell" }, [bar, frame]);
@@ -1594,9 +1675,10 @@
 
   function reportLifetime(id) {
     const run = state.run && state.run.id === id ? state.run : null;
-    const engine = "engine " + (state.status && state.status.engine_version ? state.status.engine_version : "unknown");
-    if (!run || !run.expires_at_ms) return engine;
-    return engine + " · deleted in " + PSL.dur(run.expires_at_ms - Date.now());
+    const version = state.status && state.status.engine_version;
+    const rendered = "Rendered by perf-sentinel " + (version || "unknown");
+    if (!run || !run.expires_at_ms) return rendered;
+    return rendered + " · expires in " + PSL.dur(run.expires_at_ms - Date.now());
   }
 
   // ------------------------------------------------------------------ boot

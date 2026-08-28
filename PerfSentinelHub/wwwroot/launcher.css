@@ -166,8 +166,9 @@ button { font: inherit; }
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 10px 16px;
   padding: 9px 22px;
   background: var(--surface);
   border-top: 1px solid var(--border);
@@ -192,6 +193,22 @@ button { font: inherit; }
   color: var(--text-3);
 }
 .shell-steps li { display: inline-flex; align-items: center; gap: 7px; }
+/* Same credit, same wording and same links as the dashboard's own footer: the
+   two surfaces are read in one session and should sign themselves alike. */
+.shell-credit {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.shell-credit a {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-decoration-thickness: .5px;
+  text-decoration-color: color-mix(in srgb, var(--brand-text) 55%, transparent);
+}
+.shell-credit a:hover { color: var(--text); }
+
 .shell-step-n {
   display: inline-flex;
   align-items: center;

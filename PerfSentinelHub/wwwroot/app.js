@@ -460,8 +460,14 @@
   }
 
   function sourcePanel() {
-    const list = el("div", { class: "card source-panel", role: "radiogroup", "aria-label": "Source" },
-      state.sources.map(sourceRadio));
+    const list = el("div", { class: "card source-panel" }, [
+      el("div", { class: "panel-head" }, [
+        el("span", { class: "overline", text: "// source" }),
+        el("span", { class: "panel-head-source", text: state.sources.length + " configured" })
+      ]),
+      el("div", { class: "source-list", role: "radiogroup", "aria-label": "Source" },
+        state.sources.map(sourceRadio))
+    ]);
     return el("div", {}, [
       list,
       el("p", {
@@ -507,7 +513,7 @@
 
   function producerLabel(source) {
     if (source.producer_version) return "producer " + source.producer_version;
-    return source.kind === "daemon" ? "producer unknown" : "engine " + (state.status.engine_version || "none");
+    return source.kind === "daemon" ? "producer unknown" : "no producer version";
   }
 
   function parametersPanel() {
@@ -537,8 +543,9 @@
         el("p", { text: "No parameters. A daemon snapshot is whatever it holds in memory right now." }),
         el("p", {
           class: "notice-sub",
-          text: "The window is the daemon's own ring buffer, and asking for more would be a request "
-            + "the source cannot answer. What comes back is the slice it still holds."
+          text: "The window is the daemon's own ring buffer. There is nothing to widen: asking for "
+            + "three hours from a process that keeps ten minutes would be a request the source "
+            + "cannot answer, so the launcher does not offer it."
         })
       ])
     ]);
@@ -556,7 +563,9 @@
     }
 
     nodes.push(field("Service name", serviceInput()));
-    nodes.push(field("Time range", rangeControl(source)));
+    nodes.push(field("Time range", rangeControl(source), state.form.rangeMode === "absolute"
+      ? "absolute, fixed at submission"
+      : "relative to the moment the run starts"));
     nodes.push(maxTracesBlock());
     return nodes;
   }
@@ -573,10 +582,7 @@
       button.addEventListener("click", function () { setMode(entry[0]); });
       group.appendChild(button);
     });
-    return el("div", { class: "field" }, [
-      group,
-      el("p", { class: "field-note", text: "One or the other, never both." })
-    ]);
+    return field("Select traces by", group, "one or the other, never both");
   }
 
   function serviceInput() {
@@ -609,8 +615,10 @@
     return input;
   }
 
-  function field(label, control) {
-    return el("div", { class: "field" }, [el("label", { class: "field-label", text: label }), control]);
+  function field(label, control, gloss) {
+    const heading = el("span", { class: "field-label" }, [el("span", { text: label })]);
+    if (gloss) heading.appendChild(el("span", { class: "field-gloss", text: gloss }));
+    return el("div", { class: "field" }, [heading, control]);
   }
 
   function windowLabel() {
@@ -620,6 +628,14 @@
     return "Last " + PSL.humanDur(state.form.lookback);
   }
 
+  /** The span, and the argument the run will actually carry. */
+  function rangeWire() {
+    const span = PSL.dur(windowSpanMs());
+    return state.form.rangeMode === "absolute"
+      ? span + " · from_ms/to_ms"
+      : span + " · lookback = " + state.form.lookback;
+  }
+
   function windowSpanMs() {
     return state.form.rangeMode === "absolute"
       ? state.form.toMs - state.form.fromMs
@@ -627,25 +643,25 @@
   }
 
   function rangeControl(source) {
-    const button = el("button", { type: "button", class: "pill-button", "aria-expanded": String(state.form.pickerOpen) }, [
-      svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7v5l3.5 2" }]], 14),
-      el("span", { text: windowLabel() }),
-      el("span", { class: "pill-button-span", text: PSL.dur(windowSpanMs()) })
+    const button = el("button", { type: "button", class: "range-pill", "aria-expanded": String(state.form.pickerOpen) }, [
+      svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7v5l3.2 2" }]], 14),
+      el("span", { class: "range-pill-label", text: windowLabel() }),
+      svg([["path", { d: "M6 9l6 6 6-6" }]], 11)
     ]);
     button.addEventListener("click", function () {
       state.form.pickerOpen = !state.form.pickerOpen;
       render();
     });
 
-    const wrap = el("div", { class: "range" }, [button]);
+    const wrap = el("div", { class: "range" }, [
+      el("div", { class: "range-row" }, [
+        button,
+        el("span", { class: "range-wire", text: rangeWire() })
+      ])
+    ]);
     if (state.form.pickerOpen) wrap.appendChild(rangePicker());
-    wrap.appendChild(el("p", {
-      class: "field-note",
-      text: state.form.rangeMode === "absolute"
-        ? "Absolute, fixed at submission. It does not drift while the job waits in the queue."
-        : "Relative to the moment the run starts, so it drifts while the job waits in the queue."
-    }));
-    rangeConsequences(source).forEach(function (node) { wrap.appendChild(node); });
+    const notes = rangeConsequences(source);
+    if (notes.length > 0) wrap.appendChild(el("div", { class: "consequences" }, notes));
     return wrap;
   }
 
@@ -674,126 +690,163 @@
   }
 
   function consequence(text, tone) {
-    return el("p", { class: "consequence", "data-tone": tone || "muted", text: text });
+    return el("span", { class: "consequence", "data-tone": tone || "muted" }, [
+      el("span", { class: "consequence-dot" }),
+      el("span", { text: text })
+    ]);
   }
 
   function rangePicker() {
     const backdrop = el("div", { class: "picker-backdrop" });
     backdrop.addEventListener("click", function () { state.form.pickerOpen = false; render(); });
 
-    const from = el("input", { type: "datetime-local", class: "input", value: PSL.dtLocal(state.form.fromMs) });
-    const to = el("input", { type: "datetime-local", class: "input", value: PSL.dtLocal(state.form.toMs) });
-    const span = el("p", { class: "picker-span" });
-    const apply = el("button", { type: "button", class: "pill-button pill-primary", text: "Apply" });
+    const from = el("input", { type: "datetime-local", class: "input-date", value: PSL.dtLocal(state.form.fromMs) });
+    const to = el("input", { type: "datetime-local", class: "input-date", value: PSL.dtLocal(state.form.toMs) });
+    const note = el("span", { class: "picker-note" });
+    const apply = el("button", { type: "button", class: "picker-apply", text: "Apply range" });
 
     function readAbsolute() {
       const start = Date.parse(from.value);
       const end = Date.parse(to.value);
       const ordered = Number.isFinite(start) && Number.isFinite(end) && start < end;
       const past = Number.isFinite(end) && end <= Date.now();
-      span.textContent = !ordered
+      const valid = ordered && past;
+      note.textContent = !ordered
         ? "The start must come before the end."
         : !past
           ? "The end cannot be in the future."
-          : "Span " + PSL.dur(end - start);
-      span.setAttribute("data-invalid", ordered && past ? "false" : "true");
-      apply.disabled = !(ordered && past);
-      return { start: start, end: end, valid: ordered && past };
+          : PSL.dur(end - start) + " selected";
+      note.setAttribute("data-invalid", valid ? "false" : "true");
+      apply.disabled = !valid;
+      return { start: start, end: end, valid: valid };
     }
     from.addEventListener("input", readAbsolute);
     to.addEventListener("input", readAbsolute);
     apply.addEventListener("click", function () {
       const read = readAbsolute();
       if (!read.valid) return;
-      state.form.rangeMode = "absolute";
-      state.form.fromMs = read.start;
-      state.form.toMs = read.end;
-      state.form.pickerOpen = false;
-      render();
+      applyRange("absolute", { fromMs: read.start, toMs: read.end });
     });
 
-    const quick = el("div", { class: "picker-quick" }, QUICK_RANGES.map(function (value) {
-      const button = el("button", { type: "button", class: "picker-quick-item", text: "Last " + PSL.humanDur(value) });
-      button.addEventListener("click", function () {
-        state.form.rangeMode = "relative";
-        state.form.lookback = value;
-        state.form.pickerOpen = false;
-        render();
-      });
-      return button;
-    }));
-
     const left = el("div", { class: "picker-pane" }, [
-      el("p", { class: "overline", text: "// absolute" }),
-      field("From", from),
-      field("To", to),
-      span,
-      apply,
-      el("p", { class: "overline picker-sep", text: "// relative" }),
+      dateField("From", from),
+      dateField("To", to),
+      el("div", { class: "picker-apply-row" }, [apply, note]),
+      el("div", { class: "picker-rule" }),
+      el("p", { class: "overline", text: "Custom relative" }),
       customRelativeRow()
     ]);
 
-    const panel = el("div", { class: "picker" }, [left, el("div", { class: "picker-pane picker-right" }, [
-      el("p", { class: "overline", text: "// quick" }), quick
-    ])]);
+    const right = el("div", { class: "picker-pane picker-right" }, [
+      el("p", { class: "overline picker-quick-head", text: "Quick ranges" }),
+      el("div", { class: "picker-quick" }, QUICK_RANGES.map(function (value) {
+        const active = state.form.rangeMode === "relative" && state.form.lookback === value;
+        const button = el("button", {
+          type: "button",
+          class: "picker-quick-item",
+          "aria-current": active ? "true" : null,
+          text: "Last " + PSL.humanDur(value)
+        });
+        button.addEventListener("click", function () { applyRange("relative", { lookback: value }); });
+        return button;
+      }))
+    ]);
+
     readAbsolute();
-    return el("div", {}, [backdrop, panel]);
+    return el("div", {}, [backdrop, el("div", { class: "picker" }, [left, right])]);
+  }
+
+  function applyRange(mode, values) {
+    state.form.rangeMode = mode;
+    Object.keys(values).forEach(function (key) { state.form[key] = values[key]; });
+    state.form.pickerOpen = false;
+    render();
+  }
+
+  function dateField(label, control) {
+    return el("label", { class: "picker-field" }, [
+      el("span", { class: "picker-field-label", text: label }),
+      control
+    ]);
   }
 
   function customRelativeRow() {
-    const qty = el("input", { type: "number", class: "input input-narrow", min: "1", value: String(state.form.customQty) });
+    const qty = el("input", {
+      type: "number",
+      class: "input-qty",
+      min: "1",
+      value: String(state.form.customQty)
+    });
     const units = el("div", { class: "segmented segmented-sm", role: "radiogroup", "aria-label": "Unit" });
-    [["m", "m"], ["h", "h"], ["d", "d"]].forEach(function (entry) {
+    ["m", "h", "d"].forEach(function (unit) {
       const button = el("button", {
         type: "button",
         role: "radio",
-        "aria-checked": state.form.customUnit === entry[0] ? "true" : "false",
-        text: entry[1]
+        "aria-checked": state.form.customUnit === unit ? "true" : "false",
+        text: unit
       });
+      // Picking a unit selects it. Applying is a separate, deliberate click,
+      // so a half-typed quantity is never submitted by choosing a unit.
       button.addEventListener("click", function () {
-        state.form.customUnit = entry[0];
+        state.form.customUnit = unit;
         state.form.customQty = Math.max(1, Number(qty.value) || 1);
-        state.form.rangeMode = "relative";
-        state.form.lookback = state.form.customQty + state.form.customUnit;
-        state.form.pickerOpen = false;
         render();
       });
       units.appendChild(button);
     });
-    return el("div", { class: "picker-custom" }, [qty, units]);
+
+    const apply = el("button", { type: "button", class: "pill-button pill-sm", text: "Apply" });
+    apply.addEventListener("click", function () {
+      const quantity = Math.max(1, Number(qty.value) || 1);
+      state.form.customQty = quantity;
+      applyRange("relative", { lookback: quantity + state.form.customUnit });
+    });
+
+    return el("div", { class: "picker-custom" }, [
+      el("span", { class: "picker-custom-lead", text: "Last" }),
+      qty,
+      units,
+      apply
+    ]);
   }
 
   function maxTracesBlock() {
+    const cap = state.status.limits.max_traces_cap;
     const band = PSL.weightBand(state.form.maxTraces);
-    const number = el("input", { type: "number", class: "input input-narrow", min: "1", value: String(state.form.maxTraces) });
+    const over = band.key === "over" || band.key === "invalid";
+
+    const number = el("input", {
+      type: "number",
+      class: "input input-traces",
+      min: "1",
+      max: String(cap),
+      value: String(state.form.maxTraces)
+    });
+    if (over) number.setAttribute("data-over", "true");
     number.addEventListener("input", function () { setMaxTraces(Number(number.value)); });
 
     const head = el("div", { class: "traces-head" }, [
       number,
       el("span", { class: "band-chip", style: bandStyle(band), text: band.label }),
-      el("span", { class: "traces-cap", text: "hard cap " + state.status.limits.max_traces_cap })
+      el("span", { class: "traces-cap", "data-over": over ? "true" : "false", text: capNote(band, cap) })
     ]);
 
     const slider = el("input", {
       type: "range",
-      "data-band": "true",
       min: "1",
-      max: String(state.status.limits.max_traces_cap),
-      value: String(Math.min(Math.max(state.form.maxTraces, 1), state.status.limits.max_traces_cap)),
-      "aria-label": "Maximum traces"
+      max: String(cap),
+      step: "1",
+      value: String(Math.min(Math.max(state.form.maxTraces, 1), cap)),
+      "aria-label": "Max traces"
     });
     slider.addEventListener("input", function () { setMaxTraces(Number(slider.value)); });
 
-    const track = el("div", { class: "band-track" }, [
+    // The container carries the pill radius and clips its children, so only the
+    // outer ends are rounded and the two inner joins stay square.
+    const segments = el("div", { class: "band-segs", "aria-hidden": "true" }, [
       el("span", { class: "band-seg", "data-seg": "ok" }),
       el("span", { class: "band-seg", "data-seg": "warn" }),
-      el("span", { class: "band-seg", "data-seg": "crit" }),
-      slider
-    ]);
-
-    const scale = el("div", { class: "band-scale" }, [
-      el("span", { text: "1" }), el("span", { text: "500 safe" }),
-      el("span", { text: "1 200 heavy" }), el("span", { text: "2 000 cap" })
+      el("span", { class: "band-seg", "data-seg": "crit" })
     ]);
 
     const block = el("div", { class: "field" }, [
@@ -801,12 +854,32 @@
         el("span", { text: "Max traces" }),
         el("span", { class: "field-gloss", text: "how much comes back, not how far back" })
       ]),
-      head, track, scale,
-      el("p", { class: "band-body", text: band.body })
+      head,
+      el("div", { class: "band-track" }, [segments, slider]),
+      bandScale(),
+      el("p", { class: "band-body", style: "color:" + band.fg, text: band.body })
     ]);
     if (band.needsAck) block.appendChild(heavyAck());
     block.appendChild(sinkPanel());
     return block;
+  }
+
+  function capNote(band, cap) {
+    if (band.key === "invalid") return "at least 1";
+    if (band.key === "over") return "above the hard cap of " + cap + ", the service will reject this";
+    return "hard cap " + cap;
+  }
+
+  /** Each label sits at the right edge of its own band, so it marks a boundary. */
+  function bandScale() {
+    return el("div", { class: "band-scale" }, [
+      el("span", { class: "band-scale-start", text: "1" }),
+      el("div", { class: "band-scale-grid" }, [
+        el("span", { text: "500 safe" }),
+        el("span", { text: "1 200 heavy" }),
+        el("span", { text: "2 000 cap" })
+      ])
+    ]);
   }
 
   /**
@@ -835,14 +908,16 @@
   }
 
   function bandStyle(band) {
-    return "color:" + band.fg + ";background:" + band.bg + ";border-color:" + band.bd;
+    return "color:" + band.fg + ";background:" + band.bg;
   }
 
   function heavyAck() {
-    return checkbox(
+    const node = checkbox(
       state.form.ackHeavy,
       "I accept a report that may come back trimmed.",
       function (checked) { state.form.ackHeavy = checked; updateSubmit(); });
+    node.className = "checkbox-pill";
+    return node;
   }
 
   function unreachableAck(source) {
@@ -919,8 +994,8 @@
     const source = selectedSource();
     if (!source) return "";
     if (source.kind === "daemon") {
-      return "Takes a snapshot of whatever " + source.name + " holds in memory right now. "
-        + queuePhrase();
+      return "Takes a snapshot of what " + source.name + " holds in memory. No query is sent to a "
+        + "trace backend. " + queuePhrase();
     }
     if (state.form.mode === "trace") {
       return "Fetches one trace by ID from " + source.name + ". " + queuePhrase();

@@ -85,14 +85,15 @@
     return node;
   }
 
-  // Every storage access is wrapped: sessionStorage throws in Safari private
-  // mode and under some enterprise policies, and a theme is not worth an error.
+  // Write-only: the read happens in the inline script, before this file loads.
+  // sessionStorage throws in Safari private mode and under some enterprise
+  // policies, and a theme is not worth an error.
   function store(area, key, value) {
     try {
-      if (value === undefined) return globalThis[area].getItem(key);
       globalThis[area].setItem(key, value);
-    } catch (error) { return null; }
-    return null;
+    } catch (error) {
+      // Nothing to do: the position still applies to this page.
+    }
   }
 
   // ---------------------------------------------------------------- theme
@@ -234,6 +235,13 @@
     document.body.setAttribute("data-screen", state.screen);
     if (state.loading && state.screen !== "report") {
       main.replaceChildren(el("div", { class: "card skeleton", style: "height:220px" }));
+      return;
+    }
+    // Every screen reads limits, workers and the engine version off the status.
+    // Without it there is nothing truthful to draw, and reaching for it would
+    // throw on the first field.
+    if (!state.status) {
+      main.replaceChildren(hubUnreachableBanner());
       return;
     }
     if (state.screen === "sources") main.replaceChildren(renderSourcesScreen());
@@ -430,7 +438,7 @@
     state.form.maxTraces = value;
     // Dropping back below the ceiling withdraws the question that was asked
     // about it.
-    if (!PSL.weightBand(value).needsAck) state.form.ackHeavy = false;
+    if (!PSL.weightBand(value, tracesCap()).needsAck) state.form.ackHeavy = false;
     render();
   }
 
@@ -472,7 +480,7 @@
       svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7.5v5M12 15.8v.2" }]], 16),
       el("div", {
         text: "The Hub is not answering. This is the Hub itself and not any one source, so nothing "
-          + "can be launched from here until it is back."
+          + "can be launched from here until it is back. Reload once it responds again."
       })
     ]);
   }
@@ -829,7 +837,7 @@
 
   function maxTracesBlock() {
     const cap = state.status.limits.max_traces_cap;
-    const band = PSL.weightBand(state.form.maxTraces);
+    const band = PSL.weightBand(state.form.maxTraces, cap);
     const over = band.key === "over" || band.key === "invalid";
 
     const number = el("input", {
@@ -860,11 +868,13 @@
 
     // The container carries the pill radius and clips its children, so only the
     // outer ends are rounded and the two inner joins stay square.
-    const segments = el("div", { class: "band-segs", "aria-hidden": "true" }, [
-      el("span", { class: "band-seg", "data-seg": "ok" }),
-      el("span", { class: "band-seg", "data-seg": "warn" }),
-      el("span", { class: "band-seg", "data-seg": "crit" })
-    ]);
+    const widths = bandWidths(cap);
+    const segments = el("div", { class: "band-segs", "aria-hidden": "true" },
+      ["ok", "warn", "crit"].map(function (tone, index) {
+        const segment = el("span", { class: "band-seg", "data-seg": tone });
+        segment.style.width = widths[index];
+        return segment;
+      }));
 
     const block = el("div", { class: "field" }, [
       el("label", { class: "field-label" }, [
@@ -873,7 +883,7 @@
       ]),
       head,
       el("div", { class: "band-track" }, [segments, slider]),
-      bandScale(),
+      bandScale(cap),
       el("p", { class: "band-body", style: "color:" + band.fg, text: band.body })
     ]);
     if (band.needsAck) block.appendChild(heavyAck());
@@ -887,16 +897,43 @@
     return "hard cap " + cap;
   }
 
-  /** Each label sits at the right edge of its own band, so it marks a boundary. */
-  function bandScale() {
+  /**
+   * Each label sits at the right edge of its own band, so it marks a boundary.
+   * The last one is the service's cap, not a constant, and the columns follow
+   * the same proportions.
+   */
+  function bandScale(cap) {
+    const safe = Math.min(500, cap);
+    const heavy = Math.min(1200, cap);
+    const grid = el("div", { class: "band-scale-grid" }, [
+      el("span", { text: group(safe) + " safe" }),
+      el("span", { text: group(heavy) + " heavy" }),
+      el("span", { text: group(cap) + " cap" })
+    ]);
+    grid.style.gridTemplateColumns = bandWidths(cap).join(" ");
     return el("div", { class: "band-scale" }, [
       el("span", { class: "band-scale-start", text: "1" }),
-      el("div", { class: "band-scale-grid" }, [
-        el("span", { text: "500 safe" }),
-        el("span", { text: "1 200 heavy" }),
-        el("span", { text: "2 000 cap" })
-      ])
+      grid
     ]);
+  }
+
+  /** The three segment widths, as percentages of the configured cap. */
+  function bandWidths(cap) {
+    const safe = Math.min(500, cap) / cap;
+    const heavy = Math.min(1200, cap) / cap;
+    return [
+      (safe * 100).toFixed(2) + "%",
+      ((heavy - safe) * 100).toFixed(2) + "%",
+      ((1 - heavy) * 100).toFixed(2) + "%"
+    ];
+  }
+
+  function group(value) {
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
+  }
+
+  function tracesCap() {
+    return state.status ? state.status.limits.max_traces_cap : 2000;
   }
 
   /**
@@ -933,7 +970,7 @@
       state.form.ackHeavy,
       "I accept a report that may come back trimmed.",
       function (checked) { state.form.ackHeavy = checked; updateSubmit(); });
-    node.className = "checkbox-pill";
+    node.classList.add("checkbox-pill");
     return node;
   }
 
@@ -1058,7 +1095,7 @@
       return state.form.traceId.trim() ? null : "Enter a trace ID.";
     }
     if (!state.form.service.trim()) return "Enter a service name.";
-    const band = PSL.weightBand(state.form.maxTraces);
+    const band = PSL.weightBand(state.form.maxTraces, tracesCap());
     if (band.key === "over") return "The trace cap is above what the service accepts.";
     if (band.key === "invalid") return "A run needs at least one trace.";
     return band.needsAck && !state.form.ackHeavy ? "Confirm the report will be trimmed." : null;
@@ -1468,7 +1505,11 @@
         body: "The Hub never replays an interrupted run on its own. A silent retry could fire a second "
           + "heavy query at " + run.source_name + " without anyone asking for it, so the decision stays "
           + "yours. The parameters are unchanged and ready to send again.",
-        primary: { label: "Resume with the same parameters", action: function () { resubmit(run); }, filled: true },
+        primary: {
+          label: "Resume with the same parameters",
+          action: function (button) { resubmit(run, button); },
+          filled: true
+        },
         note: PSL.argsLine(run)
       };
     }
@@ -1503,19 +1544,31 @@
       + (primary ? "" : " action-secondary");
     if (spec.href) return el("a", { class: className, href: spec.href, text: spec.label });
     const button = el("button", { type: "button", class: className, text: spec.label });
-    button.addEventListener("click", spec.action);
+    button.addEventListener("click", function () { spec.action(button); });
     return button;
   }
 
-  function resubmit(run) {
+  function resubmit(run, button) {
     fetch("/api/analyses", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ source_id: run.source_id, request: run.request || {} })
-    }).then(function (response) { return response.json(); })
-      .then(function (payload) {
-        if (payload.id) location.hash = "#/run/" + payload.id;
-      });
+    }).then(function (response) {
+      return response.json().then(function (payload) { return { ok: response.ok, payload: payload }; });
+    }).then(function (result) {
+      if (!result.ok || !result.payload.id) {
+        throw new Error(result.payload.detail || "The Hub refused the resubmission.");
+      }
+      location.hash = "#/run/" + result.payload.id;
+    }).catch(function (error) {
+      // Silence here reads as a broken button: the operator clicked and
+      // nothing moved.
+      const note = button.parentNode && button.parentNode.querySelector(".outcome-note");
+      if (note) {
+        note.textContent = String(error.message || error);
+        note.setAttribute("data-error", "true");
+      }
+    });
   }
 
   function loadRun(id) {

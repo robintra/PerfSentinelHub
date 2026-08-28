@@ -259,32 +259,39 @@
    * advice and not a bound. Only `ceiling` asks the operator to confirm; only `over`
    * is refused, and that refusal is the service's.
    *
+   * The 500 and 1 200 boundaries come from the sink's own 5 MiB target and do
+   * not move. The refusal boundary does: it is the service's configured cap,
+   * and hardcoding 2 000 would refuse runs a differently configured Hub accepts.
+   *
    * @param {number} n
+   * @param {number} [cap]
    * @returns {{key: import("../types").WeightBand, label: string, fg: string, bg: string, bd: string, body: string, needsAck: boolean}}
    */
-  function weightBand(n) {
+  function weightBand(n, cap) {
+    const hardCap = typeof cap === "number" && cap > 0 ? cap : 2000;
     if (!Number.isFinite(n) || n < 1) {
       return {
         key: "invalid", label: "not a count",
         fg: "var(--crit-fg)", bg: "var(--crit-bg)", bd: "var(--crit-bd)", needsAck: false,
-        body: "A run needs at least one trace. Drag the handle or type a number between 1 and 2 000."
+        body: "A run needs at least one trace. Drag the handle or type a number between 1 and "
+          + hardCap + "."
       };
     }
-    if (n <= 500) {
+    if (n <= Math.min(500, hardCap)) {
       return {
         key: "safe", label: "comfortable",
         fg: "var(--ok-fg)", bg: "var(--ok-bg)", bd: "var(--ok-bd)", needsAck: false,
         body: "Well inside what the report sink returns whole. Nothing is trimmed at this size unless individual traces are unusually large."
       };
     }
-    if (n <= 1200) {
+    if (n <= Math.min(1200, hardCap)) {
       return {
         key: "heavy", label: "heavy",
         fg: "var(--warn-fg)", bg: "var(--warn-bg)", bd: "var(--warn-bd)", needsAck: false,
         body: "The sink targets a 5 MiB standalone file. Whether it has to trim at this count depends on how heavy your traces are, and the launcher cannot know that before the run. Expect a whole report, plan for a trimmed one."
       };
     }
-    if (n <= 2000) {
+    if (n <= hardCap) {
       return {
         key: "ceiling", label: "at the ceiling",
         fg: "var(--crit-fg)", bg: "var(--crit-bg)", bd: "var(--crit-bd)", needsAck: true,

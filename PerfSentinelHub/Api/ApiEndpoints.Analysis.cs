@@ -64,7 +64,12 @@ public static partial class ApiEndpoints
                 return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
 
             var run = NewRun(source, requestElement, Identity(request, hubOptions.Analysis), nowMs);
-            await database.InsertRunAsync(run, cancellationToken);
+            if (!await database.TryInsertRunAsync(run, cancellationToken))
+            {
+                request.HttpContext.Response.Headers.RetryAfter = "1";
+                return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
             return TypedResults.Accepted($"/api/analyses/{run.Id}", new SubmittedAnalysis(run.Id, run.Status));
         }
     }
@@ -174,6 +179,11 @@ public static partial class ApiEndpoints
     private static string NewRunId() =>
         Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(RunIdHexChars / 2));
 
+    /// <summary>
+    /// Defence in depth ahead of the database lookup. Removing it changes no
+    /// observable response, since an id the Hub never minted finds no row and
+    /// 404s anyway, so no test can pin it from outside.
+    /// </summary>
     private static bool IsRunId(string id) =>
         id.Length == RunIdHexChars && id.All(character => char.IsAsciiHexDigitLower(character));
 

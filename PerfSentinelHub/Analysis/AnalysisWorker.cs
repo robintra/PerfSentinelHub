@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
@@ -33,6 +34,10 @@ public sealed partial class AnalysisWorker(
             stoppingToken);
         if (interrupted > 0)
             LogInterruptedOnStartup(logger, interrupted);
+
+        var swept = runner.SweepScratchFiles();
+        if (swept > 0)
+            LogScratchSwept(logger, swept);
 
         var workers = Enumerable
             .Range(0, _options.Analysis.Workers)
@@ -103,7 +108,20 @@ public sealed partial class AnalysisWorker(
         if (run is null)
             return false;
 
-        var outcome = await ExecuteRunAsync(run, cancellationToken);
+        // Whatever happens, the row has to reach a terminal status: a throw
+        // that escaped here would leave it running forever, polled by a screen
+        // that never stops waiting.
+        RunOutcome outcome;
+        try
+        {
+            outcome = await ExecuteRunAsync(run, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            LogRunCrashed(logger, exception, run.Id);
+            outcome = new RunOutcome(AnalysisStatuses.Failed, AnalysisErrorCodes.Internal, null, null);
+        }
+
         var finishedAtMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         await database.CompleteRunAsync(
             run.Id,
@@ -132,7 +150,7 @@ public sealed partial class AnalysisWorker(
             return new RunOutcome(AnalysisStatuses.Failed, AnalysisErrorCodes.InvalidRequest, null, null);
         }
 
-        using var document = System.Text.Json.JsonDocument.Parse(run.RequestJson);
+        using var document = JsonDocument.Parse(run.RequestJson);
         var request = AnalysisRequest.TryParse(
             document.RootElement,
             source,
@@ -155,6 +173,12 @@ public sealed partial class AnalysisWorker(
 
     [LoggerMessage(1303, LogLevel.Warning, "Run {RunId} targets source {SourceId}, which is no longer configured.")]
     private static partial void LogSourceGone(ILogger logger, string runId, string sourceId);
+
+    [LoggerMessage(1307, LogLevel.Information, "Removed {Count} scratch file(s) a previous process left behind.")]
+    private static partial void LogScratchSwept(ILogger logger, int count);
+
+    [LoggerMessage(1306, LogLevel.Error, "Run {RunId} threw outside the runner and was failed as internal.")]
+    private static partial void LogRunCrashed(ILogger logger, Exception exception, string runId);
 
     [LoggerMessage(1304, LogLevel.Information, "Deleted {Count} expired report(s).")]
     private static partial void LogReportsExpired(ILogger logger, int count);

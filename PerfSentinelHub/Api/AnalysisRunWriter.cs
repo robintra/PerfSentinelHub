@@ -92,17 +92,35 @@ public static class AnalysisRunWriter
         writer.WriteEndObject();
     }
 
+    /// <summary>
+    /// Stored text is parsed before the property name is written: a throw after
+    /// the writer has started would abort a body already partly flushed, and
+    /// the client would see a truncated array behind a 200.
+    /// </summary>
     private static void WriteRawOrNull(Utf8JsonWriter writer, string name, string? json)
     {
-        if (json is null)
+        JsonDocument? document = null;
+        try
+        {
+            if (json is not null)
+                document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            document = null;
+        }
+
+        if (document is null)
         {
             writer.WriteNull(name);
             return;
         }
 
-        writer.WritePropertyName(name);
-        using var document = JsonDocument.Parse(json);
-        document.RootElement.WriteTo(writer);
+        using (document)
+        {
+            writer.WritePropertyName(name);
+            document.RootElement.WriteTo(writer);
+        }
     }
 
     private static void WriteNumberOrNull(Utf8JsonWriter writer, string name, long? value)

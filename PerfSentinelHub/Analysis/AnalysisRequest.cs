@@ -23,6 +23,8 @@ public sealed record AnalysisRequest
     private const int MaxTraceIdLength = 64;
     private const int DefaultMaxTraces = 100;
 
+    private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
+
     /// <summary>
     /// Parses and validates a submitted request against the source it targets.
     /// Returns null and an operator-facing reason when the pair cannot run.
@@ -35,6 +37,10 @@ public sealed record AnalysisRequest
         out string? error)
     {
         error = null;
+        // An omitted request is the empty object, which is exactly what a
+        // daemon takes. Anything present but not an object is still refused.
+        if (payload.ValueKind == JsonValueKind.Undefined || payload.ValueKind == JsonValueKind.Null)
+            payload = EmptyObject;
         if (payload.ValueKind != JsonValueKind.Object)
         {
             error = "The request must be a JSON object.";

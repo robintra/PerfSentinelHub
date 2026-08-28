@@ -51,6 +51,26 @@ public sealed partial class AnalysisRunner(
     /// <summary>Removes a report whose lifetime ran out. Missing is fine.</summary>
     public void DeleteReport(string runId) => DeleteQuietly(ReportPath(runId));
 
+    /// <summary>
+    /// Deletes scratch input files a previous process left behind. The finally
+    /// in RenderAsync cannot run when the container is killed, and nothing else
+    /// ever removes them: report expiry only knows about the .html.
+    /// </summary>
+    public int SweepScratchFiles()
+    {
+        if (!Directory.Exists(_analysis.ReportDirectory))
+            return 0;
+
+        var swept = 0;
+        foreach (var path in Directory.EnumerateFiles(_analysis.ReportDirectory, "*.input.json"))
+        {
+            DeleteQuietly(path);
+            swept++;
+        }
+
+        return swept;
+    }
+
     public async Task<RunOutcome> RunAsync(
         AnalysisRun run,
         SourceOptions source,

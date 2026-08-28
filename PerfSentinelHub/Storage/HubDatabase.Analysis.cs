@@ -10,9 +10,15 @@ public sealed partial class HubDatabase
         expires_at_ms, producer_version, error_code, result_json
         """;
 
-    public async Task InsertRunAsync(AnalysisRun run, CancellationToken cancellationToken)
+    /// <summary>
+    /// Returns false when the write gate stays held past its wait, so a
+    /// submission answers 503 instead of hanging behind a long purge, matching
+    /// what the import path already does.
+    /// </summary>
+    public async Task<bool> TryInsertRunAsync(AnalysisRun run, CancellationToken cancellationToken)
     {
-        await _writeGate.WaitAsync(cancellationToken);
+        if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
+            return false;
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -33,6 +39,7 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$requested_by", run.RequestedBy);
             command.Parameters.AddWithValue("$created_at_ms", run.CreatedAtMs);
             await command.ExecuteNonQueryAsync(cancellationToken);
+            return true;
         }
         finally
         {

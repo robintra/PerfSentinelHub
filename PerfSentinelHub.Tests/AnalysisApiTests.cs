@@ -117,17 +117,21 @@ public sealed class AnalysisApiTests : IDisposable
     }
 
     [Theory]
-    // Hex only, the vocabulary the Hub itself mints, so nothing composed by a
-    // client reaches the filesystem.
-    [InlineData("../../etc/passwd")]
+    // What this actually pins is the response, not the IsRunId guard: an id the
+    // Hub never minted finds no row and 404s with or without it. The guard is
+    // defence in depth ahead of that lookup, and its removal is deliberately
+    // invisible from out here.
+    [InlineData("ABCDEF0123456789")]
     [InlineData("ZZZZZZZZZZZZZZZZ")]
     [InlineData("abc")]
+    [InlineData("../../etc/passwd")]
     public async Task A_report_id_outside_the_minted_vocabulary_is_not_found(string id)
     {
         using var response = await _client.GetAsync($"/reports/{id}.html", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
 
     [Fact]
     public async Task The_engine_version_and_the_declared_retention_reach_the_launcher()

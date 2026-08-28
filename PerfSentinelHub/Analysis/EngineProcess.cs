@@ -48,10 +48,11 @@ public static class EngineProcess
             // stderr pipe while nobody reads it blocks forever on its next write.
             var standardOutput = ReadBoundedAsync(process, maxOutputBytes, cancellationToken);
             var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-            var output = await standardOutput;
-            var error = await standardError;
+            // WhenAll observes both tasks even when the first one faults. Awaiting
+            // them in sequence would leave the second unobserved on that path.
+            await Task.WhenAll(standardOutput, standardError);
             await process.WaitForExitAsync(cancellationToken);
-            return new EngineResult(process.ExitCode, output, Truncate(error));
+            return new EngineResult(process.ExitCode, await standardOutput, Truncate(await standardError));
         }
         catch (Exception)
         {

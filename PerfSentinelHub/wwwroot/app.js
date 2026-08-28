@@ -1070,9 +1070,10 @@
         + "whether it found one problem or none."],
       ["every finding", "No finding is ever dropped from a report this Hub renders, at any run "
         + "size. The count on the dashboard is the count that was found."],
-      [String(embeddedCap()) + " trees", "Span trees embedded, highest impact first. The rest of "
-        + "the findings open without a tree and say so, with the trace id to read that one on its "
-        + "own. Set by whoever operates this Hub."],
+      [String(embeddedCap()) + " trees", "Span trees embedded, for the findings with the highest "
+        + "aggregate impact. The rest open without a tree and say so, with the trace id to read "
+        + "that one on its own, which the Trace ID mode above runs directly. Set by whoever "
+        + "operates this Hub."],
       ["25", "Hard cap on the top offenders embedded for the Carbon tab, whatever the run size. "
         + "The full ranking is still computed, only the embed is capped."],
       ["no ceiling", "Because every finding is kept, the file has no fixed upper size. A run that "

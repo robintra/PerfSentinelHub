@@ -76,6 +76,9 @@ public sealed class AnalysisRunnerTests : IDisposable
         // Passing the flag at all opts the sink out of size targeting, which is
         // the point: every finding reaches the report, the trees are capped.
         Assert.Contains("--max-traces-embedded 50", arguments, StringComparison.Ordinal);
+        // The sink keeps the trees the top findings point at, so the ranking
+        // decides which 50 survive, not only how the list reads.
+        Assert.Contains("--sort impact", arguments, StringComparison.Ordinal);
     }
 
     [Fact]

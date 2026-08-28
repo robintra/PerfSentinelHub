@@ -179,7 +179,13 @@ public sealed partial class AnalysisRunner(
                 // so every finding reaches the report and only the span trees
                 // are capped. A wide sweep otherwise loses the tail of the list.
                 "--max-traces-embedded",
-                _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture)
+                _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture),
+                // Ranks the findings by aggregate avoidable I/O, which also
+                // decides which span trees survive the cap above: the sink
+                // keeps the trees the top findings point at. Passed here
+                // rather than on the query so a daemon snapshot, which never
+                // goes through one, is ranked the same way.
+                "--sort", "impact"
             };
             if (configPath is not null)
             {

@@ -1773,11 +1773,26 @@
     if (knobs.length === 0) return null;
 
     const summary = el("summary", { class: "advanced-summary" }, [
+      warningGlyph(14),
       el("span", { class: "overline", text: "// advanced · what the analysis looks for" }),
       el("span", { id: "advanced-count", class: "advanced-count", hidden: "hidden" })
     ]);
 
     const body = el("div", { class: "advanced-body" }, [
+      el("section", { class: "notice-block", "data-tone": "warn" }, [
+        warningGlyph(17),
+        el("div", { class: "notice-block-text" }, [
+          el("p", {
+            class: "notice-block-title",
+            text: "For operators who know what these thresholds do."
+          }),
+          el("p", {
+            class: "notice-block-body",
+            text: "Set one too low and the report fills with noise, set it too high and real problems "
+              + "go unreported. If you are not sure which way a number should move, leave it."
+          })
+        ])
+      ]),
       el("p", {
         class: "advanced-lead",
         text: "These are the engine's detection thresholds. They decide what counts as a problem, "

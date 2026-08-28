@@ -1060,3 +1060,88 @@ body[data-screen="report"] .shell-footer { display: none; }
   color: var(--text-3);
   max-width: 78ch;
 }
+
+/* ------------------------------------------ sources: the daemon detail row */
+
+.row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+/* The same caret as the advanced panel's summary, so the product has one
+   disclosure shape rather than two. */
+.row-toggle::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform .15s ease;
+}
+.row-toggle[aria-expanded="true"]::before { transform: rotate(45deg); }
+.row-toggle:hover { color: var(--brand-text); }
+.row-toggle:hover::before { border-color: var(--brand-text); }
+
+/* Never tinted by tr[data-unreachable]: an unreachable daemon's panel is an
+   error banner already, and a red field behind it would say it twice. */
+.daemon-detail > td { padding: 4px 18px 22px; background: var(--surface); }
+.daemon-panel { display: flex; flex-direction: column; gap: 18px; max-width: 88ch; }
+.daemon-lead { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.daemon-loading { margin: 0 0 10px; font-size: 12px; color: var(--text-3); }
+.daemon-state .counts { margin-bottom: 12px; }
+/* .counts paints its own grid from currentColor, which only resolves to a tone
+   inside .outcome. Here it borrows the plain border instead. */
+.daemon-state .counts, .daemon-hints .counts {
+  border-color: var(--border);
+  background: var(--border);
+}
+.daemon-hints .outcome-warning:last-child { margin-bottom: 0; }
+.outcome-warning-kind[data-tone="crit"] { background: var(--crit-bg); color: var(--crit-fg); }
+.outcome-warning-kind[data-tone="info"] { background: var(--info-bg); color: var(--info-fg); }
+.outcome-warning-kind[data-tone="muted"] { background: var(--surface-3); color: var(--text-3); }
+
+.settings-rows { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.setting-k {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.setting-v {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.setting-v .chip-declared { font-family: var(--font-ui); }
+.setting-note {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+  max-width: 74ch;
+}

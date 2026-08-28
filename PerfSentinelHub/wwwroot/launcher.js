@@ -44,6 +44,19 @@
     internal: "the Hub itself failed and never touched the source. Retry now. If it fails the same way, the Hub needs attention rather than your request."
   };
 
+  /**
+   * What a failed read of a source means. A different vocabulary from ERRORS,
+   * which describes a failed analysis run: these are the codes the collector
+   * records, and only the ones a settings read can actually produce.
+   */
+  const READ_ERRORS = {
+    network_error: "nothing answered at its address. Check the daemon is up and that the Hub still has a route to it.",
+    http_error: "it answered with an error status, so it is running and reachable. This is the daemon refusing or failing the request rather than a network problem.",
+    timeout: "it did not answer inside this Hub's HTTP timeout. Busy is as likely as down.",
+    invalid_status: "it answered, but not with a status this Hub can read. Its /api/status has to carry a version string.",
+    response_too_large: "it answered with more than this Hub reads in one go. A [daemon] section past that cap is worth reporting."
+  };
+
   /** @type {Record<import("../types").ErrorCode, string>} */
   const ERROR_TITLES = {
     source_unreachable: "No connection could be opened.",
@@ -422,7 +435,7 @@
     setVersions,
     get ENGINE() { return ENGINE; },
     get HUB() { return HUB; },
-    ERRORS, ERROR_TITLES, KIND_LABEL,
+    ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, analysisCommand, monitorCommand, detectionToml, quotedForShell

@@ -35,6 +35,10 @@
     runTimer: null,
     noteTimer: null,
     runs: null,
+    // Which daemon rows are folded open, and what each one answered. Kept
+    // across a render so a rebuilt table comes back the way it was left.
+    daemonOpen: {},
+    daemonViews: {},
     form: {
       sourceId: null,
       mode: "service",
@@ -488,17 +492,19 @@
     const head = el("tr", {}, SOURCE_COLUMNS.map(function (name) {
       return el("th", { text: name, scope: "col" });
     }));
-    const body = sources.map(sourceRow);
+    const body = sources.flatMap(sourceRow);
     return el("table", { class: "table" }, [
       el("thead", {}, [head]),
       el("tbody", {}, body)
     ]);
   }
 
-  function sourceRow(source) {
+  function sourceRow(source, index) {
     const now = Date.now();
     const row = el("tr", source.reachable ? {} : { "data-unreachable": "true" });
-    row.appendChild(el("td", { class: "table-strong", text: source.name }));
+    // Only a daemon has something to unfold, so only a daemon gets a control.
+    if (source.kind === "daemon") row.appendChild(daemonNameCell(source, index));
+    else row.appendChild(el("td", { class: "table-strong", text: source.name }));
     row.appendChild(el("td", {}, [el("span", { class: "chip", text: PSL.KIND_LABEL[source.kind] || source.kind })]));
     row.appendChild(el("td", {}, [el("span", { class: "chip chip-declared", text: source.environment })]));
     row.appendChild(el("td", {}, [healthCell(source, now)]));
@@ -512,7 +518,17 @@
     }));
     row.appendChild(producerCell(source));
     row.appendChild(el("td", { class: "table-mono", text: source.last_error_code || "—" }));
-    return row;
+    if (source.kind !== "daemon") return [row];
+
+    // Spanning the header count and not the literal 8: adding a column must
+    // not be able to break the detail row.
+    const cell = el("td", {
+      id: "daemon-detail-" + index,
+      colspan: String(SOURCE_COLUMNS.length)
+    }, [daemonPanel(source)]);
+    const detail = el("tr", { class: "daemon-detail" }, [cell]);
+    detail.hidden = state.daemonOpen[source.id] !== true;
+    return [row, detail];
   }
 
   function healthCell(source, now) {
@@ -568,6 +584,406 @@
     return el("div", { class: "skeleton-stack" }, rows);
   }
 
+
+  // ------------------------------------------------- sources: the daemon row
+
+  /**
+   * The [daemon] section in the order the daemon's own monitor prints it, so
+   * the two surfaces never contradict each other. Environment stands alone:
+   * it is the one value that claims something about the world rather than
+   * about the process.
+   */
+  const DAEMON_GROUPS = [
+    ["// declared", "Not measured. This is what the daemon says it is.", ["environment"]],
+    ["// ingestion and memory", "What it takes in, and what it drops when it cannot keep up.",
+      ["sampling_rate", "max_active_traces", "trace_ttl_ms", "max_events_per_trace",
+        "max_payload_size", "ingest_queue_capacity", "analysis_queue_capacity",
+        "memory_high_water_pct"]],
+    ["// what it keeps for readers",
+      "Ring buffers behind the query API and the export. Past each one, the oldest goes.",
+      ["max_retained_findings", "max_export_findings", "max_retained_traces"]],
+    ["// listeners", "Where it accepts spans, and whether it answers questions at all.",
+      ["api_enabled", "listen_addr", "listen_port", "listen_port_grpc", "json_socket"]],
+    ["// sub-systems", "Off unless somebody turned them on.",
+      ["tls_configured", "ack_enabled", "ack_api_key_set", "cors_allowed_origins",
+        "archive_configured"]],
+    ["// correlation",
+      "Off by default. Every field under the first one applies only while it is on.",
+      ["correlation_enabled", "correlation_window_ms", "correlation_lag_threshold_ms",
+        "correlation_min_co_occurrences", "correlation_min_confidence",
+        "correlation_max_tracked_pairs"]]
+  ];
+
+  /** What each setting costs when it is wrong. Two say enough by their name. */
+  const DAEMON_COPY = {
+    environment: "The label this daemon stamps on every finding, which sets their confidence: "
+      + "staging reads as medium, production as high. Declared, like the column on the row above.",
+    sampling_rate: "The share of arriving traces it analyses. Below 100 % every aggregate in a "
+      + "snapshot is a sample of the traffic, not the traffic.",
+    max_active_traces: "How many traces it correlates in memory at once. The oldest is evicted "
+      + "past this, and a trace evicted while spans are still arriving is analysed incomplete.",
+    trace_ttl_ms: "How long a trace waits for more spans before it is closed and analysed.",
+    max_events_per_trace: "The ring buffer inside one trace. Its oldest spans drop once it fills, "
+      + "and the finding says nothing about what left.",
+    max_payload_size: "The largest single request body it will deserialize. Anything larger is "
+      + "refused whole, never truncated.",
+    ingest_queue_capacity: "Span batches buffered between the listeners and the event loop. A "
+      + "full queue pushes back on the sender as an OTLP 503.",
+    analysis_queue_capacity: "Batches waiting for detection. A full queue sheds whole batches, "
+      + "and a shed batch is silent to whoever sent it.",
+    memory_high_water_pct: "The share of memory above which it refuses new spans rather than meet "
+      + "the OOM killer. Zero disables the guard entirely.",
+    max_retained_findings: "Findings held for the query API. The oldest are evicted past this, so "
+      + "an old problem can leave a snapshot without anyone fixing it.",
+    max_export_findings: "Findings one export snapshot carries. The quality gate inside that "
+      + "snapshot counts those and no others.",
+    max_retained_traces: "Span trees kept so an export can draw them. Zero keeps none, and every "
+      + "finding in that export opens without a tree.",
+    api_enabled: "Whether the query API is served at all. The Hub reads this daemon through it, "
+      + "so a run from here needs it on.",
+    listen_addr: "Where the OTLP receivers and /metrics bind. An address outside loopback exposes "
+      + "both without authentication.",
+    json_socket: "Unix socket for native NDJSON ingestion, alongside OTLP.",
+    tls_configured: "TLS on the OTLP listeners. The Hub is told whether a certificate and key are "
+      + "set, never where they are.",
+    ack_enabled: "The daemon's own acknowledgement store. An acknowledged finding stays in the "
+      + "data and stops counting against the gate.",
+    ack_api_key_set: "Whether the acknowledgement routes require a key. The Hub is told that one "
+      + "exists, never what it is.",
+    cors_allowed_origins: "Browser origins the query API answers. Empty sends no CORS headers at all.",
+    archive_configured: "Whether it writes a report archive per window, for a later disclosure to "
+      + "read back.",
+    correlation_enabled: "Whether the cross-trace correlator runs.",
+    correlation_window_ms: "The rolling window over which two findings count as having happened "
+      + "together.",
+    correlation_lag_threshold_ms: "The largest gap between two findings that still counts as together.",
+    correlation_min_co_occurrences: "How many times a pair has to happen before it is reported at all.",
+    correlation_min_confidence: "How often the second finding follows the first, as a share of the "
+      + "first's own occurrences, before the pair is worth reporting.",
+    correlation_max_tracked_pairs: "Cap on tracked pairs. The least frequent are evicted past it, "
+      + "and the daemon says so above when that happens.",
+    sanitizer_aware_classification: "Whether already-parameterised SQL is recognised as such, "
+      + "which stops it being reported as an N+1.",
+    energy_model: "Where the energy figure comes from. Measured means a power backend answered, "
+      + "estimated means it was derived from I/O counts.",
+    api_version: "The Electricity Maps API version these figures were scored against.",
+    emission_factor_type: "Lifecycle counts the whole chain behind the electricity, direct counts "
+      + "only what the generation itself emits.",
+    temporal_granularity: "How finely grid intensity is resolved in time.",
+    electricity_maps: "Whether live grid intensity was fetched. Off means the embedded table was "
+      + "used, which is a vintage rather than a reading.",
+    per_operation_coefficients: "Whether each operation kind carries its own energy coefficient "
+      + "instead of one average across all I/O.",
+    use_hourly_profiles: "Whether the hour-by-hour shape of the grid is applied rather than a "
+      + "flat average."
+  };
+
+  /**
+   * The sentence for one setting, or none. Detection thresholds fall through to
+   * the launcher's own knob copy: it is the same setting seen from the other
+   * side, and writing it twice would let the two drift.
+   */
+  function settingCopy(name) {
+    // The engine serialises this one under a different name than the file key
+    // the knob carries. Same setting, same sentence.
+    if (name === "n_plus_one_threshold") return DETECTION_COPY.n_plus_one_min_occurrences;
+    return DAEMON_COPY[name] || DETECTION_COPY[name] || null;
+  }
+
+  /**
+   * Mirrors the daemon monitor's own colouring, so the two surfaces agree. An
+   * unknown kind stays muted rather than dressed as an alarm: a kind this Hub
+   * predates is not automatically bad news.
+   */
+  const DAEMON_HINT_TONE = {
+    ingestion_drops: "crit",
+    tuning: "warn",
+    cold_start: "muted",
+    snapshot_scope: "info"
+  };
+
+  /**
+   * A real button and not a clickable row: Enter, Space, the focus ring and the
+   * semantics come free, and text stays selectable.
+   */
+  function daemonNameCell(source, index) {
+    const button = el("button", {
+      type: "button",
+      class: "row-toggle",
+      "aria-expanded": state.daemonOpen[source.id] === true ? "true" : "false",
+      "aria-controls": "daemon-detail-" + index
+    }, [el("span", { text: source.name })]);
+    button.addEventListener("click", function () { toggleDaemon(source, button, index); });
+    return el("td", { class: "table-strong" }, [button]);
+  }
+
+  /**
+   * Folded in place rather than through render(), which would rebuild the
+   * wrapper and reset its horizontal scroll. Fetched once and kept: a settings
+   * snapshot is not a live figure, and refetching on every fold would hit the
+   * daemon for a fold rather than for a question.
+   */
+  function toggleDaemon(source, button, index) {
+    const open = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    state.daemonOpen[source.id] = open;
+    const cell = document.getElementById("daemon-detail-" + index);
+    if (!cell) return;
+    cell.parentNode.hidden = !open;
+    if (!open || state.daemonViews[source.id] !== undefined) return;
+
+    state.daemonViews[source.id] = "loading";
+    cell.replaceChildren(daemonPanel(source));
+    getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
+      .then(function (view) { state.daemonViews[source.id] = view; })
+      .catch(function () { state.daemonViews[source.id] = { error_code: "internal" }; })
+      .finally(function () {
+        // The table may have been rebuilt while this was in flight, so the
+        // cell is found again rather than kept in a closure.
+        const target = document.getElementById("daemon-detail-" + index);
+        if (target) target.replaceChildren(daemonPanel(source));
+      });
+  }
+
+  function daemonPanel(source) {
+    const view = state.daemonViews[source.id];
+    if (view === "loading" || view === undefined) {
+      return el("div", { class: "daemon-panel" }, [
+        el("p", { class: "daemon-loading", role: "status", text: "Reading " + source.name + "." }),
+        el("div", { class: "skeleton", style: "height:180px" })
+      ]);
+    }
+    if (view.error_code) return daemonError(view.error_code);
+
+    const panel = el("div", { class: "daemon-panel" }, [
+      el("p", {
+        class: "daemon-lead",
+        text: "Everything below is this daemon reporting on itself over its query API. The Hub "
+          + "relays it and verifies none of it. It covers the [daemon] and [detection] sections "
+          + "of that process's configuration, and the scoring half of [green]. The gate "
+          + "thresholds under [thresholds] are not published as a section, so a value you set "
+          + "there is real and simply not visible from this screen."
+      }),
+      daemonStateBlock(view),
+      daemonHintsBlock(view)
+    ]);
+    daemonSettingsBlocks(view).forEach(function (node) { panel.appendChild(node); });
+    panel.appendChild(terminalBlock({
+      head: "// the same view in your terminal",
+      sub: "Live, and refreshed on an interval.",
+      text: PSL.monitorCommand(source),
+      copyLabel: "Copy the monitor command for " + source.name,
+      notes: [
+        "The same settings, re-read every 5 seconds, alongside the energy and carbon breakdown "
+          + "this screen only summarises. Add --refresh followed by a number of seconds to "
+          + "change the interval.",
+        source.auth_header_name
+          ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
+            + "query monitor takes no such flag, so this command works only from somewhere that "
+            + "can reach the daemon directly."
+          : null
+      ]
+    }));
+    return panel;
+  }
+
+  function daemonError(code) {
+    return el("div", { class: "daemon-panel" }, [
+      el("div", { class: "banner", "data-tone": "crit" }, [
+        svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7.5v5M12 15.8v.2" }]], 16),
+        el("div", {}, [
+          el("p", {}, [
+            el("span", { text: "Reading this daemon's settings returned " }),
+            el("span", { class: "code-inline", text: code }),
+            el("span", {
+              text: ": " + (PSL.READ_ERRORS[code] || PSL.ERRORS[code] || "the Hub could not reach it.")
+            })
+          ]),
+          el("p", {
+            class: "notice-sub",
+            text: "The row above still shows the last collection state, which is a different "
+              + "observation made at a different time."
+          })
+        ])
+      ])
+    ]);
+  }
+
+  /**
+   * Figures against their caps, and no bar. The only bar in the product belongs
+   * to a running job, and drawing one here would be a judgement: a bar at 88 %
+   * says "watch out" where the daemon has said nothing. The pair states the
+   * fact, and the daemon says below whether it is one.
+   */
+  function daemonStateBlock(view) {
+    const cells = [
+      [gaugeText(view.traces), "active traces"],
+      [gaugeText(view.analysis_queue), "analysis queue"],
+      [gaugeText(view.findings), "findings stored"],
+      [view.uptime_seconds == null ? "unknown" : PSL.dur(view.uptime_seconds * 1000), "uptime"]
+    ];
+    return el("div", { class: "daemon-state" }, [
+      el("div", { class: "sink-head" }, [
+        titledOverline("// right now", "The Hub asks the daemon when you open this row, and not "
+          + "again. These are the figures at that instant, not a live feed."),
+        el("span", {
+          class: "sink-sub",
+          text: "Read " + PSL.dur(Date.now() - view.observed_at_ms) + " ago. Each figure is shown "
+            + "against the cap it runs into, and neither is coloured."
+        })
+      ]),
+      countStrip(cells),
+      el("p", {
+        class: "daemon-lead",
+        text: "A figure near its cap is not a problem by itself, and this screen does not decide "
+          + "that it is. The daemon does, from counters the Hub cannot see, and it says so below "
+          + "when it applies."
+      })
+    ]);
+  }
+
+  function gaugeText(gauge) {
+    if (!gauge || gauge.value == null) return "unknown";
+    if (gauge.capacity == null) return group(gauge.value);
+    return group(gauge.value) + " / " + group(gauge.capacity);
+  }
+
+  function daemonHintsBlock(view) {
+    const block = el("div", { class: "daemon-hints" }, [
+      el("div", { class: "sink-head" }, [
+        titledOverline("// what the daemon recommends", "These come from counters inside the "
+          + "daemon that no report and no dashboard carries. The Hub relays the sentences and "
+          + "writes none of its own."),
+        el("span", {
+          class: "sink-sub",
+          text: "Written by the daemon from its own metrics. The Hub adds none of its own."
+        })
+      ])
+    ]);
+    if (view.warnings.length === 0) {
+      block.appendChild(el("p", {
+        class: "daemon-lead",
+        text: "Nothing. The daemon emits a hint when its own counters show a setting is undersized "
+          + "for the load it is taking. Silence here means those counters were clean at the "
+          + "instant it was read, not that the settings are right."
+      }));
+      return block;
+    }
+    view.warnings.forEach(function (hint) {
+      block.appendChild(el("div", { class: "outcome-warning" }, [
+        el("span", {
+          class: "outcome-warning-kind",
+          "data-tone": DAEMON_HINT_TONE[hint.kind] || "muted",
+          text: hint.kind
+        }),
+        el("span", { class: "outcome-warning-message", text: hint.message })
+      ]));
+    });
+    return block;
+  }
+
+  function daemonSettingsBlocks(view) {
+    const blocks = [];
+    if (!view.config) {
+      blocks.push(el("p", {
+        class: "daemon-lead",
+        text: view.config_unavailable_reason === "api_disabled"
+          ? "This daemon does not serve its configuration: api_enabled is off in its own "
+            + "[daemon] section. Everything above came from the export instead."
+          : "This daemon did not answer for its configuration, so none is shown rather than a "
+            + "copy from some earlier moment."
+      }));
+    } else {
+      blocks.push(el("p", {
+        class: "daemon-lead",
+        text: "The daemon's own monitor marks in yellow every setting that differs from the "
+          + "engine's default. The Hub cannot: it never sees a default, only the value this "
+          + "daemon is running. Nothing below is highlighted, and nothing below is wrong for not "
+          + "being."
+      }));
+      DAEMON_GROUPS.forEach(function (spec) {
+        const present = spec[2].filter(function (name) { return view.config[name] !== undefined; });
+        if (present.length > 0) blocks.push(settingsGroup(spec[0], spec[1], present, view.config));
+      });
+    }
+    if (view.detection_config) {
+      blocks.push(settingsGroup(
+        "// detection thresholds",
+        "What counts as a problem. The same knobs the launcher lets a run override on a backend.",
+        Object.keys(view.detection_config),
+        view.detection_config));
+    }
+    if (view.scoring_config || view.energy_model) {
+      const scoring = Object.assign({}, view.scoring_config || {});
+      if (view.energy_model) scoring.energy_model = view.energy_model;
+      blocks.push(settingsGroup(
+        "// carbon scoring",
+        "Where the energy figures come from, not what they are.",
+        Object.keys(scoring),
+        scoring));
+    }
+    return blocks;
+  }
+
+  function settingsGroup(head, sub, names, config) {
+    return el("div", { class: "settings-group" }, [
+      el("div", { class: "sink-head" }, [
+        el("span", { class: "overline", text: head }),
+        el("span", { class: "sink-sub", text: sub })
+      ]),
+      el("dl", { class: "settings-rows" }, names.map(function (name) {
+        const row = el("div", { class: "setting" }, [
+          el("dt", { class: "setting-k", text: name }),
+          settingValue(name, config[name])
+        ]);
+        const copy = settingCopy(name);
+        if (copy) row.appendChild(el("dd", { class: "setting-note", text: copy }));
+        return row;
+      }))
+    ]);
+  }
+
+  function settingValue(name, value) {
+    if (name === "environment") {
+      return el("dd", { class: "setting-v" }, [
+        el("span", { class: "chip chip-declared", text: String(value) })
+      ]);
+    }
+    return el("dd", { class: "setting-v", text: daemonValue(name, value) });
+  }
+
+  function daemonValue(name, value) {
+    if (name === "sampling_rate" || name === "correlation_min_confidence") return share(value);
+    // Zero is not a percentage here, it switches the guard off entirely.
+    if (name === "memory_high_water_pct") return value === 0 ? "off" : value + " %";
+    if (name === "max_payload_size") return PSL.bytes(value);
+    if (Array.isArray(value)) return value.length === 0 ? "(none)" : value.join(", ");
+    if (name === "tls_configured" || name === "archive_configured") {
+      return value ? "configured" : "not configured";
+    }
+    if (name === "ack_api_key_set") return value ? "set" : "unset";
+    // The name says _ms, so the millisecond figure stays primary: it is the one
+    // that goes back into the file. PSL.dur rounds to the second, so the
+    // readable form only appears once there is a second to read.
+    if (/_ms$/.test(name) && typeof value === "number") {
+      return group(value) + " ms" + (value >= 1000 ? " (" + PSL.dur(value) + ")" : "");
+    }
+    if (typeof value === "boolean") return value ? "yes" : "no";
+    if (typeof value === "number") return group(value);
+    return String(value);
+  }
+
+  /**
+   * A 0-to-1 share as a percentage, never rounded down to a zero it is not. A
+   * sampling rate of 0.0005 is one trace in two thousand, which is very
+   * different from none at all.
+   */
+  function share(value) {
+    if (typeof value !== "number") return String(value);
+    const pct = value * 100;
+    if (value > 0 && pct < 0.1) return String(value);
+    return (Math.round(pct * 10) / 10) + " %";
+  }
 
   // ---------------------------------------------------- screen: new analysis
 

@@ -22,6 +22,18 @@ All notable changes to PerfSentinelHub are recorded here.
   unusable binary leaves it null rather than stopping the Hub, since collection and the read API
   do not depend on it.
 
+- Analysis runs. `POST /api/analyses` queues a run against a configured source, a worker executes
+  the perf-sentinel binary in a subprocess under a timeout, and `GET /reports/{id}.html` serves the
+  HTML the engine rendered, from the same origin. A run is two invocations, because the query
+  subcommands emit text, JSON or SARIF and only `report` writes HTML. A daemon skips the first one
+  and its `/api/export/report` provides the input directly.
+- Failures are reported as one of eight bounded codes and raw stderr never leaves the process. It
+  is read only to tell a backend that refused us from a binary that broke, which have different
+  owners.
+- Reports expire after `Hub:Analysis:ReportRetention` and their run is marked expired while keeping
+  its parameters. A run interrupted by a restart comes back as such and is never replayed on its
+  own, since a silent retry would fire a second heavy query nobody asked for.
+
 ### Changed
 
 - JSON responses use snake_case property names, matching the envelope perf-sentinel itself emits.

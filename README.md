@@ -111,6 +111,8 @@ and `sources`.
 | `Hub:DefaultReadLimit` | `1000` | 1–`MaxReadLimit` |
 | `Hub:MaxReadLimit` | `10000` | 1–10000 |
 | `Hub:Analysis:EngineBinaryPath` | none | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
+| `Hub:Analysis:ReportDirectory` | `/data/reports` | Absolute, writable. Rendered reports live here |
+| `Hub:Analysis:IdentityHeader` | `X-Forwarded-User` | Header a reverse proxy sets with the requester's identity |
 | `Hub:Analysis:Workers` | `2` | 1–16 |
 | `Hub:Analysis:MaxTracesCap` | `2000` | 1–100000 |
 | `Hub:Analysis:Timeout` | `00:05:00` | Positive, at most one hour |
@@ -187,6 +189,35 @@ length). Both are denormalized onto the newest link at link time, so a finding's
 survives the retention purge of every earlier hop. The heuristic is conservative and
 non-destructive: the two rows stay separate findings, and the predecessor ages out through
 normal retention.
+
+## Analysis API
+
+An analysis is a run of the perf-sentinel binary against one configured source,
+producing the self-contained HTML dashboard the engine renders.
+
+- `POST /api/analyses` takes `{"source_id": "...", "request": {...}}` and answers `202` with the
+  run's id. The request shape follows the source's kind: `{}` for a daemon, which takes no
+  parameters at all, `{service, lookback | from_ms + to_ms, max_traces}` for a trace backend, or
+  `{trace_id}`. The engine's own exclusions are enforced before anything is queued, so an
+  impossible pair is refused rather than discovered as a failed run three minutes later.
+- `GET /api/analyses` lists recent runs, newest first, and `GET /api/analyses/{id}` returns one.
+- `GET /reports/{id}.html` serves a succeeded run's report, from the same origin as the rest.
+
+A run is two engine invocations, because the query subcommands emit text, JSON or SARIF and only
+`report` writes HTML: the source is read into a report JSON, then that JSON is rendered. A daemon
+skips the first step, since its own `/api/export/report` already returns one.
+
+Every failure is reported as one of eight codes (`source_unreachable`, `source_auth_failed`,
+`source_rejected_request`, `timeout`, `output_too_large`, `binary_failed`, `invalid_request`,
+`internal`). Raw stderr never leaves the process. It is read to name an owner, since "the backend
+refused us" and "the binary broke" have different owners, and that classification is a heuristic
+on a bounded set of markers, not a contract.
+
+Reports are deleted `Hub:Analysis:ReportRetention` after they succeed and the run is marked
+expired, keeping its parameters. This is not an audit trail, and a link shared yesterday is
+already dead. A run still running when the service stops comes back `interrupted` and is never
+replayed on its own: a silent retry would fire a second heavy query at a backend nobody asked to
+query twice.
 
 ## Freshness and recovery
 
@@ -267,8 +298,8 @@ and `hub.db-shm` next to it, and scale back up.
 
 ## Deliberate exclusions
 
-The current codebase has no ingress, user authentication, CI/SARIF import, worker execution, trace
-backend, dashboard, acknowledgment writer, or remote backup (the local `backup` command snapshots
+The current codebase has no ingress, user authentication, CI/SARIF import, human interface,
+acknowledgment writer, or remote backup (the local `backup` command snapshots
 the database, shipping the file off the cluster on a schedule stays the operator's job). Network
 exposure and authentication belong in the next independent design; acknowledgments remain in the
 repository consumed by perf-sentinel.

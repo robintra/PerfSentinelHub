@@ -29,13 +29,23 @@ public static class EngineProcess
         string binaryPath,
         IEnumerable<string> arguments,
         long maxOutputBytes,
+        string workingDirectory,
         CancellationToken cancellationToken)
     {
+        // Process.Start refuses a working directory that does not exist, and the
+        // engine's first run happens before anything has written a report.
+        Directory.CreateDirectory(workingDirectory);
+
         var startInfo = new ProcessStartInfo(binaryPath)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            // Pinned, because the engine looks for .perf-sentinel.toml relative
+            // to its own working directory. Left unset it inherits whatever
+            // directory the Hub was launched from, so a stray config file there
+            // would silently decide detection thresholds for every run.
+            WorkingDirectory = workingDirectory
         };
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);

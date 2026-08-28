@@ -31,11 +31,13 @@ public sealed partial class EngineProbe(
             return;
         }
 
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(ProbeTimeout);
         try
         {
-            Version = ParseVersion(await RunVersionAsync(path, timeout.Token));
+            Version = ParseVersion(
+                await RunVersionAsync(path, _analysis.ReportDirectory, timeout.Token));
             if (Version is null)
                 LogUnreadableVersion(logger, path);
             else
@@ -53,9 +55,13 @@ public sealed partial class EngineProbe(
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private static async Task<string?> RunVersionAsync(string path, CancellationToken cancellationToken)
+    private static async Task<string?> RunVersionAsync(
+        string path,
+        string workingDirectory,
+        CancellationToken cancellationToken)
     {
-        var result = await EngineProcess.RunAsync(path, ["--version"], MaxOutputBytes, cancellationToken);
+        var result = await EngineProcess.RunAsync(
+            path, ["--version"], MaxOutputBytes, workingDirectory, cancellationToken);
         return result.Succeeded ? Encoding.UTF8.GetString(result.StandardOutput) : null;
     }
 

@@ -23,6 +23,14 @@ public sealed record ReportSummary(
     bool QualityGatePassed,
     IReadOnlyList<ResultWarning> Warnings)
 {
+    /// <summary>
+    /// How many findings the rendered report actually holds, when the sink had
+    /// to drop some to fit its budget. Null when nothing was dropped. It cannot
+    /// come from the summary above: that is parsed from the engine's pre-trim
+    /// output, and only the rendered artefact knows what survived.
+    /// </summary>
+    public int? KeptFindings { get; set; }
+
     // A remote server writes these strings and the launcher renders them.
     // Bounded here so one run cannot carry an unbounded payload into storage.
     private const int MaxWarnings = 20;

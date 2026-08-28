@@ -281,21 +281,21 @@
       return {
         key: "safe", label: "comfortable",
         fg: "var(--ok-fg)", bg: "var(--ok-bg)", bd: "var(--ok-bd)", needsAck: false,
-        body: "Well inside what the report sink returns whole. Nothing is trimmed at this size unless individual traces are unusually large."
+        body: "Well inside what the sink returns whole. At this count the report is bounded by how much your traffic is doing wrong, not by the sink."
       };
     }
     if (n <= Math.min(1200, hardCap)) {
       return {
         key: "heavy", label: "heavy",
         fg: "var(--warn-fg)", bg: "var(--warn-bg)", bd: "var(--warn-bd)", needsAck: false,
-        body: "The sink targets a 5 MiB standalone file. Whether it has to trim at this count depends on how heavy your traces are, and the launcher cannot know that before the run. Expect a whole report, plan for a trimmed one."
+        body: "More traces means more findings, and findings are the only thing this report is made of. Whether the sink has to trim depends on how much is wrong in there, which the launcher cannot know before the run."
       };
     }
     if (n <= hardCap) {
       return {
         key: "ceiling", label: "at the ceiling",
         fg: "var(--crit-fg)", bg: "var(--crit-bg)", bd: "var(--crit-bd)", needsAck: true,
-        body: "At this count the report will almost certainly be trimmed to fit 5 MiB. It will still open, still look complete, and will not be. The snapshot_scope warnings on the result are the only place that difference is stated."
+        body: "At this count the sink may drop the quieter findings to fit. It drops critical last, so what survives is what mattered most. The report opens normally either way, and the count on the dashboard is the count that survived, not the count that was found."
       };
     }
     return {

@@ -14,6 +14,10 @@ public sealed class EngineProbeTests : IDisposable
 {
     private readonly List<string> _scripts = [];
 
+    private readonly string _workspace = Path.Combine(
+        Path.GetTempPath(),
+        $"perf-sentinel-hub-probe-{Guid.NewGuid():N}");
+
     [Fact]
     public async Task No_configured_binary_leaves_the_version_unknown()
     {
@@ -66,16 +70,28 @@ public sealed class EngineProbeTests : IDisposable
     {
         foreach (var script in _scripts)
             File.Delete(script);
+        if (Directory.Exists(_workspace))
+            Directory.Delete(_workspace, recursive: true);
     }
 
-    private static EngineProbe Probe(string? binaryPath) =>
+    private EngineProbe Probe(string? binaryPath) =>
         new(
-            Options.Create(new HubOptions { Analysis = new AnalysisOptions { EngineBinaryPath = binaryPath } }),
+            Options.Create(new HubOptions
+            {
+                Analysis = new AnalysisOptions
+                {
+                    EngineBinaryPath = binaryPath,
+                    // The probe runs from the report directory, so the test must
+                    // name one it owns rather than inherit the /data default.
+                    ReportDirectory = _workspace
+                }
+            }),
             NullLogger<EngineProbe>.Instance);
 
     private string WriteScript(string body)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"engine-probe-{Guid.NewGuid():N}.sh");
+        Directory.CreateDirectory(_workspace);
+        var path = Path.Combine(_workspace, $"engine-probe-{Guid.NewGuid():N}.sh");
         File.WriteAllText(path, $"#!/bin/sh\n{body}\n");
         File.SetUnixFileMode(
             path,

@@ -537,22 +537,21 @@
   }
 
   function sourcePanel() {
-    const list = el("div", { class: "card source-panel" }, [
-      el("div", { class: "panel-head" }, [
-        el("span", { class: "overline", text: "// source" }),
-        el("span", { class: "panel-head-source", text: state.sources.length + " configured" })
-      ]),
-      el("div", { class: "source-list", role: "radiogroup", "aria-label": "Source" },
-        state.sources.map(sourceRadio)),
-      el("p", { class: "panel-note" }, [
-        el("span", { class: "panel-note-rule", "aria-hidden": "true" }),
-        el("span", {
-          text: "A dashed outline marks a value the source declares about itself. The Hub never "
-            + "measures it. A misconfigured deployment can label production as staging."
-        })
-      ])
+      return el("div", {class: "card source-panel"}, [
+        el("div", {class: "panel-head"}, [
+            el("span", {class: "overline", text: "// source"}),
+            el("span", {class: "panel-head-source", text: state.sources.length + " configured"})
+        ]),
+        el("div", {class: "source-list", role: "radiogroup", "aria-label": "Source"},
+            state.sources.map(sourceRadio)),
+        el("p", {class: "panel-note"}, [
+            el("span", {class: "panel-note-rule", "aria-hidden": "true"}),
+            el("span", {
+                text: "A dashed outline marks a value the source declares about itself. The Hub never "
+                    + "measures it. A misconfigured deployment can label production as staging."
+            })
+        ])
     ]);
-    return list;
   }
 
   function sourceRadio(source) {
@@ -1009,24 +1008,31 @@
   }
 
   /**
-   * What the report sink actually does with a run this size. The numbers are
-   * the sink's own constants, not predictions: the byte size depends on span
-   * counts and SQL template lengths, which the launcher cannot know.
+   * What the sink guarantees, measured rather than predicted. The design bans
+   * predicting a byte size, and its reason still holds: SQL template lengths
+   * move a fixed-count report by tens of kilobytes. Both ends of the range are
+   * fixed, though, so they can be stated as facts.
    */
   function sinkPanel() {
     const rows = [
-      ["5 MiB", "The size the standalone report aims for. It is a target the sink trims towards, "
-        + "not a hard refusal."],
-      ["70 %", "Share of that budget reserved for findings. Over it, findings are dropped "
+      ["550 KB", "The floor. Fonts, styles and the dashboard itself, present in every report "
+        + "whether it found one problem or none."],
+      ["4 MB", "The ceiling a report from a backend query actually reaches. The sink targets "
+        + "5 MiB but reserves part of it for embedded span trees, and a backend query has none, "
+        + "so that share is never spent."],
+      ["70 %", "Share of the budget reserved for findings. Over it, findings are dropped "
         + "critical-first, so the ones you most wanted to see survive longest."],
-      ["lowest waste", "Order in which embedded traces are dropped once findings have taken their "
-        + "share. The worst offenders stay."],
-      ["25", "Hard cap on the top offenders embedded for the Explain tab, whatever the run size. "
+      ["25", "Hard cap on the top offenders embedded for the Carbon tab, whatever the run size. "
         + "The full ranking is still computed, only the embed is capped."],
-      ["0 findings", "Traces carrying no finding are never embedded at all, at any size."]
+      ["no span trees", "A backend query returns findings, not spans, so no trace is embedded at "
+        + "any size. The dashboard says so on each finding and gives you the command to read the "
+        + "tree from a live daemon instead."]
     ];
     return el("div", { class: "sink" }, [
-      el("p", { class: "overline", text: "What comes back, and what it drops first" }),
+      el("div", { class: "sink-head" }, [
+        el("span", { class: "overline", text: "What comes back, and what it drops first" }),
+        el("span", { class: "sink-sub", text: "Constants from the sink, not predictions." })
+      ]),
       el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
         return [el("dt", { text: row[0] }), el("dd", { text: row[1] })];
       }))
@@ -1119,8 +1125,7 @@
     const input = el("input", { type: "checkbox" });
     input.checked = checked;
     input.addEventListener("change", function () { onChange(input.checked); });
-    const wrap = el("label", { class: "checkbox" }, [input, el("span", { text: label })]);
-    return wrap;
+      return el("label", {class: "checkbox"}, [input, el("span", {text: label})]);
   }
 
   /** Reported by the service, not assumed: the button is a promise of cost. */
@@ -1304,11 +1309,10 @@
   }
 
   function backLink() {
-    const link = el("a", { class: "back-pill", href: "#/recent" }, [
-      svg([["path", { d: "M15 18l-6-6 6-6" }]], 13),
-      el("span", { text: "All analyses" })
+      return el("a", {class: "back-pill", href: "#/recent"}, [
+        svg([["path", {d: "M15 18l-6-6 6-6"}]], 13),
+        el("span", {text: "All analyses"})
     ]);
-    return link;
   }
 
   /** Headline and sub-line per state, in the source's own terms. */
@@ -1505,7 +1509,7 @@
     return delta > 0 ? "in " + PSL.dur(delta) : PSL.dur(-delta) + " ago";
   }
 
-  function outcomePanel(run, key, view) {
+  function outcomePanel(run, key, _) {
     if (key === "running" || key === "queued") return null;
     const spec = outcomeSpec(run, key);
     const panel = el("section", { class: "outcome", "data-tone": spec.tone }, [
@@ -1513,6 +1517,8 @@
       el("p", { class: "outcome-body", text: spec.body })
     ]);
     if (spec.counts) panel.appendChild(countStrip(spec.counts));
+    const trimmed = trimNotice(run);
+    if (trimmed) panel.appendChild(trimmed);
     (spec.warnings || []).forEach(function (warning) {
       panel.appendChild(el("div", { class: "outcome-warning" }, [
         el("span", { class: "outcome-warning-kind", text: warning.kind }),
@@ -1532,7 +1538,7 @@
           ? "The quality gate passed. The dashboard holds the full detail."
           : "The quality gate did not pass. The dashboard holds the full detail.",
         counts: [
-          [String(result.findings), "findings", "text"],
+          [String(result.findings), result.kept_findings == null ? "findings" : "found", "text"],
           [String(result.critical), "critical", "crit"],
           [String(result.warning), "warning", "warn"],
           [String(result.info), "info", "info"],
@@ -1593,6 +1599,25 @@
       primary: { label: "Run it again", href: "#/new", filled: false },
       note: PSL.argsLine(run)
     };
+  }
+
+  /**
+   * The sink drops findings to fit its budget, and the count on the card is
+   * what the engine found, not what the report holds. Said above the link,
+   * because it changes how the numbers should be read.
+   */
+  function trimNotice(run) {
+    const result = run.result || {};
+    if (result.kept_findings == null || result.kept_findings >= result.findings) return null;
+    return el("div", { class: "outcome-warning" }, [
+      el("span", { class: "outcome-warning-kind", text: "trimmed" }),
+      el("span", {
+        class: "outcome-warning-message",
+        text: result.findings + " findings were found and " + result.kept_findings
+          + " are in the report. The sink dropped the rest to fit, critical last, so what "
+          + "survived is what mattered most."
+      })
+    ]);
   }
 
   function countStrip(counts) {

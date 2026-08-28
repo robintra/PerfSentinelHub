@@ -925,3 +925,6 @@ body[data-screen="report"] .shell-footer { display: none; }
 
 .empty-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--text); }
 
+
+.sink-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 9px; }
+.sink-sub { font-size: 10.5px; color: var(--text-3); }

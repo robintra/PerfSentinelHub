@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -93,9 +94,11 @@ public sealed partial class AnalysisRunner(
             if (summary is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
-            return await RenderAsync(run.Id, reportJson, timeout.Token)
-                ? new RunOutcome(AnalysisStatuses.Succeeded, null, binaryVersion, summary)
-                : Failed(AnalysisErrorCodes.BinaryFailed);
+            if (!await RenderAsync(run.Id, reportJson, timeout.Token))
+                return Failed(AnalysisErrorCodes.BinaryFailed);
+
+            summary.KeptFindings = await ReadKeptFindingsAsync(run.Id, timeout.Token);
+            return new RunOutcome(AnalysisStatuses.Succeeded, null, binaryVersion, summary);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -122,6 +125,7 @@ public sealed partial class AnalysisRunner(
             _analysis.EngineBinaryPath!,
             request.ToEngineArguments(source),
             MaxReportJsonBytes,
+            _analysis.ReportDirectory,
             cancellationToken);
         if (result.Succeeded)
             return result.StandardOutput;
@@ -143,6 +147,7 @@ public sealed partial class AnalysisRunner(
                 _analysis.EngineBinaryPath!,
                 ["report", "--input", inputPath, "--output", ReportPath(runId)],
                 MaxReportJsonBytes,
+                _analysis.ReportDirectory,
                 cancellationToken);
             return result.Succeeded;
         }
@@ -151,6 +156,30 @@ public sealed partial class AnalysisRunner(
             TryDelete(inputPath);
         }
     }
+
+    /// <summary>
+    /// Reads back what the sink kept, which only the rendered file records. Null
+    /// when nothing was dropped: the engine omits the field entirely then.
+    /// </summary>
+    private async Task<int?> ReadKeptFindingsAsync(string runId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // The whole file, because the payload sits at no fixed offset. It is
+            // bounded by the sink's own budget, a few megabytes at worst.
+            var html = await File.ReadAllTextAsync(ReportPath(runId), cancellationToken);
+            var match = TrimmedFindings().Match(html);
+            return match.Success && int.TryParse(match.Groups[1].ValueSpan, out var kept) ? kept : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The count is a caveat on the result, not the result.
+            return null;
+        }
+    }
+
+    [GeneratedRegex("\"trimmed_findings\"\\s*:\\s*\\{\\s*\"kept\"\\s*:\\s*(\\d+)")]
+    private static partial Regex TrimmedFindings();
 
     private static RunOutcome Failed(string errorCode) =>
         new(AnalysisStatuses.Failed, errorCode, null, null);

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Text;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 
@@ -15,7 +15,7 @@ public sealed partial class EngineProbe(
 {
     // A `--version` line is a dozen bytes. Anything beyond this is not one,
     // and reading to the end would let a wrong binary size the buffer.
-    private const int MaxOutputChars = 1024;
+    private const int MaxOutputBytes = 1024;
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
@@ -55,31 +55,8 @@ public sealed partial class EngineProbe(
 
     private static async Task<string?> RunVersionAsync(string path, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(path)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        startInfo.ArgumentList.Add("--version");
-
-        using var process = Process.Start(startInfo);
-        if (process is null)
-            return null;
-
-        var buffer = new char[MaxOutputChars];
-        var read = await process.StandardOutput.ReadAsync(buffer, cancellationToken);
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            throw;
-        }
-
-        return process.ExitCode == 0 ? new string(buffer, 0, read) : null;
+        var result = await EngineProcess.RunAsync(path, ["--version"], MaxOutputBytes, cancellationToken);
+        return result.Succeeded ? Encoding.UTF8.GetString(result.StandardOutput) : null;
     }
 
     // clap prints `perf-sentinel 0.16.0`. The version is the last token of the

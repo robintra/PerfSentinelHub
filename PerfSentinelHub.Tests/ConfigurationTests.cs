@@ -104,6 +104,83 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Analysis_settings_bind_from_the_documented_strings()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Analysis:EngineBinaryPath"] = "/opt/perf-sentinel/perf-sentinel",
+                ["Hub:Analysis:Timeout"] = "00:05:00",
+                // A day is not "24:00:00": TimeSpan hours stop at 23, and the
+                // README hands the operator this exact string to copy.
+                ["Hub:Analysis:ReportRetention"] = "1.00:00:00",
+                ["Hub:Sources:0:Id"] = "test",
+                ["Hub:Sources:0:Name"] = "Test",
+                ["Hub:Sources:0:Environment"] = "test",
+                ["Hub:Sources:0:Kind"] = "jaeger_query",
+                ["Hub:Sources:0:BaseUrl"] = "http://127.0.0.1:10428"
+            })
+            .Build();
+
+        var options = configuration.GetSection(HubOptions.SectionName).Get<HubOptions>();
+
+        Assert.NotNull(options);
+        Assert.Equal("/opt/perf-sentinel/perf-sentinel", options.Analysis.EngineBinaryPath);
+        Assert.Equal(TimeSpan.FromMinutes(5), options.Analysis.Timeout);
+        Assert.Equal(TimeSpan.FromHours(24), options.Analysis.ReportRetention);
+        Assert.Equal(SourceKinds.JaegerQuery, options.Sources[0].Kind);
+        Assert.True(new HubOptionsValidator().Validate(null, options with
+        {
+            DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db")
+        }).Succeeded);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Daemon")]
+    [InlineData("victoria")]
+    public void Unknown_source_kind_is_rejected(string kind)
+    {
+        var options = ValidOptions() with { Sources = [ValidSource() with { Kind = kind }] };
+
+        Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
+    public void Only_a_daemon_can_carry_an_import_key()
+    {
+        // A trace backend never pushes: a key on one is a misconfiguration
+        // that would otherwise sit there authorising an import path nothing
+        // uses.
+        var source = ValidSource() with
+        {
+            Kind = SourceKinds.Tempo,
+            ImportApiKey = "0123456789abcdef0123456789abcdef" // gitleaks:allow -- synthetic test credential
+        };
+
+        Assert.False(new HubOptionsValidator().Validate(null, ValidOptions() with { Sources = [source] }).Succeeded);
+    }
+
+    [Fact]
+    public void Invalid_analysis_options_are_rejected()
+    {
+        AnalysisOptions[] invalid =
+        [
+            new() { EngineBinaryPath = "relative/perf-sentinel" },
+            new() { EngineBinaryPath = "  " },
+            new() { Workers = 0 },
+            new() { Workers = 17 },
+            new() { MaxTracesCap = 0 },
+            new() { Timeout = TimeSpan.Zero },
+            new() { Timeout = TimeSpan.FromHours(2) },
+            new() { ReportRetention = TimeSpan.Zero }
+        ];
+
+        Assert.All(invalid, analysis => Assert.False(
+            new HubOptionsValidator().Validate(null, ValidOptions() with { Analysis = analysis }).Succeeded));
+    }
+
+    [Fact]
     public void Invalid_bound_configuration_stops_the_host()
     {
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>

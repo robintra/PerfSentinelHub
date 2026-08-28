@@ -94,6 +94,41 @@ public sealed class WorkerAndRetentionTests : IDisposable
     }
 
     [Fact]
+    public async Task A_trace_backend_is_never_polled()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = Options.Create(new HubOptions
+        {
+            DatabasePath = UnwritablePath,
+            Sources = [new SourceOptions
+            {
+                Id = "victoria",
+                Name = "Victoria Traces",
+                Environment = "test",
+                Kind = SourceKinds.JaegerQuery,
+                BaseUrl = new Uri("http://127.0.0.1:1")
+            }]
+        });
+        var clock = new FakeTimeProvider();
+        var poller = new SourcePoller(
+            new DaemonClient(new HttpClient(), options),
+            new HubDatabase(options, clock),
+            clock,
+            NullLogger<SourcePoller>.Instance);
+        using var worker = new PollWorker(poller, options, clock, NullLogger<PollWorker>.Instance);
+
+        await worker.StartAsync(cancellationToken);
+        await WaitForAsync(() => worker.ExecuteTask!.IsCompleted);
+
+        // The daemon case above never completes because it polls forever. With
+        // nothing pollable the loop has no source at all, which is the point:
+        // a backend serves no findings endpoint and would be marked
+        // unreachable on every interval.
+        Assert.True(worker.ExecuteTask!.IsCompleted);
+        await StopQuietlyAsync(worker, cancellationToken);
+    }
+
+    [Fact]
     public async Task Retention_worker_keeps_running_when_a_purge_fails()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

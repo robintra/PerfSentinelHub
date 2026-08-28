@@ -17,7 +17,29 @@ public sealed record HubOptions
     public TimeSpan ResolutionGrace { get; set; } = TimeSpan.FromDays(7);
     public int DefaultReadLimit { get; set; } = 1000;
     public int MaxReadLimit { get; set; } = 10_000;
+    public AnalysisOptions Analysis { get; set; } = new();
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
+}
+
+public sealed record AnalysisOptions
+{
+    // Absent means the Hub keeps collecting findings but cannot run an
+    // analysis: the launcher reads a null engine version and says so.
+    public string? EngineBinaryPath { get; set; }
+    public int Workers { get; set; } = 2;
+    public int MaxTracesCap { get; set; } = 2000;
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
+    public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
+}
+
+public static class SourceKinds
+{
+    public const string Daemon = "daemon";
+    public const string Tempo = "tempo";
+    public const string JaegerQuery = "jaeger_query";
+
+    public static bool IsKnown(string kind) =>
+        kind is Daemon or Tempo or JaegerQuery;
 }
 
 public sealed record SourceOptions
@@ -25,6 +47,10 @@ public sealed record SourceOptions
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string Environment { get; set; } = "";
+    // A daemon detects its own findings and is polled. A trace backend stores
+    // traces and detects nothing, so it is never polled and only ever read by
+    // an analysis run.
+    public string Kind { get; set; } = SourceKinds.Daemon;
     public Uri? BaseUrl { get; set; }
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
@@ -73,6 +99,22 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:DefaultReadLimit must be between 1 and MaxReadLimit.");
         if (options.Sources.Count == 0)
             errors.Add("Hub:Sources must contain at least one source.");
+        ValidateAnalysisSettings(options.Analysis, errors);
+    }
+
+    private static void ValidateAnalysisSettings(AnalysisOptions analysis, List<string> errors)
+    {
+        if (analysis.EngineBinaryPath is { } path &&
+            (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)))
+            errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
+        if (analysis.Workers is < 1 or > 16)
+            errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
+        if (analysis.MaxTracesCap is < 1 or > 100_000)
+            errors.Add("Hub:Analysis:MaxTracesCap must be between 1 and 100000.");
+        if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
+            errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
+        if (analysis.ReportRetention <= TimeSpan.Zero)
+            errors.Add("Hub:Analysis:ReportRetention must be positive.");
     }
 
     private static void ValidateSource(SourceOptions source, HashSet<string> ids, List<string> errors)
@@ -85,6 +127,10 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
         if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
             errors.Add($"Source '{source.Id}' requires a name and environment.");
+        if (!SourceKinds.IsKnown(source.Kind))
+            errors.Add($"Source '{source.Id}' kind must be 'daemon', 'tempo' or 'jaeger_query'.");
+        if (source.Kind != SourceKinds.Daemon && source.ImportApiKey is not null)
+            errors.Add($"Source '{source.Id}' is not a daemon and cannot carry an import API key.");
         ValidateBaseUrl(source, errors);
         ValidateAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))

@@ -17,7 +17,21 @@ public static class FindingEnvelopeWriter
 
         foreach (var row in rows)
         {
-            using var document = JsonDocument.Parse(row.EnvelopeJson);
+            // Parsed before anything is written: a throw here would abort a
+            // body already partly flushed, and the client would see a truncated
+            // array behind a 200. A row whose envelope is unreadable is skipped
+            // rather than allowed to take the page down with it.
+            JsonDocument document;
+            try
+            {
+                document = JsonDocument.Parse(row.EnvelopeJson);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            using var _ = document;
             writer.WriteStartObject();
             // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
             // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator

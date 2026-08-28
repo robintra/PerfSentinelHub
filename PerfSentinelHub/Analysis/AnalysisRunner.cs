@@ -49,7 +49,7 @@ public sealed partial class AnalysisRunner(
         Path.Combine(_analysis.ReportDirectory, $"{runId}.html");
 
     /// <summary>Removes a report whose lifetime ran out. Missing is fine.</summary>
-    public void DeleteReport(string runId) => DeleteQuietly(ReportPath(runId));
+    public void DeleteReport(string runId) => TryDelete(ReportPath(runId));
 
     /// <summary>
     /// Deletes scratch input files a previous process left behind. The finally
@@ -61,10 +61,12 @@ public sealed partial class AnalysisRunner(
         if (!Directory.Exists(_analysis.ReportDirectory))
             return 0;
 
-        // Counted on the delete, not on the listing: a read-only volume would
-        // otherwise have the log announce removals that never happened.
+        // The listing is materialised first: deleting while the directory walk
+        // is still open lets entries be skipped. Counted on the delete, not on
+        // the listing, so a read-only volume cannot have the log announce
+        // removals that never happened.
         return Directory
-            .EnumerateFiles(_analysis.ReportDirectory, "*.input.json")
+            .GetFiles(_analysis.ReportDirectory, "*.input.json")
             .Count(TryDelete);
     }
 
@@ -146,7 +148,7 @@ public sealed partial class AnalysisRunner(
         }
         finally
         {
-            DeleteQuietly(inputPath);
+            TryDelete(inputPath);
         }
     }
 
@@ -194,8 +196,7 @@ public sealed partial class AnalysisRunner(
     private static bool Contains(string haystack, string needle) =>
         haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
-    private static void DeleteQuietly(string path) => TryDelete(path);
-
+    /// <summary>Best effort: false when the file is still there.</summary>
     private static bool TryDelete(string path)
     {
         try
@@ -210,7 +211,7 @@ public sealed partial class AnalysisRunner(
         }
     }
 
-    [LoggerMessage(1401, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
+    [LoggerMessage(1600, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, string runId, string errorCode);
 }
 

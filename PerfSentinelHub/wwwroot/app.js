@@ -33,6 +33,7 @@
     run: null,
     runError: false,
     runTimer: null,
+    noteTimer: null,
     runs: null,
     form: {
       sourceId: null,
@@ -903,13 +904,14 @@
    * repeating the cap.
    */
   function bands(cap) {
-    const all = [["ok", 500, "safe"], ["warn", 1200, "heavy"], ["crit", Infinity, ""]];
-    const kept = all.filter(function (band) { return band[1] < cap; });
-    // The last stripe ends at the cap and takes the tone of whichever band the
-    // cap itself falls in. Always painting it crit would turn a Hub capped at
-    // 500 into one entirely red rule over a range that is all comfortable.
-    const last = all[kept.length];
-    kept.push([last[0], cap, "cap"]);
+    const inner = [["ok", 500, "safe"], ["warn", 1200, "heavy"]]
+      .filter(function (band) { return band[1] < cap; });
+    // The stripe that ends at the cap takes the tone of whichever band the cap
+    // itself falls in, which is the one after the last inner boundary kept.
+    // Always painting it crit would turn a Hub capped at 500 into an entirely
+    // red rule over a range that is all comfortable.
+    const TONES = ["ok", "warn", "crit"];
+    const kept = inner.concat([[TONES[inner.length], cap, "cap"]]);
 
     let previous = 0;
     return kept.map(function (band) {
@@ -1576,11 +1578,16 @@
       // borrows the line and hands it back.
       const note = button.parentNode && button.parentNode.querySelector(".outcome-note");
       if (!note) return;
-      const original = note.textContent;
+      // Stashed on the node, not in a closure: a second failure inside the
+      // window would otherwise capture the first error as the text to restore
+      // and pin it there for good.
+      if (note.dataset.restore === undefined) note.dataset.restore = note.textContent;
+      clearTimeout(state.noteTimer);
       note.textContent = String(error.message || error);
       note.setAttribute("data-error", "true");
-      setTimeout(function () {
-        note.textContent = original;
+      state.noteTimer = setTimeout(function () {
+        note.textContent = note.dataset.restore;
+        delete note.dataset.restore;
         note.removeAttribute("data-error");
       }, 6000);
     });

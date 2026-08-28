@@ -78,19 +78,19 @@ public sealed partial class EngineProbe(
             : null;
     }
 
-    [LoggerMessage(1101, LogLevel.Information,
+    [LoggerMessage(1400, LogLevel.Information,
         "No Hub:Analysis:EngineBinaryPath configured, analysis runs are unavailable.")]
     private static partial void LogNoBinaryConfigured(ILogger logger);
 
-    [LoggerMessage(1102, LogLevel.Information, "Engine version {Version} from {Path}.")]
+    [LoggerMessage(1401, LogLevel.Information, "Engine version {Version} from {Path}.")]
     private static partial void LogEngineVersion(ILogger logger, string version, string path);
 
-    [LoggerMessage(1103, LogLevel.Warning, "Engine binary {Path} did not report a usable version.")]
+    [LoggerMessage(1402, LogLevel.Warning, "Engine binary {Path} did not report a usable version.")]
     private static partial void LogUnreadableVersion(ILogger logger, string path);
 
-    [LoggerMessage(1104, LogLevel.Warning, "Engine binary {Path} did not answer within the probe timeout.")]
+    [LoggerMessage(1403, LogLevel.Warning, "Engine binary {Path} did not answer within the probe timeout.")]
     private static partial void LogProbeTimedOut(ILogger logger, string path);
 
-    [LoggerMessage(1105, LogLevel.Warning, "Engine binary {Path} could not be run.")]
+    [LoggerMessage(1404, LogLevel.Warning, "Engine binary {Path} could not be run.")]
     private static partial void LogProbeFailed(ILogger logger, Exception exception, string path);
 }

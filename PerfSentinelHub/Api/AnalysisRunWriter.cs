@@ -133,7 +133,7 @@ public static partial class AnalysisRunWriter
         }
     }
 
-    [LoggerMessage(1401, LogLevel.Error,
+    [LoggerMessage(1700, LogLevel.Error,
         "Run {RunId} has unreadable JSON in its {Column} column, served as null.")]
     private static partial void LogUnreadableColumn(
         ILogger logger,

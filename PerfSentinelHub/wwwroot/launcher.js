@@ -290,7 +290,7 @@
       return {
         key: "heavy", label: "heavy",
         fg: "var(--warn-fg)", bg: "var(--warn-bg)", bd: "var(--warn-bd)", needsAck: false,
-        body: "More traces means more findings, and findings are the only thing this report is made of. Whether the sink has to trim depends on how much is wrong in there, which the launcher cannot know before the run."
+        body: "More traces means more findings, and a span tree behind each one. Whether the sink has to trim depends on how much is wrong in there, which the launcher cannot know before the run."
       };
     }
     if (n <= hardCap) {

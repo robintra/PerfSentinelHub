@@ -1021,16 +1021,14 @@
     const rows = [
       ["550 KB", "The floor. Fonts, styles and the dashboard itself, present in every report "
         + "whether it found one problem or none."],
-      ["4 MB", "The ceiling a report from a backend query actually reaches. The sink targets "
-        + "5 MiB but reserves part of it for embedded span trees, and a backend query has none, "
-        + "so that share is never spent."],
+      ["5 MiB", "The size the sink targets. Findings and span trees share it, so a run that "
+        + "finds more of both sits closer to the ceiling."],
       ["70 %", "Share of the budget reserved for findings. Over it, findings are dropped "
         + "critical-first, so the ones you most wanted to see survive longest."],
       ["25", "Hard cap on the top offenders embedded for the Carbon tab, whatever the run size. "
         + "The full ranking is still computed, only the embed is capped."],
-      ["no span trees", "A backend query returns findings, not spans, so no trace is embedded at "
-        + "any size. The dashboard says so on each finding and gives you the command to read the "
-        + "tree from a live daemon instead."]
+      ["span trees", "One tree per finding, for as many as fit the budget. Past it the rest "
+        + "open without one, and the dashboard says so on the finding."]
     ];
     return el("div", { class: "sink" }, [
       el("div", { class: "sink-head" }, [

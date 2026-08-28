@@ -3,12 +3,13 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
 
-public static class FindingEnvelopeWriter
+public static partial class FindingEnvelopeWriter
 {
     public static async Task WriteArrayAsync(
         HttpResponse response,
         IReadOnlyList<StoredFinding> rows,
         DateTimeOffset now,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
@@ -21,17 +22,20 @@ public static class FindingEnvelopeWriter
             // body already partly flushed, and the client would see a truncated
             // array behind a 200. A row whose envelope is unreadable is skipped
             // rather than allowed to take the page down with it.
-            JsonDocument document;
+            JsonDocument envelope;
             try
             {
-                document = JsonDocument.Parse(row.EnvelopeJson);
+                envelope = JsonDocument.Parse(row.EnvelopeJson);
             }
-            catch (JsonException)
+            catch (JsonException exception)
             {
+                // Dropping it silently would make a finding disappear from the
+                // page with nothing anywhere saying a row was unreadable.
+                LogUnreadableEnvelope(logger, exception, row.Signature);
                 continue;
             }
 
-            using var _ = document;
+            using var document = envelope;
             writer.WriteStartObject();
             // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
             // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
@@ -85,4 +89,7 @@ public static class FindingEnvelopeWriter
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
+
+    [LoggerMessage(1800, LogLevel.Error, "Finding {Signature} has an unreadable envelope and was skipped.")]
+    private static partial void LogUnreadableEnvelope(ILogger logger, Exception exception, string signature);
 }

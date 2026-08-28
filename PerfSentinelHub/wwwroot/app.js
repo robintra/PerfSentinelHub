@@ -264,6 +264,8 @@
   function onRoute() {
     const screen = currentScreen();
     clearTimeout(state.runTimer);
+    // The note this timer restores belongs to a panel the next render replaces.
+    clearTimeout(state.noteTimer);
     render();
     if (state.loading) return;
     if (screen === "recent") loadRuns();
@@ -435,12 +437,60 @@
     render();
   }
 
+  /**
+   * Updated in place, never re-rendered. A full render replaces the range and
+   * the number field mid-interaction, which drops the browser's pointer
+   * capture (the handle stops following the mouse) and the text caret.
+   */
   function setMaxTraces(value) {
     state.form.maxTraces = value;
     // Dropping back below the ceiling withdraws the question that was asked
     // about it.
     if (!PSL.weightBand(value, tracesCap()).needsAck) state.form.ackHeavy = false;
-    render();
+    refreshTraces();
+    updateSubmit();
+  }
+
+  /** Everything on screen that reads maxTraces, refreshed without a re-render. */
+  function refreshTraces() {
+    const cap = tracesCap();
+    const band = PSL.weightBand(state.form.maxTraces, cap);
+    const over = band.key === "over" || band.key === "invalid";
+    const value = String(state.form.maxTraces);
+
+    const number = document.getElementById("traces-number");
+    const slider = document.getElementById("traces-slider");
+    // Assigned only when it differs, so the element the operator is dragging or
+    // typing into is left alone.
+    if (number && number.value !== value) number.value = value;
+    if (number) number.toggleAttribute("data-over", over);
+    if (slider) {
+      const clamped = String(Math.min(Math.max(state.form.maxTraces, 1), cap));
+      if (slider.value !== clamped) slider.value = clamped;
+    }
+
+    const chip = document.getElementById("traces-band");
+    if (chip) {
+      chip.textContent = band.label;
+      chip.setAttribute("style", bandStyle(band));
+    }
+
+    const note = document.getElementById("traces-cap");
+    if (note) {
+      note.textContent = capNote(band, cap);
+      note.setAttribute("data-over", over ? "true" : "false");
+    }
+
+    const body = document.getElementById("traces-body");
+    if (body) {
+      body.textContent = band.body;
+      body.setAttribute("style", "color:" + band.fg);
+    }
+
+    const slot = document.getElementById("traces-ack");
+    if (!slot) return;
+    if (band.needsAck) slot.replaceChildren(heavyAck());
+    else slot.replaceChildren();
   }
 
   function renderNewScreen() {
@@ -843,6 +893,7 @@
 
     const number = el("input", {
       type: "number",
+      id: "traces-number",
       class: "input input-traces",
       min: "1",
       max: String(cap),
@@ -853,12 +904,18 @@
 
     const head = el("div", { class: "traces-head" }, [
       number,
-      el("span", { class: "band-chip", style: bandStyle(band), text: band.label }),
-      el("span", { class: "traces-cap", "data-over": over ? "true" : "false", text: capNote(band, cap) })
+      el("span", { id: "traces-band", class: "band-chip", style: bandStyle(band), text: band.label }),
+      el("span", {
+        id: "traces-cap",
+        class: "traces-cap",
+        "data-over": over ? "true" : "false",
+        text: capNote(band, cap)
+      })
     ]);
 
     const slider = el("input", {
       type: "range",
+      id: "traces-slider",
       min: "1",
       max: String(cap),
       step: "1",
@@ -884,9 +941,12 @@
       head,
       el("div", { class: "band-track" }, [segments, slider]),
       bandScale(cap),
-      el("p", { class: "band-body", style: "color:" + band.fg, text: band.body })
+      el("p", { id: "traces-body", class: "band-body", style: "color:" + band.fg, text: band.body }),
+      // A slot rather than a conditional child: the acknowledgement appears and
+      // disappears as the count crosses the ceiling, and refreshing it in place
+      // keeps the rest of the block untouched.
+      el("div", { id: "traces-ack" }, band.needsAck ? [heavyAck()] : [])
     ]);
-    if (band.needsAck) block.appendChild(heavyAck());
     block.appendChild(sinkPanel());
     return block;
   }

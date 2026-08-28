@@ -149,6 +149,7 @@ public static partial class ApiEndpoints
         HubDatabase database,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!TryParseQuery(context.Request, options.Value, out var query))
@@ -162,6 +163,7 @@ public static partial class ApiEndpoints
             context.Response,
             rows,
             timeProvider.GetUtcNow(),
+            loggerFactory.CreateLogger("FindingsApi"),
             cancellationToken);
     }
 
@@ -170,6 +172,7 @@ public static partial class ApiEndpoints
         HttpResponse response,
         HubDatabase database,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var rows = await database.FindByTraceAsync(traceId, cancellationToken);
@@ -177,6 +180,7 @@ public static partial class ApiEndpoints
             response,
             rows,
             timeProvider.GetUtcNow(),
+            loggerFactory.CreateLogger("FindingsApi"),
             cancellationToken);
     }
 

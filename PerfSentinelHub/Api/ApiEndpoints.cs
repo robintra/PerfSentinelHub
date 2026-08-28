@@ -33,7 +33,10 @@ public static partial class ApiEndpoints
                 new StatusLimits(
                     analysis.MaxTracesCap,
                     (int)analysis.Timeout.TotalSeconds,
-                    (int)analysis.ReportRetention.TotalHours));
+                    (int)analysis.ReportRetention.TotalHours),
+                DetectionOverrides.Schema
+                    .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))
+                    .ToArray());
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/findings", GetFindingsAsync);

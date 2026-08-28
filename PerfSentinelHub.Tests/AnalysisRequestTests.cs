@@ -15,7 +15,9 @@ public sealed class AnalysisRequestTests
         Assert.Null(accepted);
 
         Assert.Null(Parse("""{"service":"orders"}""", SourceKinds.Daemon, out var rejected));
-        Assert.Equal("A daemon snapshot takes no parameters.", rejected);
+        Assert.Equal(
+            "A daemon snapshot takes no parameters, and detects with its own configuration.",
+            rejected);
     }
 
     [Theory]
@@ -82,7 +84,7 @@ public sealed class AnalysisRequestTests
                 "tempo", "--endpoint", "http://tempo.example:3200", "--format", "json",
                 "--service", "order-service", "--lookback", "90m", "--max-traces", "250"
             ],
-            request!.ToEngineArguments(Source(SourceKinds.Tempo)));
+            request!.ToEngineArguments(Source(SourceKinds.Tempo), null));
     }
 
     [Fact]
@@ -91,7 +93,7 @@ public sealed class AnalysisRequestTests
         var request = Parse($$"""{"service":"orders","from_ms":1787835540600,"to_ms":1787838540400}""",
             SourceKinds.JaegerQuery, out _);
 
-        var arguments = request!.ToEngineArguments(Source(SourceKinds.JaegerQuery)).ToList();
+        var arguments = request!.ToEngineArguments(Source(SourceKinds.JaegerQuery), null).ToList();
 
         Assert.Equal("jaeger-query", arguments[0]);
         // The residual milliseconds are truncated: the engine takes whole seconds.
@@ -110,7 +112,7 @@ public sealed class AnalysisRequestTests
     {
         var request = Parse("""{"trace_id":"abc123def456"}""", SourceKinds.Tempo, out _);
 
-        var arguments = request!.ToEngineArguments(Source(SourceKinds.Tempo));
+        var arguments = request!.ToEngineArguments(Source(SourceKinds.Tempo), null);
 
         Assert.Equal(["tempo", "--endpoint", "http://tempo.example:3200", "--format", "json",
             "--trace-id", "abc123def456"], arguments);
@@ -125,6 +127,57 @@ public sealed class AnalysisRequestTests
             new AnalysisOptions(),
             Now,
             out error);
+    }
+
+    [Fact]
+    public void A_detection_override_becomes_a_config_the_engine_is_pointed_at()
+    {
+        var request = Parse("""
+            {"service":"orders","lookback":"1h","detection":{"n_plus_one_min_occurrences":13}}
+            """, SourceKinds.Tempo, out var error);
+
+        Assert.Null(error);
+        Assert.Equal("[detection]\nn_plus_one_min_occurrences = 13\n", request!.Detection.ToToml());
+        var arguments = request.ToEngineArguments(Source(SourceKinds.Tempo), "/data/reports/run.config.toml").ToList();
+        Assert.Equal("/data/reports/run.config.toml", arguments[arguments.IndexOf("-c") + 1]);
+    }
+
+    [Fact]
+    public void A_value_equal_to_the_engine_default_is_not_recorded_as_an_override()
+    {
+        // Writing it out would make the run card claim a departure from the
+        // standard configuration where there is none.
+        var request = Parse("""
+            {"service":"orders","lookback":"1h","detection":{"n_plus_one_min_occurrences":5}}
+            """, SourceKinds.Tempo, out _);
+
+        Assert.True(request!.Detection.IsEmpty);
+    }
+
+    [Theory]
+    // Bounds mirror the engine's validator: two of them floor at 2, not 1.
+    [InlineData("""{"n_plus_one_min_occurrences":0}""")]
+    [InlineData("""{"pool_saturation_concurrent_threshold":1}""")]
+    [InlineData("""{"serialized_min_sequential":1}""")]
+    [InlineData("""{"max_fanout":100001}""")]
+    [InlineData("""{"n_plus_one_min_occurrences":"many"}""")]
+    [InlineData("""{"no_such_setting":3}""")]
+    public void An_out_of_range_or_unknown_detection_setting_is_refused(string detection)
+    {
+        Assert.Null(Parse(
+            $$"""{"service":"orders","lookback":"1h","detection":{{detection}}}""",
+            SourceKinds.Tempo, out var error));
+        Assert.False(string.IsNullOrWhiteSpace(error));
+    }
+
+    [Fact]
+    public void A_daemon_takes_no_detection_override()
+    {
+        // It detects with its own configuration, so the Hub cannot honour one.
+        Assert.Null(Parse("""{"detection":{"max_fanout":50}}""", SourceKinds.Daemon, out var error));
+        Assert.Equal(
+            "A daemon snapshot takes no parameters, and detects with its own configuration.",
+            error);
     }
 
     private static SourceOptions Source(string kind) => new()

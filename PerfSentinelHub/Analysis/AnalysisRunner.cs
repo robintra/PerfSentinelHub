@@ -66,8 +66,8 @@ public sealed partial class AnalysisRunner(
         // is still open lets entries be skipped. Counted on the delete, not on
         // the listing, so a read-only volume cannot have the log announce
         // removals that never happened.
-        return Directory
-            .GetFiles(_analysis.ReportDirectory, "*.input.json")
+        return new[] { "*.input.json", "*.config.toml" }
+            .SelectMany(pattern => Directory.GetFiles(_analysis.ReportDirectory, pattern))
             .Count(TryDelete);
     }
 
@@ -82,11 +82,12 @@ public sealed partial class AnalysisRunner(
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_analysis.Timeout);
+        var configPath = WriteRunConfig(run.Id, request);
         try
         {
             var reportJson = source.Kind == SourceKinds.Daemon
                 ? await daemonClient.FetchReportSnapshotAsync(source, _analysis.Timeout, timeout.Token)
-                : await QueryBackendAsync(request, source, timeout.Token);
+                : await QueryBackendAsync(request, source, configPath, timeout.Token);
             if (reportJson is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
@@ -94,7 +95,7 @@ public sealed partial class AnalysisRunner(
             if (summary is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
-            if (!await RenderAsync(run.Id, reportJson, timeout.Token))
+            if (!await RenderAsync(run.Id, reportJson, configPath, timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             summary.KeptFindings = await ReadKeptFindingsAsync(run.Id, timeout.Token);
@@ -110,6 +111,27 @@ public sealed partial class AnalysisRunner(
             LogRunFailed(logger, exception, run.Id, code);
             return Failed(code);
         }
+        finally
+        {
+            if (configPath is not null)
+                TryDelete(configPath);
+        }
+    }
+
+    /// <summary>
+    /// Writes the run's own `[detection]` section, or returns null when the
+    /// operator changed nothing. Handed to both subprocesses through `-c`, so
+    /// the query and the render agree on what counts as a problem.
+    /// </summary>
+    private string? WriteRunConfig(string runId, AnalysisRequest request)
+    {
+        if (request.Detection.IsEmpty)
+            return null;
+
+        Directory.CreateDirectory(_analysis.ReportDirectory);
+        var path = Path.Combine(_analysis.ReportDirectory, $"{runId}.config.toml");
+        File.WriteAllText(path, request.Detection.ToToml());
+        return path;
     }
 
     /// <summary>
@@ -119,11 +141,12 @@ public sealed partial class AnalysisRunner(
     private async Task<byte[]?> QueryBackendAsync(
         AnalysisRequest request,
         SourceOptions source,
+        string? configPath,
         CancellationToken cancellationToken)
     {
         var result = await EngineProcess.RunAsync(
             _analysis.EngineBinaryPath!,
-            request.ToEngineArguments(source),
+            request.ToEngineArguments(source, configPath),
             MaxReportJsonBytes,
             _analysis.ReportDirectory,
             cancellationToken);
@@ -133,7 +156,11 @@ public sealed partial class AnalysisRunner(
         throw new EngineFailedException(ClassifyEngineFailure(result.StandardError));
     }
 
-    private async Task<bool> RenderAsync(string runId, byte[] reportJson, CancellationToken cancellationToken)
+    private async Task<bool> RenderAsync(
+        string runId,
+        byte[] reportJson,
+        string? configPath,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_analysis.ReportDirectory);
         // The engine reads a path rather than stdin here: the same bytes are
@@ -145,7 +172,9 @@ public sealed partial class AnalysisRunner(
             await File.WriteAllBytesAsync(inputPath, reportJson, cancellationToken);
             var result = await EngineProcess.RunAsync(
                 _analysis.EngineBinaryPath!,
-                ["report", "--input", inputPath, "--output", ReportPath(runId)],
+                configPath is null
+                    ? ["report", "--input", inputPath, "--output", ReportPath(runId)]
+                    : ["report", "--input", inputPath, "--output", ReportPath(runId), "-c", configPath],
                 MaxReportJsonBytes,
                 _analysis.ReportDirectory,
                 cancellationToken);

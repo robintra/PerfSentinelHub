@@ -245,6 +245,8 @@
     if (r["from_ms"]) parts.push("from_ms = " + r["from_ms"]);
     if (r["to_ms"]) parts.push("to_ms = " + r["to_ms"]);
     if (r["max_traces"] != null) parts.push("max_traces = " + r["max_traces"]);
+    const detection = /** @type {Record<string, number>} */ (r["detection"] || {});
+    Object.keys(detection).forEach(function (name) { parts.push(name + " = " + detection[name]); });
     return parts.length ? parts.join("   ·   ") : "no parameters  ·  daemon in-memory snapshot";
   }
 

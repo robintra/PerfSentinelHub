@@ -46,6 +46,7 @@
       toMs: Date.now(),
       customQty: 90,
       customUnit: "m",
+      detection: {},
       pickerOpen: false,
       maxTraces: 100,
       ackUnreachable: false,
@@ -421,6 +422,7 @@
     state.form.ackUnreachable = false;
     state.form.ackHeavy = false;
     state.form.pickerOpen = false;
+    state.form.detection = {};
     render();
   }
 
@@ -518,6 +520,8 @@
     const source = selectedSource();
     const skew = source && PSL.skew(source.producer_version);
     const right = el("div", { class: "new-column" }, [parametersPanel(), costBand()]);
+    const advanced = source && source.kind !== "daemon" ? advancedPanel() : null;
+    if (advanced) right.appendChild(advanced);
     if (skew) right.appendChild(skewNotice(source, skew));
     if (source && !source.reachable) right.appendChild(unreachableNotice(source));
     right.appendChild(submitRow());
@@ -1241,8 +1245,13 @@
 
   function buildRequest(source) {
     if (source.kind === "daemon") return {};
-    if (state.form.mode === "trace") return { trace_id: state.form.traceId.trim() };
+    if (state.form.mode === "trace") {
+      const trace = { trace_id: state.form.traceId.trim() };
+      if (Object.keys(state.form.detection).length > 0) trace.detection = state.form.detection;
+      return trace;
+    }
     const request = { service: state.form.service.trim(), max_traces: state.form.maxTraces };
+    if (Object.keys(state.form.detection).length > 0) request.detection = state.form.detection;
     if (state.form.rangeMode === "absolute") {
       request.from_ms = state.form.fromMs;
       request.to_ms = state.form.toMs;
@@ -1485,6 +1494,9 @@
       if (request[name] != null) facts.push([name, String(request[name]), "mono"]);
     });
     if (request.from_ms) facts.push(["window", PSL.dtHuman(request.from_ms) + " → " + PSL.dtHuman(request.to_ms), "mono"]);
+    Object.keys(request.detection || {}).forEach(function (name) {
+      facts.push([name, String(request.detection[name]), "warn"]);
+    });
     if (!request.service && !request.trace_id) facts.push(["parameters", "none", "muted"]);
     facts.push(["requested by", run.requested_by, "mono"]);
     facts.push(["detected by", run.producer_version
@@ -1697,6 +1709,117 @@
     }, 1000);
   }
 
+
+  // ------------------------------------------------------- advanced: detection
+
+  /**
+   * One sentence per knob, saying what the detector stops seeing when the
+   * number goes up. Written in the terms of what is looked for, never in terms
+   * of file size: raising a threshold does not shorten a report, it decides
+   * that a smaller pattern is no longer a problem.
+   */
+  const DETECTION_COPY = {
+    n_plus_one_min_occurrences: "How many near-identical queries in one trace count as an N+1. "
+      + "Raise it and smaller loops stop being reported at all.",
+    window_duration_ms: "How close together those queries have to be. A shorter window splits one "
+      + "slow loop into several groups that each fall under the count.",
+    slow_query_threshold_ms: "Above this, one operation is called slow.",
+    slow_query_min_occurrences: "How many times a slow template has to appear before it is worth "
+      + "reporting. One slow query stays invisible below this.",
+    max_fanout: "Child spans under one parent before it counts as excessive fanout. The engine "
+      + "warns outside 5 to 1 000: too low floods the list, too high hides real fan-outs.",
+    chatty_service_min_calls: "Outbound HTTP calls in one trace before a service is called chatty. "
+      + "Critical fires at three times this.",
+    pool_saturation_concurrent_threshold: "Peak concurrent SQL spans on one service before the "
+      + "connection pool is called at risk. Set it to the pool size you actually run.",
+    serialized_min_sequential: "Sequential independent calls under one parent before they are "
+      + "worth parallelising."
+  };
+
+  function detectionKnobs() {
+    return (state.status && state.status.detection_knobs) || [];
+  }
+
+  function detectionCount() {
+    return Object.keys(state.form.detection).length;
+  }
+
+  function setDetection(name, raw, knob) {
+    const value = Number(raw);
+    // An empty field or the engine's own default is not an override: recording
+    // it would make the run card claim a departure that never happened.
+    if (raw === "" || !Number.isFinite(value) || value === knob.default) delete state.form.detection[name];
+    else state.form.detection[name] = value;
+    updateSubmit();
+    refreshDetectionCount();
+  }
+
+  function refreshDetectionCount() {
+    const badge = document.getElementById("advanced-count");
+    if (!badge) return;
+    const count = detectionCount();
+    badge.hidden = count === 0;
+    badge.textContent = count === 1 ? "1 changed" : count + " changed";
+  }
+
+  /**
+   * A disclosure, and the only one in the product. It holds settings that
+   * change what the analysis looks for, which is a different question from
+   * every other control on this screen, so it is folded away rather than
+   * mixed in.
+   */
+  function advancedPanel() {
+    const knobs = detectionKnobs();
+    if (knobs.length === 0) return null;
+
+    const summary = el("summary", { class: "advanced-summary" }, [
+      el("span", { class: "overline", text: "// advanced · what the analysis looks for" }),
+      el("span", { id: "advanced-count", class: "advanced-count", hidden: "hidden" })
+    ]);
+
+    const body = el("div", { class: "advanced-body" }, [
+      el("p", {
+        class: "advanced-lead",
+        text: "These are the engine's detection thresholds. They decide what counts as a problem, "
+          + "not how the report is written: raising one does not make the run lighter, it makes the "
+          + "engine stop reporting the smaller cases. A run records the ones you changed, and the "
+          + "recent list flags counts that came from different thresholds, because they are not "
+          + "comparable."
+      })
+    ]);
+
+    knobs.forEach(function (knob) {
+      body.appendChild(detectionRow(knob));
+    });
+
+    const panel = el("details", { class: "advanced" }, [summary, body]);
+    if (detectionCount() > 0) panel.setAttribute("open", "open");
+    queueMicrotask(refreshDetectionCount);
+    return panel;
+  }
+
+  function detectionRow(knob) {
+    const current = state.form.detection[knob.name];
+    const input = el("input", {
+      type: "number",
+      class: "input input-knob",
+      min: String(knob.min),
+      max: String(knob.max),
+      placeholder: String(knob.default),
+      value: current === undefined ? "" : String(current)
+    });
+    input.addEventListener("input", function () { setDetection(knob.name, input.value, knob); });
+
+    return el("label", { class: "knob" }, [
+      el("span", { class: "knob-head" }, [
+        el("span", { class: "knob-name", text: knob.name }),
+        el("span", { class: "knob-default", text: "default " + knob.default })
+      ]),
+      el("span", { class: "knob-body", text: DETECTION_COPY[knob.name] || "" }),
+      input
+    ]);
+  }
+
   // ---------------------------------------------------- screen: recent runs
 
   function renderRecentScreen() {
@@ -1737,6 +1860,21 @@
             + binaries.length + " binaries are not directly comparable: a detector added between "
             + "minors changes what gets found, not only how much. The label on each card names which "
             + "binary did the detecting."
+        })
+      ]));
+    }
+
+    const tuned = state.runs.filter(function (run) {
+      return Object.keys((run.request || {}).detection || {}).length > 0;
+    });
+    if (tuned.length > 0 && tuned.length < state.runs.length) {
+      section.appendChild(el("div", { class: "banner", "data-tone": "warn" }, [
+        warningGlyph(16),
+        el("p", {
+          text: tuned.length + (tuned.length === 1 ? " run" : " runs") + " here changed the "
+            + "detection thresholds. Their counts are not comparable with the rest: a threshold "
+            + "decides what gets reported, so a lower count can mean a quieter service or simply "
+            + "a detector that was told to look for less. Each card names the thresholds it used."
         })
       ]));
     }
@@ -1798,6 +1936,10 @@
     facts.push(["started", PSL.dur(now - started) + " ago"]);
     facts.push(["expires", run.expires_at_ms ? expiryText(run) : "n/a",
       run.expires_at_ms && run.expires_at_ms < now ? "crit" : "mono"]);
+    const tuned = Object.keys((run.request || {}).detection || {});
+    if (tuned.length > 0) {
+      facts.push(["thresholds", tuned.length === 1 ? "1 changed" : tuned.length + " changed", "warn"]);
+    }
     if (run.error_code) facts.push(["error", run.error_code, "crit"]);
     return facts;
   }

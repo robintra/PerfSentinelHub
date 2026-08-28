@@ -207,6 +207,30 @@ A run is two engine invocations, because the query subcommands emit text, JSON o
 `report` writes HTML: the source is read into a report JSON, then that JSON is rendered. A daemon
 skips the first step, since its own `/api/export/report` already returns one.
 
+Both invocations run from `Hub:Analysis:ReportDirectory`. The engine looks for `.perf-sentinel.toml`
+relative to its own working directory, so leaving it unset would let a stray file beside whatever
+directory launched the Hub decide detection thresholds for every run.
+
+A request may carry a `detection` object overriding the engine's detection thresholds
+(`n_plus_one_min_occurrences`, `window_duration_ms`, `slow_query_threshold_ms`,
+`slow_query_min_occurrences`, `max_fanout`, `chatty_service_min_calls`,
+`pool_saturation_concurrent_threshold`, `serialized_min_sequential`). Bounds mirror the engine's own
+validator, and `GET /api/status` publishes them along with each default under `detection_knobs`. A
+value equal to the default is dropped rather than recorded, so a run only carries what actually
+departs from the standard configuration. The overrides are written to a per-run TOML handed to both
+invocations through `-c`, and deleted when the run ends.
+
+These thresholds decide what counts as a problem, not how the report is written. Raising one does
+not make a run lighter, it stops the detector from reporting the smaller cases, which is why counts
+from runs with different thresholds are not comparable and the launcher says so. A daemon source
+takes none: it detects with its own configuration and the Hub only reads what it already found.
+
+The report's size is not a knob. The sink's 5 MiB target is a private constant with no flag, no
+environment variable and no config key, and a report built from a backend query tops out around
+4 MB because the share of that budget reserved for embedded span trees is never spent: a backend
+query returns findings, not spans. When the sink does drop findings to fit, the run records how
+many survived, read back from the rendered file, and the result panel says so above the link.
+
 Every failure is reported as one of eight codes (`source_unreachable`, `source_auth_failed`,
 `source_rejected_request`, `timeout`, `output_too_large`, `binary_failed`, `invalid_request`,
 `internal`). Raw stderr never leaves the process. It is read to name an owner, since "the backend

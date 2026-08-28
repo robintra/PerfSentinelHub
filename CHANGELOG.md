@@ -49,6 +49,19 @@ All notable changes to PerfSentinelHub are recorded here.
 - The launcher is excluded from Sonar coverage and `fonts.css` from analysis: browser code with no
   test runner in this repository would otherwise be counted at zero and sink the new-code gate.
 
+- A run may override the engine's detection thresholds, exposed behind an advanced disclosure in
+  the launcher and published with their bounds and defaults on `GET /api/status`. They are written
+  to a per-run TOML handed to both engine invocations through `-c`. They change what counts as a
+  problem rather than how large the report is, so a run records the ones it used and the recent list
+  flags counts that are not comparable.
+- Both engine invocations now run from a Hub-owned directory. The engine discovers
+  `.perf-sentinel.toml` relative to its working directory, so an unset one let a stray file beside
+  the Hub's launch directory silently decide detection thresholds. Measured: one threshold moved a
+  report from 5,455,307 to 559,514 bytes.
+- The result panel reports how many findings survived the sink's budget, read back from the rendered
+  report. The summary is parsed from the engine's pre-trim output, so the card previously stated a
+  count the artifact did not contain.
+
 ### Changed
 
 - JSON responses use snake_case property names, matching the envelope perf-sentinel itself emits.

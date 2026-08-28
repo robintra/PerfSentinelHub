@@ -9,7 +9,10 @@ public sealed record StatusResponse(
     string? EngineVersion,
     int QueueDepth,
     int Workers,
-    StatusLimits Limits);
+    StatusLimits Limits,
+    // The detection thresholds a run may override, with the engine's own
+    // defaults and the bounds a submission is held to.
+    IReadOnlyList<DetectionKnob> DetectionKnobs);
 
 /// <summary>
 /// What a run costs, reported rather than assumed: the launcher shows these
@@ -19,6 +22,8 @@ public sealed record StatusLimits(
     int MaxTracesCap,
     int AnalysisTimeoutSeconds,
     int ReportRetentionHours);
+
+public sealed record DetectionKnob(string Name, int Min, int Max, int Default);
 
 /// <summary>
 /// A configured source joined to its last known collection state. The

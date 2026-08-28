@@ -19,6 +19,13 @@ public sealed record AnalysisRequest
     public long? ToMs { get; init; }
     public int? MaxTraces { get; init; }
 
+    /// <summary>
+    /// Thresholds the operator moved for this run. Never set on a daemon: a
+    /// daemon detects with its own configuration and the Hub only reads what it
+    /// already found, so a threshold sent here would change nothing.
+    /// </summary>
+    public DetectionOverrides Detection { get; init; } = new();
+
     private const int MaxServiceLength = 256;
     private const int MaxTraceIdLength = 64;
     private const int DefaultMaxTraces = 100;
@@ -54,8 +61,15 @@ public sealed record AnalysisRequest
             return null;
         }
 
+        var detection = DetectionOverrides.TryParse(
+            payload.TryGetProperty("detection", out var overrides) ? overrides : default,
+            out error);
+        if (detection is null)
+            return null;
+
         var request = new AnalysisRequest
         {
+            Detection = detection,
             Service = ReadString(payload, "service"),
             TraceId = ReadString(payload, "trace_id"),
             Lookback = ReadString(payload, "lookback"),
@@ -74,7 +88,7 @@ public sealed record AnalysisRequest
     /// The engine arguments this request becomes, for the subcommand matching
     /// the source kind. Never called for a daemon: a snapshot is an HTTP read.
     /// </summary>
-    public IReadOnlyList<string> ToEngineArguments(SourceOptions source)
+    public IReadOnlyList<string> ToEngineArguments(SourceOptions source, string? configPath)
     {
         var arguments = new List<string>
         {
@@ -84,6 +98,11 @@ public sealed record AnalysisRequest
             "--format",
             "json"
         };
+        if (configPath is not null)
+        {
+            arguments.Add("-c");
+            arguments.Add(configPath);
+        }
 
         if (TraceId is { } traceId)
         {
@@ -113,6 +132,7 @@ public sealed record AnalysisRequest
     }
 
     private static string? ValidateDaemon(AnalysisRequest request) =>
+        request.Detection.IsEmpty &&
         request.Service is null &&
         request.TraceId is null &&
         request.Lookback is null &&
@@ -122,7 +142,7 @@ public sealed record AnalysisRequest
             ? null
             // A daemon snapshot is whatever it holds in memory right now.
             // Asking for a window would be a request the source cannot answer.
-            : "A daemon snapshot takes no parameters.";
+            : "A daemon snapshot takes no parameters, and detects with its own configuration.";
 
     private static string? ValidateBackend(AnalysisRequest request, AnalysisOptions analysis, long nowMs)
     {

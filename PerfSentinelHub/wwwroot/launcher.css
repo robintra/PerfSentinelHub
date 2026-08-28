@@ -928,3 +928,46 @@ body[data-screen="report"] .shell-footer { display: none; }
 
 .sink-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 9px; }
 .sink-sub { font-size: 10.5px; color: var(--text-3); }
+
+/* ------------------------------------------------- advanced: detection knobs */
+
+/* The only disclosure in the product. It holds settings that answer a different
+   question from the rest of the form, so it is folded rather than mixed in. */
+.advanced { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.advanced-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+.advanced-summary::-webkit-details-marker { display: none; }
+.advanced-summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform .15s ease;
+}
+.advanced[open] .advanced-summary::before { transform: rotate(45deg); }
+.advanced-count {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.advanced-body { padding: 0 18px 18px; }
+.advanced-lead { margin: 0 0 16px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); max-width: 78ch; }
+
+.knob { display: block; padding: 12px 0; border-top: 1px solid var(--border); }
+.knob-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.knob-name { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--text); }
+.knob-default { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
+.knob-body { display: block; margin: 5px 0 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-2); max-width: 74ch; }
+.input-knob { width: 118px; font-variant-numeric: tabular-nums; }

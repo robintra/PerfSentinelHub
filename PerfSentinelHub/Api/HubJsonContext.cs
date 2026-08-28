@@ -6,6 +6,7 @@ namespace PerfSentinelHub.Api;
 // gets the same casing as one written through the ASP.NET options.
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
 [JsonSerializable(typeof(StatusResponse))]
+[JsonSerializable(typeof(DetectionKnob))]
 [JsonSerializable(typeof(ImportResponse))]
 [JsonSerializable(typeof(IReadOnlyList<SourceResponse>))]
 [JsonSerializable(typeof(SubmittedAnalysis))]

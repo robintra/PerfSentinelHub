@@ -37,7 +37,7 @@
     source_unreachable: "nothing answered at its address. Check the daemon or backend is up and that the Hub still has a route to it, then run this again.",
     source_auth_failed: "it answered and refused the Hub's credentials. Rotate the configured auth header or API key in the source's Secret. Nothing here will work until that is done.",
     source_rejected_request: "it answered and refused these arguments, usually an unknown service name or a window it does not keep. Check the service against the backend and try a shorter lookback.",
-    timeout: "the run passed the 300-second ceiling and was killed. Halve the trace cap or shorten the lookback before resubmitting. The same request will time out again unchanged.",
+    timeout: "the run passed this Hub's time ceiling and was killed, or the backend took too long to answer a window this wide. Halve the trace cap or shorten the window before resubmitting. The same request will time out again unchanged.",
     output_too_large: "the source returned more than one run is allowed to hold. Narrow the window or lower the trace cap so less comes back, then run it again.",
     binary_failed: "the analysis binary failed for a reason none of the other codes covers, and nothing was stored. Run it once more. If it repeats, send this analysis ID to whoever operates the Hub.",
     invalid_request: "the arguments were rejected before the run started, so nothing was read and nothing was spent. Fix the trace ID or the lookback value and submit again.",
@@ -290,14 +290,14 @@
       return {
         key: "heavy", label: "heavy",
         fg: "var(--warn-fg)", bg: "var(--warn-bg)", bd: "var(--warn-bd)", needsAck: false,
-        body: "More traces means more findings, and a span tree behind each one. Whether the sink has to trim depends on how much is wrong in there, which the launcher cannot know before the run."
+        body: "More traces means more findings, and every one of them reaches the report. The span trees stop at the embed cap, so the extra weight here is the list itself, not the trees."
       };
     }
     if (n <= hardCap) {
       return {
         key: "ceiling", label: "at the ceiling",
         fg: "var(--crit-fg)", bg: "var(--crit-bg)", bd: "var(--crit-bd)", needsAck: true,
-        body: "At this count the sink may drop the quieter findings to fit. It drops critical last, so what survives is what mattered most. The report opens normally either way, and the count on the dashboard is the count that survived, not the count that was found."
+        body: "At this count the report still keeps every finding, and that is what makes it heavy: the file has no fixed ceiling and takes a moment to open. The run is also long enough to be worth watching against this Hub's time limit."
       };
     }
     return {

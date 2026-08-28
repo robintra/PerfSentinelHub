@@ -34,6 +34,11 @@ public sealed record AnalysisOptions
     public string IdentityHeader { get; set; } = "X-Forwarded-User";
     public int Workers { get; set; } = 2;
     public int MaxTracesCap { get; set; } = 2000;
+    // Span trees embedded in the rendered report. Passing this at all opts the
+    // sink out of size targeting, which is why it is set: without it a wide
+    // sweep loses findings to the budget, and the finding list is the thing an
+    // operator came for. The trees are what gets capped instead.
+    public int MaxTracesEmbedded { get; set; } = 50;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
     public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
 }
@@ -127,6 +132,8 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
         if (analysis.MaxTracesCap is < 1 or > 100_000)
             errors.Add("Hub:Analysis:MaxTracesCap must be between 1 and 100000.");
+        if (analysis.MaxTracesEmbedded is < 0 or > 10_000)
+            errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
         if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
             errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
         if (analysis.ReportRetention <= TimeSpan.Zero)

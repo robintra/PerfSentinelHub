@@ -21,7 +21,8 @@ public sealed record StatusResponse(
 public sealed record StatusLimits(
     int MaxTracesCap,
     int AnalysisTimeoutSeconds,
-    int ReportRetentionHours);
+    int ReportRetentionHours,
+    int MaxTracesEmbedded);
 
 public sealed record DetectionKnob(string Name, int Min, int Max, int Default);
 

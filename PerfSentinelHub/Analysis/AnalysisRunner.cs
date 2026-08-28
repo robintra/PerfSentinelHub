@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
@@ -171,11 +172,24 @@ public sealed partial class AnalysisRunner(
         try
         {
             await File.WriteAllBytesAsync(inputPath, reportJson, cancellationToken);
+            var arguments = new List<string>
+            {
+                "report", "--input", inputPath, "--output", ReportPath(runId),
+                // Always passed. The flag opts the sink out of size targeting,
+                // so every finding reaches the report and only the span trees
+                // are capped. A wide sweep otherwise loses the tail of the list.
+                "--max-traces-embedded",
+                _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture)
+            };
+            if (configPath is not null)
+            {
+                arguments.Add("-c");
+                arguments.Add(configPath);
+            }
+
             var result = await EngineProcess.RunAsync(
                 _analysis.EngineBinaryPath!,
-                configPath is null
-                    ? ["report", "--input", inputPath, "--output", ReportPath(runId)]
-                    : ["report", "--input", inputPath, "--output", ReportPath(runId), "-c", configPath],
+                arguments,
                 MaxReportJsonBytes,
                 _analysis.ReportDirectory,
                 cancellationToken);
@@ -190,6 +204,10 @@ public sealed partial class AnalysisRunner(
     /// <summary>
     /// Reads back what the sink kept, which only the rendered file records. Null
     /// when nothing was dropped: the engine omits the field entirely then.
+    ///
+    /// In practice null on every run since the Hub started passing
+    /// `--max-traces-embedded`, which opts the sink out of trimming findings.
+    /// Kept because the field is the engine's to emit, not the Hub's to assume.
     /// </summary>
     private async Task<int?> ReadKeptFindingsAsync(string runId, CancellationToken cancellationToken)
     {
@@ -259,8 +277,13 @@ public sealed partial class AnalysisRunner(
         if (Contains(standardError, "401") || Contains(standardError, "403") ||
             Contains(standardError, "unauthorized") || Contains(standardError, "forbidden"))
             return AnalysisErrorCodes.SourceAuthFailed;
+        // A timed-out query is a window too wide for the engine's own request
+        // deadline, not a backend that is down. Classing it as unreachable sent
+        // the operator to check a healthy backend.
+        if (Contains(standardError, "timed out"))
+            return AnalysisErrorCodes.Timeout;
         if (Contains(standardError, "connection refused") || Contains(standardError, "dns error") ||
-            Contains(standardError, "error sending request") || Contains(standardError, "timed out"))
+            Contains(standardError, "error sending request"))
             return AnalysisErrorCodes.SourceUnreachable;
         return Contains(standardError, "400") || Contains(standardError, "bad request")
             ? AnalysisErrorCodes.SourceRejectedRequest

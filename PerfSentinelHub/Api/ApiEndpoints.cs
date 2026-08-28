@@ -33,7 +33,8 @@ public static partial class ApiEndpoints
                 new StatusLimits(
                     analysis.MaxTracesCap,
                     (int)analysis.Timeout.TotalSeconds,
-                    (int)analysis.ReportRetention.TotalHours),
+                    (int)analysis.ReportRetention.TotalHours,
+                    analysis.MaxTracesEmbedded),
                 DetectionOverrides.Schema
                     .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))
                     .ToArray());

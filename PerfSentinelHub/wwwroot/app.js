@@ -1054,6 +1054,10 @@
     return state.status.limits.max_traces_cap;
   }
 
+  function embeddedCap() {
+    return state.status.limits.max_traces_embedded;
+  }
+
   /**
    * What the sink guarantees, measured rather than predicted. The design bans
    * predicting a byte size, and its reason still holds: SQL template lengths
@@ -1064,18 +1068,19 @@
     const rows = [
       ["550 KB", "The floor. Fonts, styles and the dashboard itself, present in every report "
         + "whether it found one problem or none."],
-      ["5 MiB", "The size the sink targets. Findings and span trees share it, so a run that "
-        + "finds more of both sits closer to the ceiling."],
-      ["70 %", "Share of the budget reserved for findings. Over it, findings are dropped "
-        + "critical-first, so the ones you most wanted to see survive longest."],
+      ["every finding", "No finding is ever dropped from a report this Hub renders, at any run "
+        + "size. The count on the dashboard is the count that was found."],
+      [String(embeddedCap()) + " trees", "Span trees embedded, highest impact first. The rest of "
+        + "the findings open without a tree and say so, with the trace id to read that one on its "
+        + "own. Set by whoever operates this Hub."],
       ["25", "Hard cap on the top offenders embedded for the Carbon tab, whatever the run size. "
         + "The full ranking is still computed, only the embed is capped."],
-      ["span trees", "One tree per finding, for as many as fit the budget. Past it the rest "
-        + "open without one, and the dashboard says so on the finding."]
+      ["no ceiling", "Because every finding is kept, the file has no fixed upper size. A run that "
+        + "finds a great deal produces a report that takes a moment to open."]
     ];
     return el("div", { class: "sink" }, [
       el("div", { class: "sink-head" }, [
-        el("span", { class: "overline", text: "What comes back, and what it drops first" }),
+        el("span", { class: "overline", text: "What comes back, and what it caps" }),
         el("span", { class: "sink-sub", text: "Constants from the sink, not predictions." })
       ]),
       el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
@@ -1091,7 +1096,7 @@
   function heavyAck() {
     const node = checkbox(
       state.form.ackHeavy,
-      "I accept a report that may come back trimmed.",
+      "I accept a long run and a heavy report.",
       function (checked) { state.form.ackHeavy = checked; updateSubmit(); });
     node.classList.add("checkbox-pill");
     return node;

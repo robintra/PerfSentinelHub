@@ -64,6 +64,21 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task The_render_always_caps_embedded_traces_so_no_finding_is_dropped()
+    {
+        var runner = Runner(StubEngine(ReportJson, exitCode: 0));
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            TestContext.Current.CancellationToken);
+        // Passing the flag at all opts the sink out of size targeting, which is
+        // the point: every finding reaches the report, the trees are capped.
+        Assert.Contains("--max-traces-embedded 50", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Zero_traces_is_an_empty_success_rather_than_a_failure()
     {
         var runner = Runner(StubEngine(
@@ -84,6 +99,8 @@ public sealed class AnalysisRunnerTests : IDisposable
     [InlineData("HTTP status 401 Unauthorized", AnalysisErrorCodes.SourceAuthFailed)]
     [InlineData("backend returned 400 Bad Request", AnalysisErrorCodes.SourceRejectedRequest)]
     [InlineData("thread 'main' panicked", AnalysisErrorCodes.BinaryFailed)]
+    // A window too wide for the engine's request deadline, not a backend down.
+    [InlineData("Error fetching traces from Tempo: request timed out", AnalysisErrorCodes.Timeout)]
     public async Task A_refused_query_names_an_owner_without_leaking_stderr(string stderr, string expected)
     {
         var runner = Runner(StubEngine(ReportJson, exitCode: 1, standardError: stderr));
@@ -165,6 +182,7 @@ public sealed class AnalysisRunnerTests : IDisposable
         File.WriteAllText(path, $"""
             #!/bin/sh
             if [ "$1" = "report" ]; then
+              echo "$@" > render-args.txt
               while [ $# -gt 0 ]; do
                 if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
                 shift

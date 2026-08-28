@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
 
@@ -61,7 +60,7 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
     public async Task A_trace_backend_is_listed_and_carries_no_producer()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var scoped = factory.WithWebHostBuilder(builder =>
+        await using var scoped = factory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Sources =
                 [

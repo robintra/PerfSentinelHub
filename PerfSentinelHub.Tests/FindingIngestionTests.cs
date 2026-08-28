@@ -194,7 +194,7 @@ public sealed class FindingIngestionTests : IDisposable
         var mutated = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:mutated-path",
-            TemplateHash = "mutated-template-hash",
+            TemplateHash = "mutated-template-hash"
         };
         await database.UpsertBatchAsync(source, new ParsedBatch([mutated], 0), 2000, cancellationToken);
 
@@ -219,7 +219,7 @@ public sealed class FindingIngestionTests : IDisposable
         var second = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:other-path",
-            TemplateHash = "other-template-hash",
+            TemplateHash = "other-template-hash"
         };
         // Same batch: two current problems on the endpoint, never a mutation.
         await database.UpsertBatchAsync(
@@ -228,7 +228,7 @@ public sealed class FindingIngestionTests : IDisposable
         var mutated = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:mutated-path",
-            TemplateHash = "mutated-template-hash",
+            TemplateHash = "mutated-template-hash"
         };
         await database.UpsertBatchAsync(source, new ParsedBatch([mutated], 0), 2000, cancellationToken);
 
@@ -248,18 +248,18 @@ public sealed class FindingIngestionTests : IDisposable
         var second = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:v2",
-            TemplateHash = "hash-v2",
+            TemplateHash = "hash-v2"
         };
         await database.UpsertBatchAsync(source, new ParsedBatch([second], 0), 2000, cancellationToken);
         var third = second with
         {
             Signature = "blocking_wait:rider-smoke:checkout:v3",
-            TemplateHash = "hash-v3",
+            TemplateHash = "hash-v3"
         };
         await database.UpsertBatchAsync(source, new ParsedBatch([third], 0), 3000, cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
-            new PerfSentinelHub.Api.FindingQuery(null, null, null, 100), cancellationToken);
+            new Api.FindingQuery(null, null, null, 100), cancellationToken);
 
         // v2 replaced v1, so only v3 keeps a live predecessor chain of 2.
         var successor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
@@ -302,11 +302,12 @@ public sealed class FindingIngestionTests : IDisposable
         await using var check = connection.CreateCommand();
         check.CommandText =
             "SELECT origin_first_seen_ms, depth FROM finding_lineage WHERE successor_signature = 'v2';";
-        await using var reader = await check.ExecuteReaderAsync(cancellationToken);
-        Assert.True(await reader.ReadAsync(cancellationToken));
-        Assert.Equal(1000L, reader.GetInt64(0));
-        Assert.Equal(1, reader.GetInt32(1));
-        await reader.DisposeAsync();
+        await using (var reader = await check.ExecuteReaderAsync(cancellationToken))
+        {
+            Assert.True(await reader.ReadAsync(cancellationToken));
+            Assert.Equal(1000L, reader.GetInt64(0));
+            Assert.Equal(1, reader.GetInt32(1));
+        }
 
         // The columns existing is not enough: the upgraded table must
         // accept the insert the production path issues.
@@ -336,13 +337,13 @@ public sealed class FindingIngestionTests : IDisposable
         var second = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:v2",
-            TemplateHash = "hash-v2",
+            TemplateHash = "hash-v2"
         };
         await database.UpsertBatchAsync(source, new ParsedBatch([second], 0), 2000, cancellationToken);
         var third = second with
         {
             Signature = "blocking_wait:rider-smoke:checkout:v3",
-            TemplateHash = "hash-v3",
+            TemplateHash = "hash-v3"
         };
         await database.UpsertBatchAsync(source, new ParsedBatch([third], 0), 3000, cancellationToken);
 
@@ -350,7 +351,7 @@ public sealed class FindingIngestionTests : IDisposable
         await database.PurgeAsync(2500, cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
-            new PerfSentinelHub.Api.FindingQuery(null, null, null, 100), cancellationToken);
+            new Api.FindingQuery(null, null, null, 100), cancellationToken);
         var survivor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
         Assert.NotNull(survivor.Lineage);
         Assert.Equal(2, survivor.Lineage!.Predecessors);
@@ -383,7 +384,7 @@ public sealed class FindingIngestionTests : IDisposable
         var other = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:other",
-            TemplateHash = "other-hash",
+            TemplateHash = "other-hash"
         };
         await database.UpsertBatchAsync(
             sibling,
@@ -392,7 +393,7 @@ public sealed class FindingIngestionTests : IDisposable
             cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
-            new PerfSentinelHub.Api.FindingQuery(null, null, null, 100), cancellationToken);
+            new Api.FindingQuery(null, null, null, 100), cancellationToken);
         Assert.Equal(
             "not_observed",
             Assert.Single(rows, row => row.Signature == batch.Findings[0].Signature).Status);
@@ -409,7 +410,7 @@ public sealed class FindingIngestionTests : IDisposable
         await database.InitializeAsync(cancellationToken);
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
         var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
-        var query = new PerfSentinelHub.Api.FindingQuery(null, null, null, 100);
+        var query = new Api.FindingQuery(null, null, null, 100);
 
         var seededAt = clock.GetUtcNow().ToUnixTimeMilliseconds();
         await database.UpsertBatchAsync(source, batch, seededAt, cancellationToken);
@@ -426,7 +427,7 @@ public sealed class FindingIngestionTests : IDisposable
         var other = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:other",
-            TemplateHash = "other-hash",
+            TemplateHash = "other-hash"
         };
         await database.UpsertBatchAsync(
             source,
@@ -467,7 +468,7 @@ public sealed class FindingIngestionTests : IDisposable
         var fresh = batch.Findings[0] with
         {
             Signature = "blocking_wait:rider-smoke:checkout:fresh",
-            TemplateHash = "fresh-hash",
+            TemplateHash = "fresh-hash"
         };
         await database.UpsertBatchAsync(
             source,
@@ -476,11 +477,11 @@ public sealed class FindingIngestionTests : IDisposable
             cancellationToken);
 
         var active = await database.QueryFindingsAsync(
-            new PerfSentinelHub.Api.FindingQuery(null, null, null, 1, Status: "active"), cancellationToken);
+            new Api.FindingQuery(null, null, null, 1, Status: "active"), cancellationToken);
         Assert.Equal("blocking_wait:rider-smoke:checkout:fresh", Assert.Single(active).Signature);
 
         var resolved = await database.QueryFindingsAsync(
-            new PerfSentinelHub.Api.FindingQuery(null, null, null, 1, Status: "likely_resolved"),
+            new Api.FindingQuery(null, null, null, 1, Status: "likely_resolved"),
             cancellationToken);
         Assert.Equal(batch.Findings[0].Signature, Assert.Single(resolved).Signature);
     }

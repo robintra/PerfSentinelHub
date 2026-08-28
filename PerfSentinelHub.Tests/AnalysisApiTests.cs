@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -167,10 +166,8 @@ public sealed class AnalysisApiTests : IDisposable
 
     private async Task<HttpResponseMessage> SubmitAsync(string body, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analyses")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analyses");
+        request.Content = new StringContent(body, Encoding.UTF8, "application/json");
         request.Headers.Add("X-Forwarded-User", "operator@example.internal");
         return await _client.SendAsync(request, cancellationToken);
     }

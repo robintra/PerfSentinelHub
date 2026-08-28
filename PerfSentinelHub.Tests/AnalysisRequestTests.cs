@@ -90,7 +90,7 @@ public sealed class AnalysisRequestTests
     [Fact]
     public void An_absolute_window_becomes_iso_8601_utc()
     {
-        var request = Parse($$"""{"service":"orders","from_ms":1787835540600,"to_ms":1787838540400}""",
+        var request = Parse("""{"service":"orders","from_ms":1787835540600,"to_ms":1787838540400}""",
             SourceKinds.JaegerQuery, out _);
 
         var arguments = request!.ToEngineArguments(Source(SourceKinds.JaegerQuery), null).ToList();

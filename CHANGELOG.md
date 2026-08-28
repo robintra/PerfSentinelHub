@@ -42,6 +42,13 @@ All notable changes to PerfSentinelHub are recorded here.
 - `scripts/check-supply-chain.py` accepts a GHCR container pin, restricted to this account's own
   namespace the way the Docker Hub branch is restricted to jetbrains.
 
+- A browser interface at `/`, served from the same origin as the reports. Four screens covering the
+  form, one run, recent runs and fleet health, in plain HTML, CSS and JavaScript with no framework
+  and no build step. The theme is tri-state and hands over to the rendered dashboard through
+  `sessionStorage`, which is why the two share an origin.
+- The launcher is excluded from Sonar coverage and `fonts.css` from analysis: browser code with no
+  test runner in this repository would otherwise be counted at zero and sink the new-code gate.
+
 ### Changed
 
 - JSON responses use snake_case property names, matching the envelope perf-sentinel itself emits.

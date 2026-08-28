@@ -219,6 +219,24 @@ already dead. A run still running when the service stops comes back `interrupted
 replayed on its own: a silent retry would fire a second heavy query at a backend nobody asked to
 query twice.
 
+## Launcher
+
+The Hub serves a browser interface at `/`, from the same origin as the reports it opens. Plain
+HTML, CSS and JavaScript with no framework, no build step and no network fetch: the two typefaces
+are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
+
+Four screens: start an analysis, follow one run, list recent runs, and read fleet health. The form
+adapts to the selected source's `kind` rather than offering an independent live-or-historical
+switch, since a switch would let the operator compose impossible states such as a three-hour window
+against a daemon that keeps ten minutes.
+
+The theme is tri-state (system, light, dark). Only the resolved light or dark ever reaches the DOM,
+so stylesheets see two values and never three. The position is stored under `perf-sentinel:theme`
+in both `localStorage` and `sessionStorage`, the second because the rendered dashboard reads that
+exact key from this origin. That handoff is why the launcher and the reports must share an origin.
+
+Nothing from the server is ever written with `innerHTML`. Every displayed string is a text node.
+
 ## Freshness and recovery
 
 Push is primary. Each source is also polled independently. A successful poll updates observations but does not delete a

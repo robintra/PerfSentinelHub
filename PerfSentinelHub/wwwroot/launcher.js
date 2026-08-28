@@ -323,12 +323,108 @@
     return (n / (1024 * 1024)).toFixed(1) + " MB";
   }
 
+  /**
+   * A value the way a POSIX shell reads it back, byte for byte.
+   *
+   * Single quotes and never double: inside double quotes a shell still expands
+   * `$`, backticks and backslashes, so a service name carrying one would run as
+   * something other than what is displayed. Nothing expands inside single
+   * quotes, and the only character needing care is the quote itself, closed and
+   * reopened around an escaped one.
+   *
+   * The bare form is kept for values drawn entirely from the set no shell
+   * treats specially, because quoting `order-service` would only make the
+   * common line harder to read.
+   *
+   * @param {string} value
+   * @returns {string}
+   */
+  function shq(value) {
+    const text = String(value);
+    if (text !== "" && /^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
+    return "'" + text.replace(/'/g, "'\\''") + "'";
+  }
+
+  /**
+   * Whole seconds, the way the Hub writes them into its own invocation. The
+   * printed window and the launched one have to be the same window.
+   * @param {number} ms
+   * @returns {string}
+   */
+  function isoUtc(ms) {
+    return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
+  /**
+   * The request as the engine's own command line.
+   *
+   * Takes the very object the launcher posts, never the form, so the printed
+   * command and the submitted run cannot drift: one shape feeds both, and a
+   * field added to one without the other goes missing here rather than wrong.
+   * Returns null for a daemon, which takes no arguments at all.
+   *
+   * The break follows the engine's own examples: the subcommand, the endpoint
+   * and the selector on the first line, everything else on the second.
+   *
+   * @param {import("../types").Source} source
+   * @param {Record<string, unknown>} request
+   * @returns {string | null}
+   */
+  function analysisCommand(source, request) {
+    if (!source.engine_subcommand) return null;
+    const head = ["perf-sentinel " + source.engine_subcommand, "--endpoint " + shq(source.base_url)];
+    /** @type {string[]} */
+    const tail = [];
+    if (request["trace_id"] != null) {
+      head.push("--trace-id " + shq(String(request["trace_id"])));
+    } else {
+      head.push("--service " + shq(String(request["service"] == null ? "" : request["service"])));
+      if (request["from_ms"] != null) {
+        tail.push("--from " + isoUtc(Number(request["from_ms"])));
+        tail.push("--to " + isoUtc(Number(request["to_ms"])));
+      } else {
+        tail.push("--lookback " + shq(String(request["lookback"])));
+      }
+      tail.push("--max-traces " + String(request["max_traces"]));
+    }
+    if (source.auth_header_name) tail.push("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN");
+    if (Object.keys(request["detection"] || {}).length > 0) tail.push("-c .perf-sentinel.toml");
+    return tail.length === 0 ? head.join(" ") : head.join(" ") + " \\\n  " + tail.join(" ");
+  }
+
+  /**
+   * The live view of a daemon in a terminal. `--daemon` sits on `query` and not
+   * on `monitor`, so the order is not interchangeable.
+   * @param {import("../types").Source} source
+   * @returns {string}
+   */
+  function monitorCommand(source) {
+    return "perf-sentinel query --daemon " + shq(source.base_url) + " monitor";
+  }
+
+  /**
+   * The overridden thresholds as the file `-c` expects. Only the ones a run
+   * actually changed: a value equal to the engine's own default is dropped
+   * before it reaches here, so every key present is a real departure.
+   * @param {Record<string, number>} detection
+   * @returns {string}
+   */
+  function detectionToml(detection) {
+    return ["[detection]"].concat(Object.keys(detection).sort().map(function (name) {
+      return name + " = " + detection[name];
+    })).join("\n");
+  }
+
+  /** True when a value had to be quoted, so the block can name the shell. */
+  function quotedForShell(command) { return command.indexOf("'") >= 0; }
+
   global.PSL = {
     setVersions,
     get ENGINE() { return ENGINE; },
     get HUB() { return HUB; },
     ERRORS, ERROR_TITLES, KIND_LABEL,
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
-    vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand
+    vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
+    shq, analysisCommand, monitorCommand, detectionToml, quotedForShell
   };
 })(globalThis);

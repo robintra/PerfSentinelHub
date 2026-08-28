@@ -231,6 +231,7 @@ jobs:
         run: |
           dotnet format PerfSentinelHub.sln --verify-no-changes --no-restore
           python3 -m unittest discover -s scripts/tests
+          node --test tests/launcher.test.js
       - name: Build with warnings as errors
         run: dotnet build PerfSentinelHub.sln -c Release --no-restore --warnaserror
       - name: Run backup, health, import, polling, overload, backpressure, response-streaming, SQLite retention, and bounded-storage suites with coverage

@@ -963,6 +963,16 @@ body[data-screen="report"] .shell-footer { display: none; }
   font-weight: 600;
 }
 .advanced-summary > svg { flex: 0 0 auto; color: var(--warn-fg); }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .advanced-body { padding: 0 18px 18px; }
 .advanced-body > .notice-block { margin-bottom: 16px; }
 .advanced-lead { margin: 0 0 16px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); max-width: 78ch; }

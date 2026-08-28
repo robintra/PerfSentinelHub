@@ -37,7 +37,7 @@
     source_unreachable: "nothing answered at its address. Check the daemon or backend is up and that the Hub still has a route to it, then run this again.",
     source_auth_failed: "it answered and refused the Hub's credentials. Rotate the configured auth header or API key in the source's Secret. Nothing here will work until that is done.",
     source_rejected_request: "it answered and refused these arguments, usually an unknown service name or a window it does not keep. Check the service against the backend and try a shorter lookback.",
-    timeout: "the run passed this Hub's time ceiling and was killed, or the backend took too long to answer a window this wide. Halve the trace cap or shorten the window before resubmitting. The same request will time out again unchanged.",
+    timeout: "the run passed this Hub's time ceiling, or the backend took too long to answer. A wide window is the usual cause, halve the trace cap or shorten it. If it repeats instantly whatever the window, the address is probably not answering at all, check the endpoint.",
     output_too_large: "the source returned more than one run is allowed to hold. Narrow the window or lower the trace cap so less comes back, then run it again.",
     binary_failed: "the analysis binary failed for a reason none of the other codes covers, and nothing was stored. Run it once more. If it repeats, send this analysis ID to whoever operates the Hub.",
     invalid_request: "the arguments were rejected before the run started, so nothing was read and nothing was spent. Fix the trace ID or the lookback value and submit again.",
@@ -316,7 +316,10 @@
   function bytes(n) {
     if (!Number.isFinite(n) || n < 0) return "";
     if (n < 1024) return n + " B";
-    if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    const kb = Math.round(n / 1024);
+    // Rounding can carry into the next unit: 1023.5 KiB must read
+    // "1.0 MB", never "1024 KB".
+    if (kb < 1024) return kb + " KB";
     return (n / (1024 * 1024)).toFixed(1) + " MB";
   }
 

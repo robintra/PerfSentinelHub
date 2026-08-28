@@ -269,12 +269,10 @@
     clearTimeout(state.noteTimer);
     render();
     if (state.loading) return;
-    if (screen === "recent") loadRuns();
-    // The launcher shows what past runs weighed, so it needs the same list.
-    // Reloaded on every entry, not once: coming back from a run that just
-    // finished must show that run's weight. onRoute fires on hashchange
-    // alone, so the render inside loadRuns cannot bring us back here.
-    else if (screen === "new") loadRuns();
+    // Both screens read the runs list: recent renders it, the launcher
+    // shows what past runs weighed. Reloaded on every entry, not once, so
+    // coming back from a run that just finished shows its weight.
+    if (screen === "recent" || screen === "new") loadRuns();
     else if (screen === "run" || screen === "report") {
       const id = currentRunId();
       if (id && (!state.run || state.run.id !== id)) loadRun(id);
@@ -956,9 +954,26 @@
       el("div", { id: "traces-ack" }, band.needsAck ? [heavyAck()] : [])
     ]);
     block.appendChild(sinkPanel());
+    // A slot rather than a conditional child, like traces-ack above: the
+    // deferred runs fetch fills it in place without touching the form.
+    const slot = el("div", { id: "weight-history" });
     const history = weightHistory();
-    if (history) block.appendChild(history);
+    if (history) slot.appendChild(history);
+    block.appendChild(slot);
     return block;
+  }
+
+  /** The sink-panel scaffold both info blocks share: head, subtitle, rows. */
+  function sinkBlock(head, sub, rows) {
+    return el("div", { class: "sink" }, [
+      el("div", { class: "sink-head" }, [
+        el("span", { class: "overline", text: head }),
+        el("span", { class: "sink-sub", text: sub })
+      ]),
+      el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
+        return [el("dt", { text: row[0] }), el("dd", { text: row[1] })];
+      }))
+    ]);
   }
 
   /**
@@ -972,29 +987,23 @@
     if (!source || !state.runs) return null;
     const past = state.runs.filter(function (run) {
       const result = run.result || {};
-      const request = run.request || {};
+      // Trace-id runs are excluded: their weight says nothing about the
+      // slider. A missing max_traces on a service run is the server-side
+      // default, not an unmeasured one.
       return run.source_id === source.id &&
         run.status === "succeeded" &&
         typeof result.report_bytes === "number" &&
-        typeof request.max_traces === "number";
+        (run.request || {}).trace_id === undefined;
     }).slice(0, 3);
     if (past.length === 0) return null;
 
-    return el("div", { class: "sink" }, [
-      el("div", { class: "sink-head" }, [
-        el("span", { class: "overline", text: "What your own runs weighed" }),
-        el("span", { class: "sink-sub", text: "Measured on this source, not predicted." })
-      ]),
-      el("dl", { class: "sink-rows" }, past.flatMap(function (run) {
-        return [
-          el("dt", { text: PSL.bytes(run.result.report_bytes) }),
-          el("dd", {
-            text: run.request.max_traces + " traces, " + run.result.findings + " findings, "
-              + PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms)) + " ago"
-          })
-        ];
-      }))
-    ]);
+    return sinkBlock("What your own runs weighed", "Measured on this source, not predicted.",
+      past.map(function (run) {
+        const traces = typeof run.request.max_traces === "number" ? run.request.max_traces : 100;
+        return [PSL.bytes(run.result.report_bytes),
+          traces + " traces, " + run.result.findings + " findings, "
+            + PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms)) + " ago"];
+      }));
   }
 
   function capNote(band, cap) {
@@ -1068,7 +1077,7 @@
     const rows = [
       ["550 KB", "The floor. Fonts, styles and the dashboard itself, present in every report "
         + "whether it found one problem or none."],
-      ["every finding", "No finding is ever dropped from a report this Hub renders, at any run "
+      ["every finding", "Every run this Hub executes renders every finding it found, at any "
         + "size. The count on the dashboard is the count that was found."],
       [String(embeddedCap()) + " trees", "Span trees embedded, for the findings with the highest "
         + "aggregate impact. The rest open without a tree and say so, with the trace id to read "
@@ -1076,18 +1085,11 @@
         + "operates this Hub."],
       ["25", "Hard cap on the top offenders embedded for the Carbon tab, whatever the run size. "
         + "The full ranking is still computed, only the embed is capped."],
-      ["no ceiling", "Because every finding is kept, the file has no fixed upper size. A run that "
-        + "finds a great deal produces a report that takes a moment to open."]
+      ["no ceiling", "The file has no size target of its own once every finding is kept. A run "
+        + "that finds a great deal produces a report that takes a moment to open."]
     ];
-    return el("div", { class: "sink" }, [
-      el("div", { class: "sink-head" }, [
-        el("span", { class: "overline", text: "What comes back, and what it caps" }),
-        el("span", { class: "sink-sub", text: "Constants from the sink, not predictions." })
-      ]),
-      el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
-        return [el("dt", { text: row[0] }), el("dd", { text: row[1] })];
-      }))
-    ]);
+    return sinkBlock("What comes back, and what it caps",
+      "From the sink and this Hub's settings, not predictions.", rows);
   }
 
   function bandStyle(band) {
@@ -1226,7 +1228,7 @@
     const band = PSL.weightBand(state.form.maxTraces, tracesCap());
     if (band.key === "over") return "The trace cap is above what the service accepts.";
     if (band.key === "invalid") return "A run needs at least one trace.";
-    return band.needsAck && !state.form.ackHeavy ? "Confirm the report will be trimmed." : null;
+    return band.needsAck && !state.form.ackHeavy ? "Confirm the long run and heavy report." : null;
   }
 
   /** Restates the request in a sentence, so the button is not a leap of faith. */
@@ -1821,6 +1823,9 @@
 
     const summary = el("summary", { class: "advanced-summary" }, [
       warningGlyph(14),
+      // The glyph is aria-hidden, so the caution it carries needs words a
+      // screen reader receives while the panel is still collapsed.
+      el("span", { class: "visually-hidden", text: "Warning, expert settings." }),
       el("span", { class: "overline", text: "// advanced · what the analysis looks for" }),
       el("span", { id: "advanced-count", class: "advanced-count", hidden: "hidden" })
     ]);
@@ -1835,8 +1840,8 @@
           }),
           el("p", {
             class: "notice-block-body",
-            text: "Set one too low and the report fills with noise, set it too high and real problems "
-              + "go unreported. If you are not sure which way a number should move, leave it."
+            text: "Moved carelessly, they hide real problems or flood the report with noise, and "
+              + "which direction does which differs per threshold. If you are not sure, leave them."
           })
         ])
       ]),
@@ -2007,13 +2012,34 @@
   }
 
   function loadRuns() {
-    return getJson("/api/analyses").then(function (runs) {
+    // limit=500 rather than the API's 50 default: the weight history
+    // filters per source, and on a busy multi-source Hub the newest 50
+    // can all belong to someone else.
+    return getJson("/api/analyses?limit=500").then(function (runs) {
       state.runs = runs;
-      render();
+      applyRuns();
     }).catch(function () {
       state.runs = [];
-      render();
+      applyRuns();
     });
+  }
+
+  /**
+   * On the launcher, refresh the weight-history block in place instead of
+   * re-rendering: the deferred fetch would otherwise replace the whole
+   * form mid-interaction and drop focus, caret and slider capture, the
+   * same hazard the slider handler documents.
+   */
+  function applyRuns() {
+    if (currentScreen() !== "new") {
+      render();
+      return;
+    }
+    const slot = document.getElementById("weight-history");
+    if (!slot) return;
+    slot.replaceChildren();
+    const history = weightHistory();
+    if (history) slot.appendChild(history);
   }
 
   // ------------------------------------------------ screen: dashboard handoff

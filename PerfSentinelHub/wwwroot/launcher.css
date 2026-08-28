@@ -596,9 +596,23 @@ button { font: inherit; }
   overflow: hidden;
   background: var(--surface-3);
 }
-.band-seg[data-seg="ok"] { width: 25%; background: var(--ok-fg); }
-.band-seg[data-seg="warn"] { width: 35%; background: var(--warn-fg); }
-.band-seg[data-seg="crit"] { width: 40%; background: var(--crit-fg); }
+.band-seg[data-seg="ok"] { width: 25%; background: var(--band-ok); }
+.band-seg[data-seg="warn"] { width: 35%; background: var(--band-warn); }
+.band-seg[data-seg="crit"] { width: 40%; background: var(--band-crit); }
+
+/* The bands read as fills, not as text. In dark the -fg tones are already
+   light and carry perfectly. In light they are their opposites, near-black
+   greens and browns meant to be read on white, and an unmixed fill turns the
+   rule into three dark slabs. The tokens stay the source, only their
+   application is lightened, which is what the handoff leaves open. */
+:root { --band-ok: color-mix(in srgb, var(--ok-fg) 62%, #ffffff); }
+:root { --band-warn: color-mix(in srgb, var(--warn-fg) 62%, #ffffff); }
+:root { --band-crit: color-mix(in srgb, var(--crit-fg) 62%, #ffffff); }
+:root[data-theme="dark"] {
+  --band-ok: var(--ok-fg);
+  --band-warn: var(--warn-fg);
+  --band-crit: var(--crit-fg);
+}
 .band-track input[type="range"] {
   position: absolute;
   inset: 0;

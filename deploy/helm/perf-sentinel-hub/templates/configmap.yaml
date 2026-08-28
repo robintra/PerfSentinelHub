@@ -6,6 +6,7 @@ data:
   appsettings.Production.json: |-
     {{- $sources := list }}
     {{- range .Values.sources }}
-    {{- $sources = append $sources (dict "Id" .id "Name" .name "Environment" .environment "BaseUrl" .baseUrl "AuthHeaderName" .authHeaderName) }}
+    {{- $sources = append $sources (dict "Id" .id "Name" .name "Environment" .environment "Kind" (default "daemon" .kind) "RetentionHours" .retentionHours "BaseUrl" .baseUrl "AuthHeaderName" .authHeaderName) }}
     {{- end }}
-    {{ dict "Hub" (dict "DatabasePath" "/data/hub.db" "PollInterval" .Values.hub.pollInterval "HttpTimeout" .Values.hub.httpTimeout "MaxConcurrentPolls" .Values.hub.maxConcurrentPolls "Retention" .Values.hub.retention "ResolutionGrace" .Values.hub.resolutionGrace "DefaultReadLimit" .Values.hub.defaultReadLimit "MaxReadLimit" .Values.hub.maxReadLimit "Sources" $sources) | toJson }}
+    {{- $analysis := dict "EngineBinaryPath" .Values.hub.analysis.engineBinaryPath "ReportDirectory" "/data/reports" "IdentityHeader" .Values.hub.analysis.identityHeader "Workers" .Values.hub.analysis.workers "MaxTracesCap" .Values.hub.analysis.maxTracesCap "Timeout" .Values.hub.analysis.timeout "ReportRetention" .Values.hub.analysis.reportRetention }}
+    {{ dict "Hub" (dict "DatabasePath" "/data/hub.db" "Analysis" $analysis "PollInterval" .Values.hub.pollInterval "HttpTimeout" .Values.hub.httpTimeout "MaxConcurrentPolls" .Values.hub.maxConcurrentPolls "Retention" .Values.hub.retention "ResolutionGrace" .Values.hub.resolutionGrace "DefaultReadLimit" .Values.hub.defaultReadLimit "MaxReadLimit" .Values.hub.maxReadLimit "Sources" $sources) | toJson }}

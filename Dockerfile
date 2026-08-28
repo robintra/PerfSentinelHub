@@ -9,6 +9,11 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
     && dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r "$rid" \
        --self-contained true -p:PublishAot=true -p:Version="$VERSION" --no-restore -o /out
 
+# The engine the Hub runs for an analysis. Pinned by digest like every other
+# image here, and copied rather than downloaded so the build reaches no host
+# outside the registry.
+FROM ghcr.io/robintra/perf-sentinel:0.16.0@sha256:12a6861abd5c9cd0dc2bf7b1d5c60d4d2aaa21c6e443713c4aa2ef3c380c76e3 AS engine
+
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.11-noble-chiseled-extra@sha256:4bf18f918ddae188e11fc4a496e36eae78c43c927720b162bcd8a567e9bebc30
 ARG SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.version="0.1.0" \
@@ -18,6 +23,7 @@ WORKDIR /app
 # Root owns what it runs, so the service account cannot rewrite its own binary.
 COPY --from=build /out/PerfSentinelHub /app/PerfSentinelHub
 COPY --from=build /out/libe_sqlite3.so /app/libe_sqlite3.so
+COPY --from=engine /perf-sentinel /app/perf-sentinel
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 USER 1654:1654

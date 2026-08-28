@@ -34,6 +34,14 @@ All notable changes to PerfSentinelHub are recorded here.
   its parameters. A run interrupted by a restart comes back as such and is never replayed on its
   own, since a silent retry would fire a second heavy query nobody asked for.
 
+- The engine ships inside the Hub image, copied by digest from the published perf-sentinel image
+  rather than downloaded, so the build reaches no host outside the registry. The Helm chart renders
+  the `Hub:Analysis` section and a source's `Kind` and `RetentionHours`, which it previously
+  dropped, and reports live under the existing `/data` volume since the container root is
+  read-only.
+- `scripts/check-supply-chain.py` accepts a GHCR container pin, restricted to this account's own
+  namespace the way the Docker Hub branch is restricted to jetbrains.
+
 ### Changed
 
 - JSON responses use snake_case property names, matching the envelope perf-sentinel itself emits.

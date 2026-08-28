@@ -206,6 +206,23 @@ def container_source_matches(item: dict) -> bool:
         and source.fragment == ""
     ):
         return True
+    ghcr_match = re.fullmatch(
+        rf"/v2/(?P<namespace>{SAFE_NAME})/(?P<repository>{SAFE_NAME})/manifests/(?P<tag>{SAFE_VERSION})",
+        source.path,
+    )
+    # Restricted to this account's own namespace, the way the Docker Hub branch
+    # below is restricted to jetbrains. GHCR hosts anyone's images.
+    if (
+        source.scheme == "https"
+        and source.netloc == "ghcr.io"
+        and ghcr_match
+        and ghcr_match.group("namespace") == "robintra"
+        and item["name"] == f"ghcr.io/{ghcr_match.group('namespace')}/{ghcr_match.group('repository')}"
+        and item["version"] == ghcr_match.group("tag")
+        and source.query == ""
+        and source.fragment == ""
+    ):
+        return True
     docker_hub_match = re.fullmatch(
         rf"/v2/namespaces/(?P<namespace>{SAFE_NAME})/repositories/"
         rf"(?P<repository>{SAFE_NAME})/tags/(?P<tag>{SAFE_VERSION})",

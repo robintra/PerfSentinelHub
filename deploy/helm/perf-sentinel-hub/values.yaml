@@ -10,6 +10,17 @@ hub:
   resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000
   maxReadLimit: 10000
+  analysis:
+    # The engine ships in the image. Set to null to run the Hub as a
+    # collector only, which leaves the launcher unable to start a run.
+    engineBinaryPath: /app/perf-sentinel
+    identityHeader: X-Forwarded-User
+    workers: 2
+    maxTracesCap: 2000
+    timeout: "00:05:00"
+    reportRetention: "1.00:00:00"
+# Each source takes id, name, environment, baseUrl, and optionally
+# kind (daemon, tempo, jaeger_query), retentionHours and authHeaderName.
 sources: []
 persistence:
   size: 1Gi

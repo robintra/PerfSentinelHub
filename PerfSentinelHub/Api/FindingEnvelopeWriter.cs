@@ -88,11 +88,13 @@ public static partial class FindingEnvelopeWriter
     {
         // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
         // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
+#pragma warning disable S3267
         foreach (var property in envelope.EnumerateObject())
         {
             if (property.Name is not ("first_seen" or "last_seen" or "max_confidence" or "sources"
                 or "status" or "lineage"))
                 property.WriteTo(writer);
         }
+#pragma warning restore S3267
     }
 }

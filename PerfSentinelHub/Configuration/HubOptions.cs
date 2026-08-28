@@ -68,6 +68,17 @@ public sealed record SourceOptions
     // stale claim until someone edits it.
     public int? RetentionHours { get; set; }
     public Uri? BaseUrl { get; set; }
+    // The endpoint as it goes on a command line. Computed once so the run the Hub
+    // launches and the command it publishes cannot drift apart.
+    public string EndpointArgument => BaseUrl!.ToString().TrimEnd('/');
+    // The engine subcommand that reads this source, null for a daemon: a daemon is
+    // read over HTTP and has no subcommand of its own.
+    public string? EngineSubcommand => Kind switch
+    {
+        SourceKinds.Daemon => null,
+        SourceKinds.Tempo => "tempo",
+        _ => "jaeger-query"
+    };
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
     // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a

@@ -43,7 +43,17 @@ public sealed record SourceResponse(
     long? LastSuccessMs,
     long? UnreachableSinceMs,
     string? ProducerVersion,
-    string? LastErrorCode);
+    string? LastErrorCode,
+    // The endpoint a command would target, in the exact form the Hub passes to
+    // the engine itself. Published rather than rebuilt in the page: the two
+    // spellings have to be the same bytes.
+    string BaseUrl,
+    // The engine subcommand for this kind, null for a daemon: a daemon is not
+    // queried, it is read.
+    string? EngineSubcommand,
+    // The header's name, never its value. Without it the note cannot say what
+    // belongs in the variable, which the engine expects as "Name: Value".
+    string? AuthHeaderName);
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 

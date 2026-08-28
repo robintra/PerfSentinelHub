@@ -70,7 +70,10 @@ public static partial class ApiEndpoints
                 state?.LastSuccessMs,
                 state?.UnreachableSinceMs,
                 state?.ProducerVersion,
-                state?.LastErrorCode);
+                state?.LastErrorCode,
+                source.EndpointArgument,
+                source.EngineSubcommand,
+                source.AuthHeaderName);
         })];
     }
 

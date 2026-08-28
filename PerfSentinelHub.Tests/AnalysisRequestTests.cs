@@ -118,6 +118,33 @@ public sealed class AnalysisRequestTests
             "--trace-id", "abc123def456"], arguments);
     }
 
+    [Theory]
+    [InlineData(SourceKinds.Tempo, "tempo")]
+    [InlineData(SourceKinds.JaegerQuery, "jaeger-query")]
+    public void The_endpoint_and_subcommand_a_command_would_publish_are_the_ones_the_engine_receives(
+        string kind, string subcommand)
+    {
+        // The launcher prints a command out of these same two properties.
+        // Inlining either back into ToEngineArguments would let the printed
+        // command and the launched run target different things, silently.
+        var source = Source(kind) with { BaseUrl = new Uri("http://backend.example:3200/prefix/") };
+        var request = Parse("""{"trace_id":"abc123def456"}""", kind, out _);
+
+        var arguments = request!.ToEngineArguments(source, null).ToList();
+
+        Assert.Equal(subcommand, arguments[0]);
+        Assert.Equal(source.EngineSubcommand, arguments[0]);
+        Assert.Equal(source.EndpointArgument, arguments[2]);
+        // The trailing slash is dropped once, in the one place both readers use.
+        Assert.Equal("http://backend.example:3200/prefix", arguments[2]);
+    }
+
+    [Fact]
+    public void A_daemon_has_no_subcommand_because_it_is_read_rather_than_queried()
+    {
+        Assert.Null(Source(SourceKinds.Daemon).EngineSubcommand);
+    }
+
     private static AnalysisRequest? Parse(string payload, string kind, out string? error)
     {
         using var document = JsonDocument.Parse(payload);

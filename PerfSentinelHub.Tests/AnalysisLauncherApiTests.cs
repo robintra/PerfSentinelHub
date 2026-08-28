@@ -88,6 +88,75 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
         Assert.Equal(JsonValueKind.Null, source.GetProperty("producer_version").ValueKind);
     }
 
+    [Fact]
+    public async Task A_source_publishes_the_endpoint_and_subcommand_a_command_would_target()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scoped = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
+                options.Sources =
+                [
+                    ..options.Sources,
+                    new SourceOptions
+                    {
+                        Id = "tempo",
+                        Name = "Tempo",
+                        Environment = "production",
+                        Kind = SourceKinds.Tempo,
+                        BaseUrl = new Uri("http://tempo.obs.svc:3200/"),
+                        AuthHeaderName = "Authorization",
+                        AuthHeaderValue = "Bearer topsecret" // gitleaks:allow -- synthetic test credential
+                    }
+                ])));
+        using var client = scoped.CreateClient();
+
+        var backend = await ReadSourceAsync(client, "tempo", cancellationToken);
+        // The trailing slash is gone: the printed command and the launched run
+        // have to spell the endpoint the same way.
+        Assert.Equal("http://tempo.obs.svc:3200", backend.GetProperty("base_url").GetString());
+        Assert.Equal("tempo", backend.GetProperty("engine_subcommand").GetString());
+
+        var daemon = await ReadSourceAsync(client, "test", cancellationToken);
+        // A daemon is read over HTTP, so there is no command to spell at all.
+        Assert.Equal(JsonValueKind.Null, daemon.GetProperty("engine_subcommand").ValueKind);
+    }
+
+    [Fact]
+    public async Task A_source_with_an_auth_header_names_it_and_never_its_value()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scoped = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
+                options.Sources =
+                [
+                    ..options.Sources,
+                    new SourceOptions
+                    {
+                        Id = "guarded",
+                        Name = "Guarded",
+                        Environment = "production",
+                        Kind = SourceKinds.JaegerQuery,
+                        BaseUrl = new Uri("http://jaeger.obs.svc:16686"),
+                        AuthHeaderName = "X-Scope-OrgID",
+                        AuthHeaderValue = "tenant-42" // gitleaks:allow -- synthetic test credential
+                    }
+                ])));
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync("/api/sources", cancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        using var body = JsonDocument.Parse(payload);
+        var source = body.RootElement.EnumerateArray()
+            .Single(candidate => candidate.GetProperty("id").GetString() == "guarded");
+        // The name makes the note actionable, the value never leaves the Hub.
+        Assert.Equal("X-Scope-OrgID", source.GetProperty("auth_header_name").GetString());
+        Assert.DoesNotContain("tenant-42", payload, StringComparison.Ordinal);
+
+        var open = await ReadSourceAsync(client, "test", cancellationToken);
+        Assert.Equal(JsonValueKind.Null, open.GetProperty("auth_header_name").ValueKind);
+    }
+
     private static async Task<JsonElement> ReadSourceAsync(
         HttpClient client,
         string sourceId,

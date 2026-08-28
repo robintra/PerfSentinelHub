@@ -92,9 +92,9 @@ public sealed record AnalysisRequest
     {
         var arguments = new List<string>
         {
-            source.Kind == SourceKinds.Tempo ? "tempo" : "jaeger-query",
+            source.EngineSubcommand!,
             "--endpoint",
-            source.BaseUrl!.ToString().TrimEnd('/'),
+            source.EndpointArgument,
             "--format",
             "json"
         };

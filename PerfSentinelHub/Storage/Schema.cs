@@ -76,4 +76,33 @@ internal static class Schema
         CREATE INDEX IF NOT EXISTS ix_heartbeats_service_endpoint
           ON endpoint_heartbeats(service, endpoint, last_seen_any_ms);
         """;
+
+    // One row per analysis run. The source's name, environment and kind are
+    // denormalized at submission: a run outlives the configuration entry it
+    // came from, and a card that lost its source name is unreadable.
+    // `request_json` and `result_json` are opaque here on purpose, the shape
+    // is the launcher's contract and varies with the source kind.
+    internal const string V3 = """
+        CREATE TABLE IF NOT EXISTS analysis_runs (
+          id TEXT PRIMARY KEY,
+          status TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          source_name TEXT NOT NULL,
+          environment TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          request_json TEXT NOT NULL,
+          requested_by TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          started_at_ms INTEGER,
+          finished_at_ms INTEGER,
+          expires_at_ms INTEGER,
+          producer_version TEXT,
+          error_code TEXT,
+          result_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS ix_runs_status_created
+          ON analysis_runs(status, created_at_ms);
+        CREATE INDEX IF NOT EXISTS ix_runs_created
+          ON analysis_runs(created_at_ms DESC);
+        """;
 }

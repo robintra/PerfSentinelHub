@@ -31,7 +31,8 @@ public sealed class StorageTests
         while (await reader.ReadAsync(cancellationToken))
             names.Add(reader.GetString(0));
         Assert.Equal(
-            ["endpoint_heartbeats", "finding_lineage", "finding_sources", "findings", "schema_migrations", "source_state"],
+            ["analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_sources", "findings",
+                "schema_migrations", "source_state"],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);
     }

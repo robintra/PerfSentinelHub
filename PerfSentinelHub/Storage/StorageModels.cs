@@ -55,3 +55,36 @@ public sealed record SourceState(
     long? UnreachableSinceMs,
     string? ProducerVersion,
     string? LastErrorCode);
+
+public static class AnalysisStatuses
+{
+    public const string Pending = "pending";
+    public const string Running = "running";
+    public const string Succeeded = "succeeded";
+    public const string Failed = "failed";
+    public const string Interrupted = "interrupted";
+    public const string Expired = "expired";
+}
+
+/// <summary>
+/// One analysis run. The source's name, environment and kind are copied at
+/// submission because a run outlives the configuration entry it came from.
+/// `RequestJson` and `ResultJson` stay opaque here: their shape is the
+/// launcher's contract and varies with the source kind.
+/// </summary>
+public sealed record AnalysisRun(
+    string Id,
+    string Status,
+    string SourceId,
+    string SourceName,
+    string Environment,
+    string Kind,
+    string RequestJson,
+    string RequestedBy,
+    long CreatedAtMs,
+    long? StartedAtMs,
+    long? FinishedAtMs,
+    long? ExpiresAtMs,
+    string? ProducerVersion,
+    string? ErrorCode,
+    string? ResultJson);

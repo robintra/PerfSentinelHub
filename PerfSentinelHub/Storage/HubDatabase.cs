@@ -7,7 +7,7 @@ using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Storage;
 
-public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider) : IDisposable
+public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider) : IDisposable
 {
     private readonly string _databasePath = options.Value.DatabasePath;
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
@@ -46,7 +46,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             await using (var migration = connection.CreateCommand())
             {
                 migration.Transaction = transaction;
-                migration.CommandText = Schema.V1 + Schema.V2;
+                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -57,7 +57,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                 version.Transaction = transaction;
                 version.CommandText = """
                     INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
-                    VALUES (1, $applied_at_ms), (2, $applied_at_ms);
+                    VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms);
                     """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",

@@ -227,6 +227,8 @@
   }
 
   function render() {
+    // A tip whose anchor is about to be replaced would never see its mouseleave.
+    closeTip();
     state.screen = currentScreen();
     Array.prototype.forEach.call(document.querySelectorAll(".shell-tab"), function (tab) {
       if (tab.getAttribute("data-screen") === state.screen) tab.setAttribute("aria-current", "page");
@@ -259,6 +261,165 @@
       el("span", { class: "overline", text: text }),
       el("span", { class: "overline-rule", "aria-hidden": "true" })
     ]);
+  }
+
+  // ------------------------------------------------- shared: help affordance
+
+  /**
+   * One floating tip at a time, on <body>. The Sources table scrolls
+   * horizontally and clips its own rows, so a tip anchored in CSS cannot
+   * escape it. The native title attribute is not an option either: it never
+   * appears on keyboard focus.
+   */
+  let openTip = null;
+
+  function closeTip() {
+    if (!openTip) return;
+    openTip.remove();
+    openTip = null;
+  }
+
+  /**
+   * The dashboard's help affordance, same shape and same rule: it sits beside
+   * a heading and never inside one, or a screen reader would read the
+   * explanation as part of the heading.
+   */
+  function helpDot(text) {
+    const dot = el("button", { type: "button", class: "help-dot", "aria-label": text, text: "?" });
+    dot.addEventListener("mouseenter", function () { showTip(dot, text); });
+    dot.addEventListener("focus", function () { showTip(dot, text); });
+    dot.addEventListener("mouseleave", closeTip);
+    dot.addEventListener("blur", closeTip);
+    // Touch has no hover, and a tap would otherwise only focus the dot.
+    dot.addEventListener("click", function () {
+      if (openTip) closeTip();
+      else showTip(dot, text);
+    });
+    return dot;
+  }
+
+  function showTip(anchor, text) {
+    closeTip();
+    const box = el("div", { class: "tipbox", role: "tooltip", text: text });
+    document.body.appendChild(box);
+    const at = anchor.getBoundingClientRect();
+    const size = box.getBoundingClientRect();
+    let left = at.right + 10;
+    let top = at.top + at.height / 2 - size.height / 2;
+    if (left + size.width > globalThis.innerWidth - 12) {
+      // No room beside it, so it sits underneath instead.
+      box.classList.add("tipbox-below");
+      left = Math.min(at.left - 16, globalThis.innerWidth - size.width - 12);
+      top = at.bottom + 10;
+    }
+    box.style.left = Math.max(12, left) + "px";
+    box.style.top = Math.max(12, top) + "px";
+    openTip = box;
+  }
+
+  /** A label with its "?" beside it, which is the only place one belongs. */
+  function titledOverline(text, help) {
+    return el("div", { class: "title-row" }, [
+      el("span", { class: "overline", text: text }),
+      help ? helpDot(help) : null
+    ]);
+  }
+
+  // ------------------------------------------------ shared: a copyable command
+
+  /**
+   * A command, and one button that copies it.
+   *
+   * The text arrives already joined: which flags belong on which line is shell
+   * syntax rather than a layout choice, so it is decided in PSL beside the
+   * quoting.
+   */
+  function terminalBlock(spec) {
+    const code = el("pre", { class: "terminal-code", tabindex: "0", text: spec.text });
+    const status = el("span", { class: "terminal-status", role: "status" });
+    const label = el("span", { text: "Copy" });
+    const button = el("button", {
+      type: "button",
+      class: "pill-button terminal-copy",
+      "aria-label": spec.copyLabel
+    }, [copyGlyph(), label]);
+
+    // One timer per block, held here rather than on state: two blocks are on
+    // screen at once, and a shared handle would let one revert cancel the other.
+    let timer = 0;
+    button.addEventListener("click", function () {
+      const copied = writeClipboard(code, spec.text);
+      label.textContent = copied ? "Copied" : "Copy";
+      if (copied) button.setAttribute("data-copied", "true");
+      status.textContent = copied
+        ? "Copied."
+        : "This browser refused the copy. The command is selected, use your own copy key.";
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        label.textContent = "Copy";
+        button.removeAttribute("data-copied");
+        status.textContent = "";
+      }, 3200);
+    });
+
+    const section = el("section", { class: "card terminal" }, [
+      el("div", { class: "terminal-head" }, [
+        titledOverline(spec.head, spec.help),
+        el("span", { class: "terminal-sub", text: spec.sub })
+      ]),
+      code,
+      el("div", { class: "terminal-actions" }, [button, status])
+    ]);
+    (spec.notes || []).forEach(function (note) {
+      if (note) section.appendChild(el("p", { class: "terminal-note", text: note }));
+    });
+    return section;
+  }
+
+  /**
+   * Copies, or selects and says so.
+   *
+   * navigator.clipboard exists only in a secure context and this Hub is
+   * routinely served over plain HTTP on an internal address. The check comes
+   * before the call rather than after a rejection: Firefox exposes the object
+   * in an insecure context and rejects, and by the time that promise settles
+   * the user activation execCommand needs is gone.
+   *
+   * When even that is refused, the selection it made is left in place: the
+   * operator finishes with their own keystroke, and the block says so instead
+   * of pretending the click worked.
+   */
+  function writeClipboard(code, text) {
+    if (globalThis.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () { selectNode(code); });
+      return true;
+    }
+    const selection = selectNode(code);
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch (error) {
+      copied = false;
+    }
+    if (copied && selection) selection.removeAllRanges();
+    return copied;
+  }
+
+  function selectNode(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = getSelection();
+    if (!selection) return null;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return selection;
+  }
+
+  function copyGlyph() {
+    return svg([
+      ["rect", { x: "9", y: "9", width: "11", height: "11", rx: "2" }],
+      ["path", { d: "M5 15V5a2 2 0 0 1 2-2h10" }]
+    ], 13);
   }
 
   /** Loads whatever the route needs, then renders it. */
@@ -528,9 +689,97 @@
     if (skew) right.appendChild(skewNotice(source, skew));
     if (source && !source.reachable) right.appendChild(unreachableNotice(source));
     right.appendChild(submitRow());
+    // Last, deliberately. The button is the action, and the other way of doing
+    // the same thing is read after the decision rather than against it.
+    right.appendChild(terminalSlot());
 
     section.appendChild(el("div", { class: "new-grid" }, [sourcePanel(), right]));
     return section;
+  }
+
+  /**
+   * Rebuilt in place on every keystroke rather than through render(), which
+   * would take the focus out of the field being typed into.
+   */
+  function terminalSlot() {
+    const slot = el("div", { id: "terminal-panels", class: "terminal-stack" });
+    queueMicrotask(refreshTerminal);
+    return slot;
+  }
+
+  function refreshTerminal() {
+    const slot = document.getElementById("terminal-panels");
+    if (!slot) return;
+    slot.replaceChildren.apply(slot, terminalPanels(selectedSource()));
+  }
+
+  /**
+   * The command, and the file it needs when thresholds were changed. Empty for
+   * a daemon, which is read over HTTP and has no command line at all.
+   */
+  function terminalPanels(source) {
+    if (!source) return [];
+    const request = buildRequest(source);
+    const command = PSL.analysisCommand(source, request);
+    if (!command) return [];
+
+    const changed = Object.keys(state.form.detection).length;
+    const trace = state.form.mode === "trace";
+    const panels = [terminalBlock({
+      head: "// or from your terminal",
+      sub: "The same run, spelled out.",
+      help: "The Hub runs this same binary. What is missing here is the JSON output and the "
+        + "second command that renders it, which exist so the Hub can build a dashboard. "
+        + "A terminal does not need either.",
+      text: command,
+      copyLabel: "Copy the analysis command",
+      notes: [
+        "This is the same request the button above sends, written as the engine's own "
+          + "arguments. It runs wherever perf-sentinel is installed and does not pass through "
+          + "this Hub: no worker slot, no queue, and no report kept here for "
+          + state.status.limits.report_retention_hours + " hours.",
+        "It prints its findings to the terminal. There is no dashboard at the end of it and no "
+          + "link to share, which is the trade for not spending a worker.",
+        trace
+          ? "An ID resolves to exactly one trace, so the engine takes neither a window nor a "
+            + "trace cap here, exactly as the form above stops offering them."
+          : null,
+        !trace && !state.form.service.trim()
+          ? "No service name yet, so the command carries an empty one. It is shown as it stands "
+            + "and will be refused as it stands."
+          : null,
+        source.auth_header_name
+          ? "This source needs an auth header. The Hub holds one and does not disclose it, so "
+            + "the command reads yours from PERF_SENTINEL_SOURCE_TOKEN instead. Export the whole "
+            + "header line, " + source.auth_header_name + " and the value, not the value on its own."
+          : null,
+        PSL.quotedForShell(command)
+          ? "Quoted for a POSIX shell. PowerShell and cmd quote differently, and this line is "
+            + "not valid in either."
+          : null,
+        changed > 0
+          ? (changed === 1 ? "1 detection threshold is" : changed + " detection thresholds are")
+            + " changed above. They have no command-line flag: the engine reads them from a "
+            + "file, so the command carries -c .perf-sentinel.toml and the file it expects is below."
+          : null
+      ]
+    })];
+
+    if (changed > 0) {
+      panels.push(terminalBlock({
+        head: "// .perf-sentinel.toml",
+        sub: "Only the thresholds you changed.",
+        text: PSL.detectionToml(state.form.detection),
+        copyLabel: "Copy the .perf-sentinel.toml fragment",
+        notes: [
+          "Every threshold this file leaves out keeps the engine's own default, and the Hub only "
+            + "records a value that actually departs from one. A run launched from the button "
+            + "above carries the same numbers, so the two are comparable with each other."
+        ]
+      }));
+    }
+
+    return panels;
   }
 
   function hubUnreachableBanner() {
@@ -628,7 +877,13 @@
           text: "The window is the daemon's own ring buffer. There is nothing to widen: asking for "
             + "three hours from a process that keeps ten minutes would be a request the source "
             + "cannot answer, so the launcher does not offer it."
-        })
+        }),
+        el("p", {
+          class: "notice-sub",
+          text: "There is no command line for this either. What this daemon is configured with, "
+            + "and what it is holding at this moment, is on the Sources screen, on its own row."
+        }),
+        el("a", { class: "pill-button pill-sm", href: "#/sources", text: "Open its row on Sources" })
       ])
     ]);
   }
@@ -1290,6 +1545,7 @@
     button.title = blocker || "";
     sentence.textContent = blocker || submitSentence();
     sentence.setAttribute("data-blocked", blocker ? "true" : "false");
+    refreshTerminal();
   }
 
   function buildRequest(source) {

@@ -981,3 +981,82 @@ body[data-screen="report"] .shell-footer { display: none; }
 .knob-default { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
 .knob-body { display: block; margin: 5px 0 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-2); max-width: 74ch; }
 .input-knob { width: 118px; font-variant-numeric: tabular-nums; }
+
+/* --------------------------------------------------- shared: help affordance */
+
+/* The dashboard's own "?", same size and same rule: beside a heading, never
+   inside one. */
+.help-dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+.help-dot:hover { border-color: var(--brand); color: var(--brand-text); }
+.title-row { display: flex; align-items: center; gap: 9px; min-width: 0; }
+
+/* Floating rather than a ::after: the Sources table scrolls horizontally and
+   clips its own rows, so an anchored tip cannot escape it. */
+.tipbox {
+  position: fixed;
+  z-index: 60;
+  width: max-content;
+  max-width: 320px;
+  min-width: min-content;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  line-height: 1.65;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------ shared: copyable command */
+
+.terminal-stack { display: flex; flex-direction: column; gap: 14px; }
+.terminal { padding: 16px 18px 18px; }
+.terminal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 11px; }
+.terminal-sub { font-size: 11.5px; color: var(--text-3); }
+/* Never soft-wrapped: the backslash continuations are shell syntax, and a
+   visual wrap beside one would read as a line that is not there. */
+.terminal-code {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow-x: auto;
+}
+.terminal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.terminal-copy { height: 30px; padding: 0 13px; font-size: 12px; }
+.pill-button[data-copied="true"] {
+  border-color: var(--ok-bd);
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.terminal-status { font-size: 11.5px; color: var(--text-3); }
+.terminal-note {
+  margin: 11px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  max-width: 78ch;
+}

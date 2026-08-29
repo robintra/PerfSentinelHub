@@ -327,5 +327,7 @@ public static partial class ApiEndpoints
 /// </summary>
 public sealed class DaemonViewGate() : RequestGate(MaxReads)
 {
-    private const int MaxReads = 2;
+    // Public because DaemonViewApiTests pins it, the same reason
+    // ImportGate.MaxImports is: the cap is a contract, not a detail.
+    public const int MaxReads = 2;
 }

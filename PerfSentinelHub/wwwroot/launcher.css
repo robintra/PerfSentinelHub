@@ -745,9 +745,10 @@ button { font: inherit; }
    than --surface-2 so it still reads on a card that is itself --surface-2. */
 .code-inline {
   font-family: var(--font-mono);
-  /* No size of its own: the dashboard's `code` rule sets the family and nothing
-     else, so a chip is always the size of the sentence it sits in rather than a
-     fixed size that reads large in one place and small in another. */
+  /* The size of the sentence it sits in, as the dashboard's own `code` rule
+     does, rather than a fixed size that reads large in one place and small in
+     another. The floor is kept: a chip is text, and no text goes under it. */
+  font-size: max(11.5px, 1em);
   /* A chip broken across lines splits its own background mid-token. */
   white-space: nowrap;
   background: var(--surface-3);

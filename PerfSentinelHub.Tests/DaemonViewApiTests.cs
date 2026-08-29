@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Tests;
@@ -284,6 +285,40 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
         using var body = JsonDocument.Parse(payload);
         return (body.RootElement.Clone(), payload);
+    }
+
+    [Fact]
+    public async Task A_full_gate_refuses_a_full_read_and_says_when_to_come_back()
+    {
+        // The cap exists because each full read buffers a report snapshot, so
+        // it is a memory contract rather than a detail. A status refresh goes
+        // around it, and has to keep doing so while the gate is full.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await FakeDaemon.StartAsync(Answering, cancellationToken);
+        await using var scoped = Scoped(daemon.BaseUrl, null, null);
+        using var client = scoped.CreateClient();
+        var gate = scoped.Services.GetRequiredService<DaemonViewGate>();
+
+        var entered = Enumerable.Range(0, DaemonViewGate.MaxReads).Count(_ => gate.TryEnter());
+        try
+        {
+            Assert.Equal(DaemonViewGate.MaxReads, entered);
+            Assert.False(gate.TryEnter());
+
+            using var refused = await client.GetAsync("/api/sources/probe/daemon", cancellationToken);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+            Assert.Equal("1", refused.Headers.RetryAfter?.ToString());
+
+            using var light = await client.GetAsync(
+                "/api/sources/probe/daemon?refresh=status",
+                cancellationToken);
+            Assert.Equal(HttpStatusCode.OK, light.StatusCode);
+        }
+        finally
+        {
+            for (var slot = 0; slot < entered; slot++)
+                gate.Exit();
+        }
     }
 
     private WebApplicationFactory<Program> Scoped(Uri baseUrl, string? headerName, string? headerValue) =>

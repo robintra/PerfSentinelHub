@@ -389,7 +389,7 @@
         + "one. This Hub runs " + version + " and the command is spelled for it, an older "
         + "engine may refuse a flag it does not have yet. Take the same build: "
       : "This runs the `perf-sentinel` binary itself, so the machine you type it into needs "
-        + "one. This Hub has none configured, so there is no version to match: ");
+        + "one. This Hub reports no engine version, so there is none to match here: ");
     note.appendChild(el("a", {
       class: "terminal-link",
       href: PSL.releaseUrl(version),
@@ -420,7 +420,7 @@
     button.addEventListener("click", function () {
       // Read off the node, not off the spec: a command that changes under the
       // reader would otherwise copy the line it replaced.
-      writeClipboard(code, code.textContent).then(function (copied) {
+      writeClipboard(code).then(function (copied) {
         label.textContent = copied ? "Copied" : "Copy";
         if (copied) button.setAttribute("data-copied", "true");
         status.textContent = copied
@@ -465,7 +465,8 @@
    * operator finishes with their own keystroke, and the block says so instead
    * of pretending the click worked.
    */
-  function writeClipboard(code, text) {
+  function writeClipboard(code) {
+    const text = code.textContent;
     if (globalThis.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
       // The label waits for this promise: claiming "Copied" before it settles
       // would announce a success a denied permission can still take back.
@@ -886,14 +887,17 @@
     return el("div", { class: "daemon-panel" }, [
       el("p", {
         class: "daemon-source-note",
-        text: "Reported by this daemon over its query API. The Hub relays it and verifies none of it."
+        text: "Reported by this daemon over its query API. The Hub relays it and verifies none of "
+          + "it. Written for whoever operates the daemon: everything here is read-only, and every "
+          + "setting below is changed where the daemon is deployed, in its Helm values or its "
+          + "own configuration file, never from this Hub."
       }),
       el("div", { id: "daemon-top-" + index }, [daemonTopRow(source, view, index)]),
       terminalBlock({
         head: "// the same view in your terminal",
         sub: "The same figures, plus the tabs this screen leaves out.",
         id: "monitor-command-" + index,
-        text: PSL.monitorCommand(source, refreshMs(source.id) / 1000),
+        text: PSL.monitorCommand(source, refreshSeconds(source.id)),
         copyLabel: "Copy the monitor command for " + source.name,
         notes: [
           "`query monitor` carries the energy and carbon breakdown this screen only summarises. "
@@ -1035,13 +1039,22 @@
    * command does not have: a terminal session is opened to watch, a table row
    * is often opened just to read a setting once.
    */
-  const REFRESH_CHOICES = [[0, "off"], [5000, "5 s"], [10000, "10 s"], [30000, "30 s"], [60000, "60 s"]];
+  // Declared in seconds, not milliseconds: the engine's `--refresh` takes whole
+  // seconds and the printed command mirrors this list, so a choice that is not
+  // one would drop the flag while the row kept re-reading. Deriving the
+  // milliseconds from the seconds makes that impossible rather than unlikely.
+  const REFRESH_SECONDS = [0, 5, 10, 30, 60];
+  const REFRESH_CHOICES = REFRESH_SECONDS.map(function (seconds) {
+    return [seconds * 1000, seconds ? seconds + " s" : "off"];
+  });
   const DEFAULT_REFRESH_MS = 5000;
 
   function refreshMs(sourceId) {
     const chosen = state.daemonRefreshMs[sourceId];
     return chosen === undefined ? DEFAULT_REFRESH_MS : chosen;
   }
+
+  function refreshSeconds(sourceId) { return refreshMs(sourceId) / 1000; }
 
   function refreshControl(source, index) {
     const ms = refreshMs(source.id);
@@ -1061,7 +1074,7 @@
       // Only the line is rewritten: the note under it is worded to hold at any
       // interval, including off, so it never needs to be.
       const printed = document.getElementById("monitor-command-" + index);
-      if (printed) printed.textContent = PSL.monitorCommand(source, Number(select.value) / 1000);
+      if (printed) printed.textContent = PSL.monitorCommand(source, refreshSeconds(source.id));
     });
     const ring = refreshRing();
     if (ms) ring.querySelector(".refresh-ring-fill").style.setProperty("--cycle", ms + "ms");

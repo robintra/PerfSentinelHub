@@ -33,11 +33,14 @@ public sealed record AnalysisOptions
     // Header a reverse proxy sets with the established identity. The Hub has
     // no account surface and records the value as a claim, never verifies it.
     public string IdentityHeader { get; set; } = "X-Forwarded-User";
-    public int Workers { get; set; } = 2;
+    // Not a setting: configuration binding ignores a const, and it sits with the
+    // properties only to be near the one it bounds.
     // The engine's own ceiling on --max-traces, which it enforces when it parses
     // its arguments. A cap above it would pass every check here and then fail the
     // run on an engine error the operator never asked for.
     public const int EngineMaxTraces = 10_000;
+
+    public int Workers { get; set; } = 2;
     public int MaxTracesCap { get; set; } = 2000;
     // Span trees embedded in the rendered report. Passing this at all opts the
     // sink out of size targeting, which is why it is set: without it a wide
@@ -54,7 +57,7 @@ public sealed record AnalysisOptions
 /// configured source, so it is stated here rather than implied, and one key
 /// turns it off for a deployment with no egress.
 /// </summary>
-public sealed class UpdateCheckOptions
+public sealed record UpdateCheckOptions
 {
     public bool Enabled { get; set; } = true;
     // A release lands a few times a month at most. Anything shorter spends

@@ -337,9 +337,14 @@
       class: "shell-version-update",
       title: "The newest release published on GitHub, read by this Hub on its update-check "
         + "interval. It says a newer version exists, not that this one is wrong."
-    }, [svg([["path", { d: "M12 19V5M5 12l7-7 7 7" }]], 12)]);
+    }, [
+      svg([["path", { d: "M12 19V5M5 12l7-7 7 7" }]], 12),
+      // Said, not left to be inferred from two numbers side by side. The Hub
+      // asked and got an answer, so it can claim this much.
+      el("span", { class: "shell-version-news", text: "update available" })
+    ]);
     behind.forEach(function (row, index) {
-      if (index > 0) segment.appendChild(el("span", { text: "\u00b7" }));
+      segment.appendChild(el("span", { text: index === 0 ? ":" : "\u00b7" }));
       segment.appendChild(el("a", {
         href: row[2] || PSL.releaseUrl(row[1].latest),
         target: "_blank",

@@ -30,11 +30,17 @@ public sealed partial class UpdateChecker(
     private readonly UpdateCheckOptions _settings = options.Value.UpdateCheck;
     private readonly TimeSpan _timeout = options.Value.HttpTimeout;
 
+    // Written here, read on every request thread. Volatile on both sides so the
+    // publication is ordered: a plain reference store is atomic but carries no
+    // barrier, and arm64 is a shipped target.
+    private string? _latestEngineVersion;
+    private string? _latestHubVersion;
+
     /// <summary>The newest published engine release, or null until one is read.</summary>
-    public string? LatestEngineVersion { get; private set; }
+    public string? LatestEngineVersion => Volatile.Read(ref _latestEngineVersion);
 
     /// <summary>The newest published Hub release, or null until one is read.</summary>
-    public string? LatestHubVersion { get; private set; }
+    public string? LatestHubVersion => Volatile.Read(ref _latestHubVersion);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -47,10 +53,10 @@ public sealed partial class UpdateChecker(
         using var timer = new PeriodicTimer(_settings.Interval);
         do
         {
-            LatestEngineVersion = await ReadAsync(_settings.EngineEndpoint, "engine", stoppingToken)
-                ?? LatestEngineVersion;
-            LatestHubVersion = await ReadAsync(_settings.HubEndpoint, "hub", stoppingToken)
-                ?? LatestHubVersion;
+            var engine = await ReadAsync(_settings.EngineEndpoint, "engine", stoppingToken);
+            if (engine is not null) Volatile.Write(ref _latestEngineVersion, engine);
+            var hub = await ReadAsync(_settings.HubEndpoint, "hub", stoppingToken);
+            if (hub is not null) Volatile.Write(ref _latestHubVersion, hub);
         }
         while (await SafeWaitAsync(timer, stoppingToken));
     }
@@ -167,11 +173,11 @@ public sealed partial class UpdateChecker(
         Message = "No published {What} release to compare against, the endpoint answered {Status}.")]
     private static partial void LogUnavailable(ILogger logger, string what, int status);
 
-    [LoggerMessage(EventId = 1504, Level = LogLevel.Warning,
-        Message = "The newest {What} release was not read: the answer was larger than this Hub reads.")]
-    private static partial void LogTooLarge(ILogger logger, string what);
-
     [LoggerMessage(EventId = 1503, Level = LogLevel.Warning,
         Message = "Could not read the newest {What} release ({Reason}), so the Hub keeps reporting what it last knew.")]
     private static partial void LogFailed(ILogger logger, string what, string reason);
+
+    [LoggerMessage(EventId = 1504, Level = LogLevel.Warning,
+        Message = "The newest {What} release was not read: the answer was larger than this Hub reads.")]
+    private static partial void LogTooLarge(ILogger logger, string what);
 }

@@ -9,5 +9,12 @@ data:
     {{- $sources = append $sources (dict "Id" .id "Name" .name "Environment" .environment "Kind" (default "daemon" .kind) "RetentionHours" .retentionHours "BaseUrl" .baseUrl "AuthHeaderName" .authHeaderName) }}
     {{- end }}
     {{- $analysis := dict "EngineBinaryPath" .Values.hub.analysis.engineBinaryPath "ReportDirectory" "/data/reports" "IdentityHeader" .Values.hub.analysis.identityHeader "Workers" .Values.hub.analysis.workers "MaxTracesCap" .Values.hub.analysis.maxTracesCap "Timeout" .Values.hub.analysis.timeout "ReportRetention" .Values.hub.analysis.reportRetention }}
-    {{- $updateCheck := dict "Enabled" .Values.hub.updateCheck.enabled }}
+    {{- /* Nil-safe and false-safe. An upgrade with --reuse-values carries values
+           that predate this key, so a bare lookup is a nil pointer; and `default
+           true` would read an explicit false as absent and turn the check back
+           on. hasKey is the only form that tells the two apart. */}}
+    {{- $update := .Values.hub.updateCheck | default dict }}
+    {{- $enabled := true }}
+    {{- if hasKey $update "enabled" }}{{- $enabled = $update.enabled }}{{- end }}
+    {{- $updateCheck := dict "Enabled" $enabled }}
     {{ dict "Hub" (dict "DatabasePath" "/data/hub.db" "Analysis" $analysis "UpdateCheck" $updateCheck "PollInterval" .Values.hub.pollInterval "HttpTimeout" .Values.hub.httpTimeout "MaxConcurrentPolls" .Values.hub.maxConcurrentPolls "Retention" .Values.hub.retention "ResolutionGrace" .Values.hub.resolutionGrace "DefaultReadLimit" .Values.hub.defaultReadLimit "MaxReadLimit" .Values.hub.maxReadLimit "Sources" $sources) | toJson }}

@@ -53,6 +53,21 @@ public sealed class UpdateCheckTests
                 .Succeeded));
     }
 
+    [Theory]
+    // The floor itself is allowed, one tick under it is not. Tested at the edge
+    // because a comparison that slipped to <= would pass every other case.
+    [InlineData(15, true)]
+    [InlineData(14, false)]
+    public void The_interval_floor_is_the_fifteen_minutes_the_readme_documents(int minutes, bool valid)
+    {
+        var options = ConfigurationTests.ValidOptions() with
+        {
+            UpdateCheck = new UpdateCheckOptions { Interval = TimeSpan.FromMinutes(minutes) }
+        };
+
+        Assert.Equal(valid, new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
     [Fact]
     public void A_disabled_check_stops_validating_what_it_will_never_read()
     {

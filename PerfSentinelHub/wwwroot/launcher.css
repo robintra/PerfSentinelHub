@@ -129,6 +129,8 @@ button { font: inherit; }
 .shell-version-update { display: inline-flex; align-items: center; gap: 5px; color: var(--brand-text); }
 .shell-version-update svg { width: 12px; height: 12px; }
 .shell-version-update a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* The claim carries the weight, the versions after it are the detail. */
+.shell-version-news { font-weight: 600; }
 
 .shell-identity {
   display: inline-flex;

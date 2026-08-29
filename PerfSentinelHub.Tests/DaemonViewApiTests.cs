@@ -173,6 +173,31 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
     }
 
     [Fact]
+    public async Task A_status_refresh_carries_the_gauges_and_nothing_that_needs_a_restart()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await FakeDaemon.StartAsync(Answering, cancellationToken);
+        await using var scoped = Scoped(daemon.BaseUrl, null, null);
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync(
+            "/api/sources/probe/daemon?refresh=status",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        var view = body.RootElement;
+
+        Assert.Equal(90.0, view.GetProperty("traces").GetProperty("pct").GetDouble());
+        Assert.Equal("0.16.0", view.GetProperty("version").GetString());
+        // No config, no defaults, no hints, no state: none of it can change
+        // without a restart or a full read, so a light body never carries it.
+        Assert.False(view.TryGetProperty("config", out _));
+        Assert.False(view.TryGetProperty("warnings", out _));
+        Assert.False(view.TryGetProperty("state", out _));
+    }
+
+    [Fact]
     public async Task The_view_never_echoes_the_source_auth_header_value()
     {
         await using var daemon = await FakeDaemon.StartAsync(

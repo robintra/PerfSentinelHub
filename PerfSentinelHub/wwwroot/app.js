@@ -51,6 +51,9 @@
     // the Hub's observed_at_ms from Date.now() would bake the clock skew
     // between the two machines into "Read X ago".
     daemonReadAt: {},
+    // When the last FULL read happened: light ticks carry the gauges alone,
+    // and once a minute the full read re-syncs hints, state and settings age.
+    daemonFullReadAt: {},
     terminalSig: null,
     form: {
       sourceId: null,
@@ -815,6 +818,7 @@
       .then(function (view) {
         state.daemonViews[source.id] = view;
         state.daemonReadAt[source.id] = Date.now();
+        state.daemonFullReadAt[source.id] = Date.now();
       })
       .catch(function (error) {
         // The gate's 503 is the Hub being briefly full, not the Hub failing:
@@ -908,9 +912,9 @@
     const verdict = DAEMON_VERDICT[view.state] || DAEMON_VERDICT.unknown;
     const main = el("div", { class: "daemon-top-main" }, [
       el("div", { class: "sink-head" }, [
-        titledOverline("// right now", "Read from the daemon on the interval below. Each read is "
-          + "one request to this Hub and three from it to the daemon, so the interval is a cost "
-          + "as much as a freshness setting."),
+        titledOverline("// right now", "Read from the daemon on the interval below. A tick asks "
+          + "the daemon for its status alone, and once a minute the full export runs to refresh "
+          + "the hints, so the interval prices a small read, not the heavy one."),
         el("span", { class: "sink-sub refresh-read", id: "refresh-read-" + index })
       ]),
       refreshControl(source, view, index),
@@ -1134,6 +1138,10 @@
    * change without a restart, so rebuilding those every few seconds would
    * throw away the reader's open groups and their focus for nothing.
    */
+  // A light tick costs the daemon one status read. The full read, which
+  // buffers the export to refresh the hints, runs at most this often.
+  const FULL_READ_EVERY_MS = 60000;
+
   function refreshDaemon(source, index) {
     // A separate flag rather than a sentinel in daemonViews: a render during
     // the flight reads daemonViews, and a string there would crash it.
@@ -1141,14 +1149,29 @@
     state.daemonInFlight[source.id] = true;
     restartCycle(source.id, index);
     const previous = state.daemonViews[source.id];
-    getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
+    const full = Date.now() - (state.daemonFullReadAt[source.id] || 0) >= FULL_READ_EVERY_MS;
+    getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon" + (full ? "" : "?refresh=status"))
       .then(function (view) {
         // A transient error does not outrank data: the last good reading is
         // kept and its age keeps counting, exactly as a dropped connection is
         // handled below.
         if (view.error_code && previous && !previous.error_code) return;
+        if (!full && previous && !previous.error_code) {
+          // A light body carries the gauges alone: they land on the kept view,
+          // and the state is theirs plus the hints of the last full read.
+          view = Object.assign({}, previous, {
+            observed_at_ms: view.observed_at_ms,
+            version: view.version,
+            uptime_seconds: view.uptime_seconds,
+            traces: view.traces,
+            analysis_queue: view.analysis_queue,
+            findings: view.findings,
+            state: PSL.lightState(view, previous.warnings.length)
+          });
+        }
         state.daemonViews[source.id] = view;
         state.daemonReadAt[source.id] = Date.now();
+        if (full) state.daemonFullReadAt[source.id] = Date.now();
       })
       .catch(function () {
         // Keep the last good reading rather than blanking the panel, and let

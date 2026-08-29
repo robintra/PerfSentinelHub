@@ -42,6 +42,23 @@ public static partial class ApiEndpoints
             return;
         }
 
+        // A status-only refresh reads a few hundred bytes and buffers no export,
+        // so it goes around the gate the export buffering justifies.
+        if (context.Request.Query["refresh"] == "status")
+        {
+            var status = await TryReadAsync<DaemonStatus>(
+                async () => await client.FetchStatusAsync(source, cancellationToken),
+                cancellationToken);
+            await DaemonViewWriter.WriteLightAsync(
+                context.Response,
+                source.Id,
+                timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
+                status.Value,
+                status.ErrorCode,
+                cancellationToken);
+            return;
+        }
+
         if (!gate.TryEnter())
         {
             context.Response.Headers.RetryAfter = "1";

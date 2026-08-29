@@ -69,6 +69,37 @@ public static class DaemonViewWriter
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// The status-only refresh body: the gauges and nothing that cannot change
+    /// without a restart. No state either, deliberately: state folds in the
+    /// daemon's hints, which a light read does not carry, so the page derives
+    /// it from these gauges plus the hints of its last full read.
+    /// </summary>
+    public static async Task WriteLightAsync(
+        HttpResponse response,
+        string sourceId,
+        long observedAtMs,
+        DaemonStatus? status,
+        string? errorCode,
+        CancellationToken cancellationToken)
+    {
+        response.ContentType = "application/json";
+        await using var writer = new Utf8JsonWriter(response.BodyWriter);
+        writer.WriteStartObject();
+        writer.WriteString("source_id", sourceId);
+        writer.WriteNumber("observed_at_ms", observedAtMs);
+        JsonWrite.StringOrNull(writer, "error_code", errorCode);
+        JsonWrite.StringOrNull(writer, "version", status?.Version);
+        JsonWrite.NumberOrNull(writer, "uptime_seconds", status?.UptimeSeconds);
+        var gauges = status is null ? null : DaemonView.Read(status);
+        WriteGauge(writer, "traces", gauges?.Traces);
+        WriteGauge(writer, "analysis_queue", gauges?.AnalysisQueue);
+        WriteGauge(writer, "findings", gauges?.Findings);
+        writer.WriteEndObject();
+        await writer.FlushAsync(cancellationToken);
+        await response.BodyWriter.FlushAsync(cancellationToken);
+    }
+
     private static void WriteGauge(Utf8JsonWriter writer, string name, DaemonGauge? gauge)
     {
         if (gauge is null)

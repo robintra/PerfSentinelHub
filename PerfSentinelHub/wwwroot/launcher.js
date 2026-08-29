@@ -432,6 +432,22 @@
   /** True when a value had to be quoted, so the block can name the shell. */
   function quotedForShell(command) { return command.indexOf("'") >= 0; }
 
+  /**
+   * The state a light refresh yields, mirroring DaemonView.Classify with the
+   * hints of the page's last full read: a status-only body carries the gauges
+   * but not the daemon's hints, and once a minute a full read re-syncs both.
+   *
+   * @param {{traces: any, analysis_queue: any, findings: any}} view
+   * @param {number} warningCount
+   * @returns {string}
+   */
+  function lightState(view, warningCount) {
+    const gauges = [view.traces, view.analysis_queue, view.findings];
+    if (gauges.some(function (g) { return g && g.at_capacity; })) return "near_capacity";
+    if (warningCount > 0) return "advised";
+    return gauges.every(function (g) { return !g || g.pct === null; }) ? "unknown" : "ok";
+  }
+
   global.PSL = {
     setVersions,
     get ENGINE() { return ENGINE; },
@@ -439,6 +455,6 @@
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
-    shq, analysisCommand, monitorCommand, detectionToml, quotedForShell
+    shq, analysisCommand, monitorCommand, detectionToml, quotedForShell, lightState
   };
 })(globalThis);

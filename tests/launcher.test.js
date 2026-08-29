@@ -98,3 +98,17 @@ test("the shell note fires only when something was actually quoted", () => {
   assert.ok(!PSL.quotedForShell(PSL.analysisCommand(tempo, { service: "orders", max_traces: 1, lookback: "1h" })));
   assert.ok(PSL.quotedForShell(PSL.analysisCommand(tempo, { service: "two words", max_traces: 1, lookback: "1h" })));
 });
+
+test("a light refresh classifies from its gauges plus the kept hints", () => {
+  // Mirrors DaemonView.Classify: a status-only body has no hints of its own.
+  const at = { value: 90, capacity: 100, pct: 90, at_capacity: true };
+  const under = { value: 1, capacity: 100, pct: 1, at_capacity: false };
+  const unknown = { value: 1, capacity: null, pct: null, at_capacity: false };
+
+  assert.equal(PSL.lightState({ traces: at, analysis_queue: under, findings: under }, 0), "near_capacity");
+  // The full gauge outranks the hints, exactly as the server rules it.
+  assert.equal(PSL.lightState({ traces: at, analysis_queue: under, findings: under }, 3), "near_capacity");
+  assert.equal(PSL.lightState({ traces: under, analysis_queue: under, findings: under }, 2), "advised");
+  assert.equal(PSL.lightState({ traces: unknown, analysis_queue: unknown, findings: unknown }, 0), "unknown");
+  assert.equal(PSL.lightState({ traces: under, analysis_queue: unknown, findings: under }, 0), "ok");
+});

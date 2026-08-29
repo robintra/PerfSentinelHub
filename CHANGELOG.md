@@ -26,6 +26,8 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The daemon row's terminal block folds, closed by default, and sits one surface step above the
+  row it is in so it reads as a block rather than as more of the same field.
 - An unfolded daemon row says who it is written for, and that its settings are changed where the
   daemon is deployed rather than from the Hub.
 - The terminal blocks' prose reads at 12px like the rest of the screen rather than at the 11.5px

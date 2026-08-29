@@ -54,6 +54,7 @@
     // When the last FULL read happened: light ticks carry the gauges alone,
     // and once a minute the full read re-syncs hints, state and settings age.
     daemonFullReadAt: {},
+    daemonTerminalOpen: {},
     terminalSig: null,
     form: {
       sourceId: null,
@@ -435,21 +436,45 @@
       });
     });
 
-    const section = el("section", { class: "card terminal" }, [
-      el("div", { class: "terminal-head" }, [
-        titledOverline(spec.head, spec.help),
-        el("span", { class: "terminal-sub", text: spec.sub })
-      ]),
-      code,
-      el("div", { class: "terminal-actions" }, [button, status])
-    ]);
+    const body = el("div", {}, [code, el("div", { class: "terminal-actions" }, [button, status])]);
     (spec.notes || []).forEach(function (note) {
       if (!note) return;
-      section.appendChild(note instanceof Node
+      body.appendChild(note instanceof Node
         ? note
         : proseInto(el("p", { class: "terminal-note" }), note));
     });
-    return section;
+    if (!spec.fold) {
+      return el("section", { class: "card terminal" }, [
+        el("div", { class: "terminal-head" }, [
+          titledOverline(spec.head, spec.help),
+          el("span", { class: "terminal-sub", text: spec.sub })
+        ]),
+        body
+      ]);
+    }
+
+    // Folded, the overline and its subtitle still say what is behind it: a
+    // lone chevron would make the reader open it to find out.
+    const toggle = el("button", {
+      type: "button",
+      class: "settings-more terminal-more",
+      "aria-expanded": spec.fold.open ? "true" : "false"
+    }, [el("span", { class: "overline", text: spec.head })]);
+    body.hidden = !spec.fold.open;
+    toggle.addEventListener("click", function () {
+      const next = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", next ? "true" : "false");
+      body.hidden = !next;
+      spec.fold.onToggle(next);
+    });
+    return el("section", { class: "card terminal" }, [
+      el("div", { class: "terminal-head" }, [
+        toggle,
+        spec.help ? helpDot(spec.help) : null,
+        el("span", { class: "terminal-sub", text: spec.sub })
+      ]),
+      body
+    ]);
   }
 
   /**
@@ -897,6 +922,12 @@
         head: "// the same view in your terminal",
         sub: "The same figures, plus the tabs this screen leaves out.",
         id: "monitor-command-" + index,
+        // Folded by default: the row is opened to read the gauges, and this is
+        // the other way of reading them rather than part of that answer.
+        fold: {
+          open: state.daemonTerminalOpen[source.id] === true,
+          onToggle: function (open) { state.daemonTerminalOpen[source.id] = open; }
+        },
         text: PSL.monitorCommand(source, refreshSeconds(source.id)),
         copyLabel: "Copy the monitor command for " + source.name,
         notes: [

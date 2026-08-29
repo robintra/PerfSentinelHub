@@ -1060,6 +1060,18 @@ body[data-screen="report"] .shell-footer { display: none; }
 
 .terminal-stack { display: flex; flex-direction: column; gap: 14px; }
 .terminal { padding: 16px 18px 18px; }
+/* One surface step above the cell it sits in, in both themes: a card the exact
+   colour of its ground has only its border to be seen by. Scoped to the daemon
+   row because that is the only place a terminal block sits on --surface, the
+   launcher's own sits on the page and would lose its edge instead of gaining
+   one. The copy button then takes the next step up, or it would disappear into
+   the card it is standing on. */
+.daemon-panel .terminal { background: var(--surface-2); }
+.daemon-panel .terminal .pill-button { background: var(--surface-3); }
+/* The fold's own overline, which the shared rule colours brand green. Here it
+   is the block's title, so it keeps the overline's own tone. */
+.terminal-more .overline { color: var(--text-3); }
+.terminal-more:hover .overline { color: var(--brand-text); }
 .terminal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 11px; }
 /* Never soft-wrapped: the backslash continuations are shell syntax, and a
    visual wrap beside one would read as a line that is not there. */

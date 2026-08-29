@@ -2199,11 +2199,9 @@
           "Every threshold this file leaves out keeps the engine's own default, and the Hub only "
             + "records a value that actually departs from one. A run launched from the button "
             + "above carries the same numbers, so the two are comparable with each other.",
-          "The name carries no leading dot on purpose. The engine reads a `.perf-sentinel.toml` "
-            + "from the working directory on its own, but a downloaded file may not keep a "
-            + "leading dot, so the command above names this one with `-c` instead. Put it in the "
-            + "directory you run the command from: `-c` makes the file required, and the run "
-            + "stops rather than falling back to the defaults if it is not there."
+          "Put it in the directory you run the command from. The `-c` above makes it required, "
+            + "so a run that cannot find it stops instead of quietly falling back to the "
+            + "engine's own defaults, which are the numbers you just moved away from."
         ]
       }));
     }

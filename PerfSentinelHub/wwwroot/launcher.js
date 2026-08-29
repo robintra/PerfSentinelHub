@@ -479,10 +479,12 @@
       tail.push("--max-traces " + String(request["max_traces"]));
     }
     if (source.auth_header_name) tail.push("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN");
-    // Undotted, and named explicitly rather than left to the engine's discovery
-    // of `.perf-sentinel.toml`, which is dotted and cwd-only: a downloaded file
-    // may not keep a leading dot, so the dotted name is one the reader might
-    // have to restore before the command could find it.
+    // Undotted, and named rather than left to the engine's discovery of
+    // `.perf-sentinel.toml`, which is dotted and cwd-only. The Hub hands this
+    // file over as a download, and a downloaded file may not keep a leading
+    // dot, so asking for the dotted name would ask for one the reader might not
+    // have. Naming it also makes a missing file stop the run instead of
+    // silently reverting to the defaults the reader just moved away from.
     if (Object.keys(request["detection"] || {}).length > 0) tail.push("-c perf-sentinel.toml");
     return tail.length === 0
       ? head.join(" ")

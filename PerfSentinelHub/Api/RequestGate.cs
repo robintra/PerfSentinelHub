@@ -14,11 +14,18 @@ public abstract class RequestGate(int maxConcurrent) : IDisposable
 
     public void Exit() => _gate.Release();
 
-    // One managed field and no finalizer, so there is no second Dispose to
-    // route through and no subclass has ever had anything to add to it.
     public void Dispose()
     {
-        _gate.Dispose();
+        Dispose(true);
         GC.SuppressFinalize(this);
+    }
+
+    // The hook exists because the class is inheritable, not because a subclass
+    // needs it today: neither of the two holds a field of its own. Without it a
+    // third one could only hide this Dispose, and its own field would leak.
+    // ReSharper disable once VirtualMemberNeverOverridden.Global
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing) _gate.Dispose();
     }
 }

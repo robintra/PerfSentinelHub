@@ -28,7 +28,9 @@ All notable changes to PerfSentinelHub are recorded here.
   value is corrected in the engine's dashboard template, which is where these tokens come from.
 - The generated config is named `perf-sentinel.toml`, without the leading dot, and the printed
   command names it with `-c`. A downloaded file may not keep a leading dot, so the dotted name
-  the command used to ask for was one the reader could not count on having.
+  the command used to ask for was one the reader could not count on having. Its caption now says
+  where to put the file and that `-c` makes it required, instead of naming a second, nearly
+  identical file the reader has nothing to do with.
 - The generated `perf-sentinel.toml` can be downloaded, not only copied. Copying left the
   reader to create the file themselves, which is the one step between the thresholds they set
   here and a run that honours them.

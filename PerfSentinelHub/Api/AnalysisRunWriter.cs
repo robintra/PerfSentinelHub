@@ -88,11 +88,11 @@ public static partial class AnalysisRunWriter
         WriteRawOrNull(writer, "request", run.RequestJson, run.Id, logger);
         writer.WriteString("requested_by", run.RequestedBy);
         writer.WriteNumber("created_at_ms", run.CreatedAtMs);
-        WriteNumberOrNull(writer, "started_at_ms", run.StartedAtMs);
-        WriteNumberOrNull(writer, "finished_at_ms", run.FinishedAtMs);
-        WriteNumberOrNull(writer, "expires_at_ms", run.ExpiresAtMs);
-        WriteStringOrNull(writer, "producer_version", run.ProducerVersion);
-        WriteStringOrNull(writer, "error_code", run.ErrorCode);
+        JsonWrite.NumberOrNull(writer, "started_at_ms", run.StartedAtMs);
+        JsonWrite.NumberOrNull(writer, "finished_at_ms", run.FinishedAtMs);
+        JsonWrite.NumberOrNull(writer, "expires_at_ms", run.ExpiresAtMs);
+        JsonWrite.StringOrNull(writer, "producer_version", run.ProducerVersion);
+        JsonWrite.StringOrNull(writer, "error_code", run.ErrorCode);
         WriteRawOrNull(writer, "result", run.ResultJson, run.Id, logger);
         writer.WriteEndObject();
     }
@@ -144,19 +144,5 @@ public static partial class AnalysisRunWriter
         string runId,
         string column);
 
-    private static void WriteNumberOrNull(Utf8JsonWriter writer, string name, long? value)
-    {
-        if (value is { } number)
-            writer.WriteNumber(name, number);
-        else
-            writer.WriteNull(name);
-    }
 
-    private static void WriteStringOrNull(Utf8JsonWriter writer, string name, string? value)
-    {
-        if (value is null)
-            writer.WriteNull(name);
-        else
-            writer.WriteString(name, value);
-    }
 }

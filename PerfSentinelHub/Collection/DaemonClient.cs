@@ -82,11 +82,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         ReadCapacity(root, "max_retained_findings"));
 
     private static long? ReadGauge(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.Number &&
-        value.TryGetInt64(out var number)
-            ? number
-            : null;
+        Api.JsonRead.ReadLong(root, name);
 
     // Normalised here rather than at every reader: a capacity of zero and an
     // absent one are the same question, and only one of them has to be asked.

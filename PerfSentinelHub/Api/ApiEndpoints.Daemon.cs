@@ -181,7 +181,7 @@ public static partial class ApiEndpoints
             return new DaemonSnapshotRead(
                 RawObject(root, "detection_config"),
                 green is { } summary ? RawObject(summary, "scoring_config") : null,
-                green is { } model ? Text(model, "energy_model") : null,
+                green is { } model ? JsonRead.ReadString(model, "energy_model") : null,
                 warnings,
                 dropped);
         }
@@ -208,7 +208,7 @@ public static partial class ApiEndpoints
             {
                 if (entry.ValueKind != JsonValueKind.Object)
                     continue;
-                if (Text(entry, "kind") is not { } kind || Text(entry, "message") is not { } message)
+                if (JsonRead.ReadString(entry, "kind") is not { } kind || JsonRead.ReadString(entry, "message") is not { } message)
                     continue;
                 if (warnings.Count == MaxHints) { dropped++; continue; }
                 warnings.Add(new ResultWarning(kind, TruncateHint(message)));
@@ -242,11 +242,6 @@ public static partial class ApiEndpoints
     private static string? RawObject(JsonElement root, string name) =>
         Section(root, name)?.GetRawText();
 
-    private static string? Text(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-
     private static async Task<DaemonRead<T>> TryReadAsync<T>(
         Func<Task<T?>> read,
         CancellationToken cancellationToken)
@@ -279,19 +274,10 @@ public static partial class ApiEndpoints
 }
 
 /// <summary>
-/// Bounds concurrent daemon reads. Each one buffers a report snapshot, so a
-/// burst of folds on the Sources screen is real memory rather than a few
-/// cheap requests.
+/// Each daemon read buffers a report snapshot, so a burst of folds on the
+/// Sources screen is real memory rather than a few cheap requests.
 /// </summary>
-public sealed class DaemonViewGate : IDisposable
+public sealed class DaemonViewGate() : RequestGate(MaxReads)
 {
     public const int MaxReads = 2;
-
-    private readonly SemaphoreSlim _gate = new(MaxReads, MaxReads);
-
-    public bool TryEnter() => _gate.Wait(0);
-
-    public void Exit() => _gate.Release();
-
-    public void Dispose() => _gate.Dispose();
 }

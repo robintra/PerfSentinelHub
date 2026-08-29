@@ -29,12 +29,12 @@ public static class DaemonViewWriter
         writer.WriteString("source_id", view.SourceId);
         writer.WriteNumber("observed_at_ms", view.ObservedAtMs);
         writer.WriteString("state", view.State);
-        WriteStringOrNull(writer, "error_code", view.ErrorCode);
-        WriteStringOrNull(writer, "version", view.Status?.Version);
-        WriteNumberOrNull(writer, "uptime_seconds", view.Status?.UptimeSeconds);
+        JsonWrite.StringOrNull(writer, "error_code", view.ErrorCode);
+        JsonWrite.StringOrNull(writer, "version", view.Status?.Version);
+        JsonWrite.NumberOrNull(writer, "uptime_seconds", view.Status?.UptimeSeconds);
 
         WriteRawOrNull(writer, "config", view.ConfigJson);
-        WriteStringOrNull(writer, "config_unavailable_reason", view.ConfigUnavailableReason);
+        JsonWrite.StringOrNull(writer, "config_unavailable_reason", view.ConfigUnavailableReason);
         WriteRawOrNull(writer, "detection_config", view.DetectionConfigJson);
         // The defaults ride along so a reader can mark what was changed, and
         // the version they belong to rides with them: a daemon on another
@@ -44,14 +44,14 @@ public static class DaemonViewWriter
         WriteRawOrNull(writer, "detection_defaults", DaemonDefaults.DetectionJson);
         writer.WriteString("defaults_engine_version", view.DefaultsEngineVersion);
         WriteRawOrNull(writer, "scoring_config", view.ScoringConfigJson);
-        WriteStringOrNull(writer, "energy_model", view.EnergyModel);
+        JsonWrite.StringOrNull(writer, "energy_model", view.EnergyModel);
 
         var gauges = view.Status is null ? null : DaemonView.Read(view.Status);
         WriteGauge(writer, "traces", gauges?.Traces);
         WriteGauge(writer, "analysis_queue", gauges?.AnalysisQueue);
         WriteGauge(writer, "findings", gauges?.Findings);
 
-        WriteStringOrNull(writer, "hints_unavailable_reason", view.HintsUnavailableReason);
+        JsonWrite.StringOrNull(writer, "hints_unavailable_reason", view.HintsUnavailableReason);
         writer.WriteNumber("warnings_dropped", view.WarningsDropped);
         writer.WritePropertyName("warnings");
         writer.WriteStartArray();
@@ -79,8 +79,8 @@ public static class DaemonViewWriter
 
         writer.WritePropertyName(name);
         writer.WriteStartObject();
-        WriteNumberOrNull(writer, "value", gauge.Value);
-        WriteNumberOrNull(writer, "capacity", gauge.Capacity);
+        JsonWrite.NumberOrNull(writer, "value", gauge.Value);
+        JsonWrite.NumberOrNull(writer, "capacity", gauge.Capacity);
         if (gauge.Pct is { } pct)
             writer.WriteNumber("pct", Math.Round(pct, 1));
         else
@@ -108,21 +108,7 @@ public static class DaemonViewWriter
         writer.WriteRawValue(json, skipInputValidation: false);
     }
 
-    private static void WriteStringOrNull(Utf8JsonWriter writer, string name, string? value)
-    {
-        if (value is null)
-            writer.WriteNull(name);
-        else
-            writer.WriteString(name, value);
-    }
 
-    private static void WriteNumberOrNull(Utf8JsonWriter writer, string name, long? value)
-    {
-        if (value is null)
-            writer.WriteNull(name);
-        else
-            writer.WriteNumber(name, value.Value);
-    }
 }
 
 /// <summary>

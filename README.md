@@ -170,7 +170,11 @@ while its daemon pushes successfully.
   those sentences and writes none of its own. A hint past two thousand characters is cut with a
   visible ellipsis, anything past a hundred hints is counted in `warnings_dropped` rather than
   silently gone, and a failed export read is named in `hints_unavailable_reason` instead of
-  reading as a clean bill. The only thing it derives is `state`, from whether
+  reading as a clean bill. The polling this view drives cannot starve the daemon: the engine's
+  32-concurrent-request cap is scoped to its OTLP ingest route precisely so `/api` and `/health`
+  stay responsive, and the Hub bounds itself to two concurrent view reads of three requests each,
+  over pooled connections. The daemon's query surface is HTTP(S) only by design, the gRPC port is
+  OTLP ingest, so the Hub speaks no RPC to it. The only thing it derives is `state`, from whether
   a gauge crossed 90 % of its cap, the same line the daemon's own monitor draws. It also carries
   `daemon_defaults`, `detection_defaults` and `defaults_engine_version`, so a reader can mark what
   a daemon actually changed. Those defaults are the ones of the binary this Hub embeds, exactly as
@@ -282,6 +286,14 @@ holds for a service name carrying `$` or a quote. Detection overrides have no co
 so a run that changed one carries `-c .perf-sentinel.toml` and the file is printed beside the
 command. An authenticated source prints `--auth-header-env` rather than its token, which the Hub
 holds and never discloses.
+
+A report rendered from a daemon source goes live when the daemon's `BaseUrl` is a bare origin:
+the render passes `--daemon-url`, and the dashboard's own Refresh and acknowledgment controls then
+talk to that daemon from the viewer's browser. Two conditions sit outside the Hub: the daemon's
+`[daemon.cors] allowed_origins` must carry the origin this Hub serves reports from, and the viewer
+must be able to reach the daemon directly. A daemon behind a path-based ingress gets a static
+report instead, because the engine's flag takes an origin and nothing else. Report links share
+within network reach of the Hub and die with the retention window.
 
 On the fleet health screen, a daemon's row unfolds into the gauges it reports against their caps
 and the hints it writes about its own tuning, neither of which `/metrics` carries. The row re-reads

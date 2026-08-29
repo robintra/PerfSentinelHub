@@ -93,7 +93,10 @@ public sealed partial class AnalysisRunner(
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             var summary = ReportSummary.TryParse(reportJson, out var binaryVersion);
-            if (summary is null || !await RenderAsync(run.Id, reportJson, configPath, timeout.Token))
+            // Short-circuit kept on purpose: output that is not a report must
+            // never reach the renderer.
+            if (summary is null ||
+                !await RenderAsync(run.Id, reportJson, configPath, LiveDaemonUrl(source), timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             summary.ReportBytes = RenderedBytes(run.Id);
@@ -161,10 +164,22 @@ public sealed partial class AnalysisRunner(
             : throw new EngineFailedException(ClassifyEngineFailure(result.StandardError));
     }
 
+    /// <summary>
+    /// The URL a daemon-source report can go live against, or null. The engine
+    /// only accepts an origin (path, query, userinfo and trailing slash are
+    /// rejected at parse), so a daemon reached through a path-based ingress
+    /// renders a static report rather than failing the whole run.
+    /// </summary>
+    public static string? LiveDaemonUrl(SourceOptions source) =>
+        source.Kind == SourceKinds.Daemon && source.BaseUrl!.AbsolutePath == "/"
+            ? source.EndpointArgument
+            : null;
+
     private async Task<bool> RenderAsync(
         string runId,
         byte[] reportJson,
         string? configPath,
+        string? daemonUrl,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_analysis.ReportDirectory);
@@ -188,6 +203,17 @@ public sealed partial class AnalysisRunner(
                 "--max-traces-embedded",
                 _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture)
             };
+            if (daemonUrl is not null)
+            {
+                // The report's own Refresh and acknowledgment controls talk to
+                // this daemon from the viewer's browser. That only works when
+                // the daemon's [daemon.cors] allowed_origins carries the origin
+                // this Hub serves reports from; without it the dashboard shows
+                // itself disconnected and stays a static report.
+                arguments.Add("--daemon-url");
+                arguments.Add(daemonUrl);
+            }
+
             if (configPath is not null)
             {
                 arguments.Add("-c");

@@ -83,6 +83,28 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public void A_daemon_report_goes_live_only_against_a_bare_origin()
+    {
+        // The engine's --daemon-url takes an origin and nothing else, so a
+        // daemon behind a path-based ingress gets a static report instead of
+        // a render that dies at argument parsing.
+        var origin = new SourceOptions
+        {
+            Id = "d",
+            Name = "D",
+            Environment = "production",
+            Kind = SourceKinds.Daemon,
+            BaseUrl = new Uri("http://daemon.svc:4318/")
+        };
+        var prefixed = origin with { BaseUrl = new Uri("http://ingress.svc/daemon/") };
+        var backend = origin with { Kind = SourceKinds.Tempo, BaseUrl = new Uri("http://tempo.svc:3200") };
+
+        Assert.Equal("http://daemon.svc:4318", AnalysisRunner.LiveDaemonUrl(origin));
+        Assert.Null(AnalysisRunner.LiveDaemonUrl(prefixed));
+        Assert.Null(AnalysisRunner.LiveDaemonUrl(backend));
+    }
+
+    [Fact]
     public async Task Zero_traces_is_an_empty_success_rather_than_a_failure()
     {
         var runner = Runner(StubEngine(

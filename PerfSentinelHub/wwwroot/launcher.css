@@ -1048,18 +1048,24 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* Still at the engine's own number, so it reads as untouched even though the
    field now carries a value for the spinner to step from. */
 .input-knob[data-default] { color: var(--text-3); }
+/* An icon rather than the word: the row already names the value and its
+   default, so the button only has to say which direction it goes. */
 .knob-reset {
+  /* Never squeezed by the row it shares with the field. */
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 0;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
   cursor: pointer;
 }
-.knob-reset:hover { color: var(--brand-text); }
+.knob-reset:hover { border-color: var(--brand); color: var(--brand-text); }
 .advanced-actions { display: flex; justify-content: flex-end; margin: 12px 0 2px; }
 
 /* --------------------------------------------------- shared: help affordance */
@@ -1198,9 +1204,12 @@ body[data-screen="report"] .shell-footer { display: none; }
   font-size: 10px;
   opacity: .75;
 }
-/* The chips and the link inside a step read on the block's own ground. */
+/* One grid item, whatever the step is made of. */
+.step-text { min-width: 0; }
+/* The chips read on the block's own ground. The link keeps the product's green:
+   a link is a link everywhere here, and the tone of the block it sits in is
+   about what the block is, not about where the link goes. */
 .steps .code-inline { border-color: currentColor; background: transparent; color: inherit; }
-.steps .terminal-link { color: inherit; }
 
 /* Underlined, unlike the rest of the product's links: this one sits inside a
    sentence, where colour alone is not a strong enough tell that it is one. */

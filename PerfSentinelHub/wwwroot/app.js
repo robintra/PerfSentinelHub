@@ -480,6 +480,14 @@
     return engineNeed(el("p", { class: "terminal-note" }));
   }
 
+  /** An arrow turning back on itself: put this value where it was. */
+  function undoGlyph(size) {
+    return svg([
+      ["polyline", { points: "3 5 3 11 9 11" }],
+      ["path", { d: "M5.1 15.5a8 8 0 1 0 1.9-8.3L3 11" }]
+    ], size);
+  }
+
   /** A circled i, for a block that tells rather than warns. */
   function infoGlyph(size) {
     return svg([
@@ -500,10 +508,13 @@
         infoGlyph(14),
         el("span", { class: "overline", text: "// what you need first" })
       ]),
+      // The content is always one node: the row is a two-column grid, and prose
+      // carrying a code chip would otherwise arrive as several grid items and
+      // be dealt into the columns one piece at a time.
       el("ol", { class: "steps" }, present.map(function (step) {
-        return step instanceof Node
-          ? el("li", {}, [step])
-          : proseInto(el("li", {}), step);
+        return el("li", {}, [step instanceof Node
+          ? el("span", { class: "step-text" }, [step])
+          : proseInto(el("span", { class: "step-text" }), step)]);
       }))
     ]);
   }
@@ -3413,12 +3424,15 @@
       // and a value equal to the default is still not an override.
       value: current === undefined ? String(knob.default) : String(current)
     });
+    const label = "Put " + knob.name + " back to " + knob.default;
     const reset = el("button", {
       type: "button",
       class: "knob-reset",
-      "aria-label": "Reset " + knob.name + " to " + knob.default,
-      text: "reset"
-    });
+      // The glyph is aria-hidden like every other in the product, so the button
+      // carries the words itself, and a title says them to a mouse as well.
+      "aria-label": label,
+      title: label
+    }, [undoGlyph(14)]);
 
     function mark() {
       const moved = state.form.detection[knob.name] !== undefined;

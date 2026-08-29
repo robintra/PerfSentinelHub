@@ -244,3 +244,51 @@ test("a gauge move is what changed, and nothing when nothing did", () => {
   assert.equal(PSL.gaugeMove(at(0), at(12)), 12);
   assert.equal(PSL.gaugeMove(at(12), at(0)), -12);
 });
+
+test("PowerShell quotes by doubling, and keeps its own operators out of bare words", () => {
+  // Inside single quotes everything is literal and a quote is doubled, where a
+  // POSIX shell has to close, escape and reopen.
+  assert.equal(PSL.psq("a b'c"), "'a b''c'");
+  assert.equal(PSL.shq("a b'c"), "'a b'\\''c'");
+  // A comma is PowerShell's array operator and @ opens a splat, so neither
+  // stays bare even though a POSIX shell would leave them alone.
+  assert.equal(PSL.psq("a,b"), "'a,b'");
+  assert.equal(PSL.psq("@thing"), "'@thing'");
+  assert.equal(PSL.shq("a,b"), "a,b");
+  // What both leave alone: a URL, a name, a number, an ISO timestamp.
+  assert.equal(PSL.psq("http://tempo.svc:3200"), "http://tempo.svc:3200");
+  assert.equal(PSL.psq("order-service"), "order-service");
+  // Nothing in an ISO timestamp is special to either shell, so both pass it bare.
+  assert.equal(PSL.psq("2026-08-29T09:00:00.000Z"), "2026-08-29T09:00:00.000Z");
+  assert.equal(PSL.shq("2026-08-29T09:00:00.000Z"), "2026-08-29T09:00:00.000Z");
+  // And the empty string is quoted by both, or it would vanish.
+  assert.equal(PSL.psq(""), "''");
+});
+
+test("the shell a first visit gets follows the platform", () => {
+  assert.equal(PSL.defaultShell("Win32"), "powershell");
+  assert.equal(PSL.defaultShell("Windows"), "powershell");
+  assert.equal(PSL.defaultShell("MacIntel"), "posix");
+  assert.equal(PSL.defaultShell("Linux x86_64"), "posix");
+  // Nothing to go on is not Windows, so it is the line most machines run.
+  assert.equal(PSL.defaultShell(null), "posix");
+  assert.equal(PSL.defaultShell(""), "posix");
+  assert.equal(PSL.shellById("nonsense").id, "posix");
+  assert.equal(PSL.shellById("powershell").label, "PowerShell");
+});
+
+test("a command continues its line the way its own shell does", () => {
+  const source = { engine_subcommand: "tempo", base_url: "http://tempo.svc:3200" };
+  const request = { service: "orders", lookback: "1h", max_traces: 100, detection: {} };
+
+  const posix = PSL.analysisCommand(source, request, "posix");
+  const pwsh = PSL.analysisCommand(source, request, "powershell");
+  assert.match(posix, /\\\n {2}--lookback/);
+  assert.match(pwsh, /`\n {2}--lookback/);
+  // The backslash never appears in the PowerShell line, and vice versa.
+  assert.ok(!pwsh.includes("\\"));
+  assert.ok(!posix.includes("`"));
+  // The monitor command takes its shell too.
+  assert.equal(PSL.monitorCommand({ base_url: "http://a b" }, 5, "powershell"),
+    "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
+});

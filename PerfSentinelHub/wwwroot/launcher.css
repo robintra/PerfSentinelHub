@@ -1066,7 +1066,7 @@ body[data-screen="report"] .shell-footer { display: none; }
   cursor: pointer;
 }
 .knob-reset:hover { border-color: var(--brand); color: var(--brand-text); }
-.advanced-actions { display: flex; justify-content: flex-end; margin: 12px 0 2px; }
+.advanced-actions { display: flex; justify-content: flex-end; margin: 12px 0 14px; }
 
 /* --------------------------------------------------- shared: help affordance */
 
@@ -1134,6 +1134,26 @@ body[data-screen="report"] .shell-footer { display: none; }
    generates no box, so a folded block has no space under its heading to sit
    between the heading's margin and the card's own padding. */
 .terminal-body { margin-top: 11px; }
+/* One row of tabs over the command, each spelling the same request for its own
+   shell. Squared off at the bottom so the line below reads as their panel. */
+.cmd-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.cmd-tab {
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.cmd-tab:hover { color: var(--text-2); }
+.cmd-tab[aria-selected="true"] {
+  border-color: var(--border-2);
+  background: var(--surface-3);
+  color: var(--text);
+}
+
 /* Never soft-wrapped: the backslash continuations are shell syntax, and a
    visual wrap beside one would read as a line that is not there. */
 .terminal-code {
@@ -1173,6 +1193,9 @@ body[data-screen="report"] .shell-footer { display: none; }
   color: var(--info-fg);
 }
 .steps-head { display: flex; align-items: center; gap: 8px; color: inherit; }
+/* The shared overline rule pins its own grey, which left the one element in
+   this block that names it reading as if it belonged to another. */
+.steps-head .overline { color: inherit; }
 .steps {
   counter-reset: step;
   display: grid;

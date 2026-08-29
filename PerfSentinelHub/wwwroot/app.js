@@ -66,6 +66,8 @@
     // Folds that belong to a screen rather than to a source. Kept in the same
     // record, since a reader does not care which of the two a fold is.
     panelOpen: {},
+    // Which shell every printed command is spelled for.
+    shell: "posix",
     terminalSig: null,
     form: {
       sourceId: null,
@@ -208,6 +210,32 @@
   // Its own key rather than a field in the fold record: a chosen source is not
   // a fold, and one name per thing survives the next thing worth remembering.
   const SOURCE_STORAGE_KEY = "perf-sentinel-hub.source";
+  const SHELL_STORAGE_KEY = "perf-sentinel-hub.shell";
+
+  /**
+   * The shell every printed command is spelled for. The reader's own choice
+   * once they make one, and until then the one their platform opens with.
+   */
+  function restoreShell() {
+    let stored = null;
+    try {
+      stored = localStorage.getItem(SHELL_STORAGE_KEY);
+    } catch (error) {
+      stored = null;
+    }
+    const platform = (navigator.userAgentData && navigator.userAgentData.platform)
+      || navigator.platform;
+    state.shell = stored ? PSL.shellById(stored).id : PSL.defaultShell(platform);
+  }
+
+  function saveShell(id) {
+    try {
+      localStorage.setItem(SHELL_STORAGE_KEY, id);
+    } catch (error) {
+      // Storage refused. The choice holds for this page and the next visit
+      // opens on the platform's own shell again.
+    }
+  }
 
   function rememberedSource() {
     try {
@@ -519,8 +547,68 @@
     ]);
   }
 
+  /**
+   * One tab per shell, over a single command line. The quoting and the line
+   * continuation differ between them, so this is the same request written
+   * three ways rather than a preference about how it looks.
+   */
+  function shellTabs(code, spell) {
+    const tabs = PSL.SHELLS.map(function (shell) {
+      const tab = el("button", {
+        type: "button",
+        class: "cmd-tab",
+        role: "tab",
+        "aria-selected": shell.id === state.shell ? "true" : "false",
+        tabindex: shell.id === state.shell ? "0" : "-1",
+        text: shell.label
+      });
+      tab.addEventListener("click", function () { choose(shell.id); });
+      return tab;
+    });
+
+    function choose(id) {
+      state.shell = id;
+      saveShell(id);
+      // Every printed command on the page follows: the reader chose a shell,
+      // not a tab on one block.
+      document.querySelectorAll("[data-spell]").forEach(function (node) {
+        node.textContent = SPELL.get(node)(id);
+      });
+      document.querySelectorAll(".cmd-tab").forEach(function (node) {
+        const selected = node.textContent === PSL.shellById(id).label;
+        node.setAttribute("aria-selected", selected ? "true" : "false");
+        node.tabindex = selected ? 0 : -1;
+        node.setAttribute("tabindex", selected ? "0" : "-1");
+      });
+    }
+
+    const strip = el("div", { class: "cmd-tabs", role: "tablist", "aria-label": "Shell" }, tabs);
+    // Arrow keys move between tabs, which is what a tablist promises.
+    strip.addEventListener("keydown", function (event) {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const index = PSL.SHELLS.findIndex(function (shell) { return shell.id === state.shell; });
+      const next = PSL.SHELLS[(index + step + PSL.SHELLS.length) % PSL.SHELLS.length];
+      choose(next.id);
+      tabs[PSL.SHELLS.indexOf(next)].focus();
+    });
+    SPELL.set(code, spell);
+    code.setAttribute("data-spell", "");
+    return strip;
+  }
+
+  // The line each command block would print for a given shell, kept beside the
+  // node rather than rebuilt from the form, which has moved on by then.
+  const SPELL = new WeakMap();
+
   function terminalBlock(spec) {
-    const code = el("pre", { class: "terminal-code", tabindex: "0", text: spec.text });
+    const spell = spec.spell || null;
+    const code = el("pre", {
+      class: "terminal-code",
+      tabindex: "0",
+      text: spell ? spell(state.shell) : spec.text
+    });
     if (spec.id) code.id = spec.id;
     const status = el("span", { class: "terminal-status", role: "status" });
     const label = el("span", { text: "Copy" });
@@ -551,8 +639,11 @@
       });
     });
 
-    const body = el("div", { class: "terminal-body" },
-      [code, el("div", { class: "terminal-actions" }, [button, status])]);
+    const body = el("div", { class: "terminal-body" }, [
+      spell ? shellTabs(code, spell) : null,
+      code,
+      el("div", { class: "terminal-actions" }, [button, status])
+    ]);
     (spec.notes || []).forEach(function (note) {
       if (!note) return;
       body.appendChild(note instanceof Node
@@ -1039,6 +1130,9 @@
         head: "// the same view in your terminal",
         sub: "The same figures, plus the tabs this screen leaves out.",
         id: "monitor-command-" + index,
+        spell: function (shellId) {
+          return PSL.monitorCommand(source, refreshSeconds(source.id), shellId);
+        },
         // Folded by default: the row is opened to read the gauges, and this is
         // the other way of reading them rather than part of that answer.
         fold: {
@@ -1048,7 +1142,6 @@
             saveFolds();
           }
         },
-        text: PSL.monitorCommand(source, refreshSeconds(source.id)),
         copyLabel: "Copy the monitor command for " + source.name,
         notes: [
           "`query monitor` carries the energy and carbon breakdown this screen only summarises. "
@@ -1235,7 +1328,9 @@
       // Only the line is rewritten: the note under it is worded to hold at any
       // interval, including off, so it never needs to be.
       const printed = document.getElementById("monitor-command-" + index);
-      if (printed) printed.textContent = PSL.monitorCommand(source, refreshSeconds(source.id));
+      if (printed) {
+        printed.textContent = PSL.monitorCommand(source, refreshSeconds(source.id), state.shell);
+      }
     });
     const ring = refreshRing();
     if (ms) ring.querySelector(".refresh-ring-fill").style.setProperty("--cycle", ms + "ms");
@@ -1904,8 +1999,9 @@
   function terminalPanels(source) {
     if (!source) return [];
     const request = buildRequest(source);
-    const command = PSL.analysisCommand(source, request);
-    if (!command) return [];
+    // Only to know whether there is a command at all: the block spells its own
+    // line per shell, and this one is never the one shown.
+    if (!PSL.analysisCommand(source, request, state.shell)) return [];
 
     const changed = Object.keys(state.form.detection).length;
     const trace = state.form.mode === "trace";
@@ -1915,7 +2011,7 @@
       help: "The Hub runs this same binary. What is missing here is the JSON output and the "
         + "second command that renders it, which exist so the Hub can build a dashboard. "
         + "A terminal does not need either.",
-      text: command,
+      spell: function (shellId) { return PSL.analysisCommand(source, request, shellId); },
       copyLabel: "Copy the analysis command",
       notes: [
         // What to go and do, then what it means. The two were one list, which
@@ -1948,10 +2044,9 @@
           ? "An ID resolves to exactly one trace, so the engine takes neither a window nor a "
             + "trace cap here, exactly as the form above stops offering them."
           : null,
-        PSL.quotedForShell(command)
-          ? "Quoted for a POSIX shell. PowerShell and cmd quote differently, and this line is "
-            + "not valid in either."
-          : null
+        // The note that used to say which shell this was quoted for: the tabs
+        // above the line say it, and they let the reader take the other one.
+        null
       ]
     })];
 
@@ -3651,6 +3746,7 @@
   // Before the first render, so a row left open comes back open and reads its
   // daemon on its own rather than waiting to be clicked again.
   restoreFolds();
+  restoreShell();
   // Escape closes the picker. Without it the only ways out are Apply, a quick
   // range or a click outside, and a keyboard user has none of them.
   globalThis.addEventListener("keydown", function (event) {

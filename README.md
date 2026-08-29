@@ -316,6 +316,13 @@ back the way they were left, and a row left open reads its daemon again on the n
 being clicked. Nothing but those names is stored, and a browser that refuses storage simply starts
 everything folded.
 
+Every printed command carries a tab per shell, because the difference is not cosmetic: a POSIX
+shell continues a line with a backslash and escapes a quote by closing and reopening, PowerShell
+continues with a backtick and doubles the quote, and its bare-word set is narrower since a comma
+is its array operator. The tab a first visit opens on follows the platform, Windows getting
+PowerShell, and the reader's own choice is remembered from then on and applies to every command on
+the page at once.
+
 Neither command carries a placeholder. The endpoint is the source's own configured `BaseUrl`, and
 the monitor command carries the re-read interval the reader picked on that row, so a copied line is
 runnable as it stands and does not contradict the screen it came from. The one thing an operator

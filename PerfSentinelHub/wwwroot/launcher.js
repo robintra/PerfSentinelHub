@@ -360,6 +360,50 @@
   }
 
   /**
+   * The same job for PowerShell, which quotes by a different rule: inside
+   * single quotes everything is literal and a quote is doubled, where a POSIX
+   * shell has to close, escape and reopen.
+   *
+   * The bare-word set is narrower than the POSIX one on purpose. A comma is
+   * PowerShell's array operator, so `a,b` would arrive as two arguments, and
+   * `@` opens a splat or a hash literal. Both are quoted here rather than
+   * trusted.
+   *
+   * @param {unknown} value
+   * @returns {string}
+   */
+  function psq(value) {
+    const text = String(value);
+    if (text !== "" && /^[A-Za-z0-9_.:/=+-]+$/.test(text)) return text;
+    return "'" + text.replace(/'/g, "''") + "'";
+  }
+
+  /* One entry per shell the launcher can spell a command for. `wrap` is what
+     continues a command on the next line: a backslash in a POSIX shell, a
+     backtick in PowerShell. */
+  const SHELLS = [
+    { id: "posix", label: "bash / zsh", wrap: "\\", quote: shq },
+    { id: "powershell", label: "PowerShell", wrap: "`", quote: psq }
+  ];
+
+  function shellById(id) {
+    return SHELLS.find(function (shell) { return shell.id === id; }) || SHELLS[0];
+  }
+
+  /**
+   * Which shell to spell a command for when the reader has not chosen one.
+   * Windows gets PowerShell, which is what its terminal opens with, and
+   * everything else gets the POSIX line.
+   *
+   * @param {string | null | undefined} platform navigator.platform, or the
+   *   userAgentData platform, whichever the browser offers
+   * @returns {string}
+   */
+  function defaultShell(platform) {
+    return /win/i.test(String(platform || "")) ? "powershell" : "posix";
+  }
+
+  /**
    * Whole seconds, the way the Hub writes them into its own invocation. The
    * printed window and the launched one have to be the same window.
    * @param {number} ms
@@ -384,8 +428,10 @@
    * @param {Record<string, unknown>} request
    * @returns {string | null}
    */
-  function analysisCommand(source, request) {
+  function analysisCommand(source, request, shellId) {
     if (!source.engine_subcommand) return null;
+    const shell = shellById(shellId);
+    const shq = shell.quote;
     const head = ["perf-sentinel " + source.engine_subcommand, "--endpoint " + shq(source.base_url)];
     /** @type {string[]} */
     const tail = [];
@@ -403,7 +449,9 @@
     }
     if (source.auth_header_name) tail.push("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN");
     if (Object.keys(request["detection"] || {}).length > 0) tail.push("-c .perf-sentinel.toml");
-    return tail.length === 0 ? head.join(" ") : head.join(" ") + " \\\n  " + tail.join(" ");
+    return tail.length === 0
+      ? head.join(" ")
+      : head.join(" ") + " " + shell.wrap + "\n  " + tail.join(" ");
   }
 
   /**
@@ -422,8 +470,9 @@
    * @param {number} [refreshSeconds] omitted, or 0, leaves the engine's own default
    * @returns {string}
    */
-  function monitorCommand(source, refreshSeconds) {
-    const command = "perf-sentinel query --daemon " + shq(source.base_url) + " monitor";
+  function monitorCommand(source, refreshSeconds, shellId) {
+    const command = "perf-sentinel query --daemon "
+      + shellById(shellId).quote(source.base_url) + " monitor";
     return Number.isInteger(refreshSeconds) && refreshSeconds > 0
       ? command + " --refresh " + refreshSeconds
       : command;
@@ -597,7 +646,8 @@
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
-    shq, analysisCommand, monitorCommand, detectionToml, quotedForShell,
+    shq, psq, SHELLS, shellById, defaultShell,
+    analysisCommand, monitorCommand, detectionToml, quotedForShell,
     lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
     gaugeTone, gaugeMove
   };

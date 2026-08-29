@@ -167,7 +167,10 @@ while its daemon pushes successfully.
   serves no query API, which is a configuration statement rather than a fault. `detection_config`,
   `scoring_config` and `energy_model` come from the daemon's export instead, where `/api/config`
   does not carry them. `warnings` is the daemon's own tuning advisor verbatim: the Hub relays
-  those sentences and writes none of its own. The only thing it derives is `state`, from whether
+  those sentences and writes none of its own. A hint past two thousand characters is cut with a
+  visible ellipsis, anything past a hundred hints is counted in `warnings_dropped` rather than
+  silently gone, and a failed export read is named in `hints_unavailable_reason` instead of
+  reading as a clean bill. The only thing it derives is `state`, from whether
   a gauge crossed 90 % of its cap, the same line the daemon's own monitor draws. It also carries
   `daemon_defaults`, `detection_defaults` and `defaults_engine_version`, so a reader can mark what
   a daemon actually changed. Those defaults are the ones of the binary this Hub embeds, exactly as

@@ -51,6 +51,8 @@ public static class DaemonViewWriter
         WriteGauge(writer, "analysis_queue", gauges?.AnalysisQueue);
         WriteGauge(writer, "findings", gauges?.Findings);
 
+        WriteStringOrNull(writer, "hints_unavailable_reason", view.HintsUnavailableReason);
+        writer.WriteNumber("warnings_dropped", view.WarningsDropped);
         writer.WritePropertyName("warnings");
         writer.WriteStartArray();
         foreach (var warning in view.Warnings)
@@ -88,34 +90,22 @@ public static class DaemonViewWriter
     }
 
     /// <summary>
-    /// Parsed before the property name is written: a throw once the writer has
-    /// started would abort a body already partly flushed, and the client would
-    /// see a truncated object behind a 200.
+    /// Every string that reaches this method was already validated by a parse
+    /// upstream: the endpoint's shape checks for the config, GetRawText of a
+    /// parsed element for the sections, and the defaults a test pins. So it is
+    /// written with the writer's own single validation pass and no second
+    /// document, which is what a 5-second refresh cadence asks for.
     /// </summary>
     private static void WriteRawOrNull(Utf8JsonWriter writer, string name, string? json)
     {
-        JsonDocument? document = null;
-        try
-        {
-            if (json is not null)
-                document = JsonDocument.Parse(json);
-        }
-        catch (JsonException)
-        {
-            document = null;
-        }
-
-        if (document is null)
+        if (json is null)
         {
             writer.WriteNull(name);
             return;
         }
 
-        using (document)
-        {
-            writer.WritePropertyName(name);
-            document.RootElement.WriteTo(writer);
-        }
+        writer.WritePropertyName(name);
+        writer.WriteRawValue(json, skipInputValidation: false);
     }
 
     private static void WriteStringOrNull(Utf8JsonWriter writer, string name, string? value)
@@ -153,4 +143,8 @@ public sealed record DaemonViewData(
     // The engine version whose defaults are published alongside, which is the
     // binary this Hub embeds and not necessarily the one the daemon runs.
     string DefaultsEngineVersion,
-    IReadOnlyList<ResultWarning> Warnings);
+    // Null when the export snapshot was read; otherwise the error code of the
+    // read that failed, because unread hints are not the same thing as none.
+    string? HintsUnavailableReason,
+    IReadOnlyList<ResultWarning> Warnings,
+    int WarningsDropped);

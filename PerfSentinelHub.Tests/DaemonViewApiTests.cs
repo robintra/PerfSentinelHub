@@ -64,6 +64,8 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
         Assert.Equal(JsonValueKind.Null, view.GetProperty("config_unavailable_reason").ValueKind);
         Assert.Equal(JsonValueKind.Null, view.GetProperty("error_code").ValueKind);
 
+        Assert.Equal(JsonValueKind.Null, view.GetProperty("hints_unavailable_reason").ValueKind);
+        Assert.Equal(0, view.GetProperty("warnings_dropped").GetInt32());
         var warning = view.GetProperty("warnings").EnumerateArray().Single();
         Assert.Equal("tuning", warning.GetProperty("kind").GetString());
         Assert.Equal("ingest queue is undersized", warning.GetProperty("message").GetString());
@@ -136,7 +138,10 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
         Assert.Equal("http_error", view.GetProperty("error_code").GetString());
         Assert.Equal(JsonValueKind.Null, view.GetProperty("version").ValueKind);
         Assert.Equal(JsonValueKind.Null, view.GetProperty("traces").ValueKind);
-        Assert.Equal("unreachable", view.GetProperty("config_unavailable_reason").GetString());
+        // A 500 is the daemon answering, so the config is unreadable, not
+        // unreachable, and the unread export is named rather than silent.
+        Assert.Equal("unreadable", view.GetProperty("config_unavailable_reason").GetString());
+        Assert.Equal("http_error", view.GetProperty("hints_unavailable_reason").GetString());
         Assert.Empty(view.GetProperty("warnings").EnumerateArray());
     }
 
@@ -149,7 +154,9 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
             : Answering(context));
 
         Assert.Equal(JsonValueKind.Null, view.GetProperty("config").ValueKind);
-        Assert.Equal("unreachable", view.GetProperty("config_unavailable_reason").GetString());
+        // The daemon answered with something the Hub refused to relay, which
+        // is a different action for an operator than nothing answering.
+        Assert.Equal("unreadable", view.GetProperty("config_unavailable_reason").GetString());
         // The status still answered, so the daemon itself is not unreachable.
         Assert.Equal("near_capacity", view.GetProperty("state").GetString());
     }
@@ -162,6 +169,7 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
             : Answering(context));
 
         Assert.Equal(JsonValueKind.Null, view.GetProperty("config").ValueKind);
+        Assert.Equal("unreadable", view.GetProperty("config_unavailable_reason").GetString());
     }
 
     [Fact]

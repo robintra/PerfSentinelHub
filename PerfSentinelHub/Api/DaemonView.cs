@@ -26,7 +26,7 @@ public static class DaemonView
         Gauge(status.AnalysisQueueDepth, status.AnalysisQueueCapacity),
         Gauge(status.StoredFindings, status.MaxRetainedFindings));
 
-    public static string Classify(DaemonStatus? status, int warningCount)
+    public static string Classify(DaemonStatus? status, int warningCount, bool hintsKnown)
     {
         if (status is null)
             return Unreachable;
@@ -36,6 +36,10 @@ public static class DaemonView
             return NearCapacity;
         if (warningCount > 0)
             return Advised;
+        // "ok" is a claim about the daemon's own hints as much as about the
+        // gauges: with the export unread, silence proves nothing.
+        if (!hintsKnown)
+            return Unknown;
         // Nothing measurable and nothing reported is not a clean bill of
         // health: a daemon that publishes no capacity leaves the Hub without
         // evidence, and "ok" would be a claim it cannot make.

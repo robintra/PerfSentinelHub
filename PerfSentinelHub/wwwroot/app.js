@@ -46,6 +46,8 @@
     daemonRefreshMs: {},
     daemonTickers: {},
     daemonCycleAt: {},
+    daemonInFlight: {},
+    terminalSig: null,
     form: {
       sourceId: null,
       mode: "service",
@@ -303,11 +305,10 @@
     dot.addEventListener("focus", function () { showTip(dot, text); });
     dot.addEventListener("mouseleave", closeTip);
     dot.addEventListener("blur", closeTip);
-    // Touch has no hover, and a tap would otherwise only focus the dot.
-    dot.addEventListener("click", function () {
-      if (openTip) closeTip();
-      else showTip(dot, text);
-    });
+    // Touch has no hover, and the synthesized mouseenter and focus that come
+    // before a tap would make a toggle close its own tip. Showing is
+    // idempotent, and blur or leaving the dot is what closes.
+    dot.addEventListener("click", function () { showTip(dot, text); });
     return dot;
   }
 
@@ -321,7 +322,6 @@
     let top = at.top + at.height / 2 - size.height / 2;
     if (left + size.width > globalThis.innerWidth - 12) {
       // No room beside it, so it sits underneath instead.
-      box.classList.add("tipbox-below");
       left = Math.min(at.left - 16, globalThis.innerWidth - size.width - 12);
       top = at.bottom + 10;
     }
@@ -384,18 +384,19 @@
     // screen at once, and a shared handle would let one revert cancel the other.
     let timer = 0;
     button.addEventListener("click", function () {
-      const copied = writeClipboard(code, spec.text);
-      label.textContent = copied ? "Copied" : "Copy";
-      if (copied) button.setAttribute("data-copied", "true");
-      status.textContent = copied
-        ? "Copied."
-        : "This browser refused the copy. The command is selected, use your own copy key.";
-      clearTimeout(timer);
-      timer = setTimeout(function () {
-        label.textContent = "Copy";
-        button.removeAttribute("data-copied");
-        status.textContent = "";
-      }, 3200);
+      writeClipboard(code, spec.text).then(function (copied) {
+        label.textContent = copied ? "Copied" : "Copy";
+        if (copied) button.setAttribute("data-copied", "true");
+        status.textContent = copied
+          ? "Copied."
+          : "This browser refused the copy. The command is selected, use your own copy key.";
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          label.textContent = "Copy";
+          button.removeAttribute("data-copied");
+          status.textContent = "";
+        }, 3200);
+      });
     });
 
     const section = el("section", { class: "card terminal" }, [
@@ -427,8 +428,11 @@
    */
   function writeClipboard(code, text) {
     if (globalThis.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).catch(function () { selectNode(code); });
-      return true;
+      // The label waits for this promise: claiming "Copied" before it settles
+      // would announce a success a denied permission can still take back.
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { selectNode(code); return false; });
     }
     const selection = selectNode(code);
     let copied = false;
@@ -438,7 +442,7 @@
       copied = false;
     }
     if (copied && selection) selection.removeAllRanges();
-    return copied;
+    return Promise.resolve(copied);
   }
 
   function selectNode(node) {
@@ -567,6 +571,16 @@
     }, [daemonPanel(source, index)]);
     const detail = el("tr", { class: "daemon-detail" }, [cell]);
     detail.hidden = state.daemonOpen[source.id] !== true;
+    // A render stopped every ticker, so a row rebuilt open re-arms its own
+    // once the table is attached, and one opened by a link from another
+    // screen runs its first read here.
+    if (state.daemonOpen[source.id] === true) {
+      queueMicrotask(function () {
+        const view = state.daemonViews[source.id];
+        if (view === undefined) loadDaemon(source, index);
+        else if (view !== "loading" && !view.error_code) startTicker(source, index);
+      });
+    }
     return [row, detail];
   }
 
@@ -777,10 +791,18 @@
     cell.parentNode.hidden = !open;
     // A folded row is not being read, so it stops costing the daemon anything.
     if (!open) { stopTicker(source.id); return; }
-    if (state.daemonViews[source.id] !== undefined) { startTicker(source, index); return; }
+    const view = state.daemonViews[source.id];
+    if (view === "loading") return;
+    // An error is not kept as an answer: reopening the fold is the retry.
+    if (view !== undefined && !view.error_code) { startTicker(source, index); return; }
+    loadDaemon(source, index);
+  }
 
+  /** The first read of a daemon row, and the retry after a failed one. */
+  function loadDaemon(source, index) {
     state.daemonViews[source.id] = "loading";
-    cell.replaceChildren(daemonPanel(source, index));
+    const cell = document.getElementById("daemon-detail-" + index);
+    if (cell) cell.replaceChildren(daemonPanel(source, index));
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
       .then(function (view) { state.daemonViews[source.id] = view; })
       .catch(function () { state.daemonViews[source.id] = { error_code: "internal" }; })
@@ -789,7 +811,9 @@
         // cell is found again rather than kept in a closure.
         const target = document.getElementById("daemon-detail-" + index);
         if (target) target.replaceChildren(daemonPanel(source, index));
-        startTicker(source, index);
+        // And the row may have been folded in the meantime, in which case
+        // starting to poll it would contradict the fold.
+        if (state.daemonOpen[source.id]) startTicker(source, index);
       });
   }
 
@@ -894,7 +918,13 @@
         el("span", { class: "sink-sub", text: "Written by the daemon, not by the Hub." })
       ])
     ]);
-    if (view.warnings.length === 0) {
+    if (view.hints_unavailable_reason) {
+      // An unread export is not a clean bill: silence has to be earned.
+      side.appendChild(proseInto(el("p", { class: "daemon-lead" }),
+        "The export this screen reads hints from could not be read: `"
+          + view.hints_unavailable_reason + "`. Whatever the daemon recommends right now is "
+          + "unknown, which is not the same thing as nothing."));
+    } else if (view.warnings.length === 0) {
       side.appendChild(el("p", {
         class: "daemon-lead",
         text: "Nothing. The daemon emits a hint when its own counters show a setting is undersized "
@@ -912,6 +942,12 @@
           proseInto(el("span", { class: "outcome-warning-message" }), hint.message)
         ]));
       });
+      if (view.warnings_dropped > 0) {
+        side.appendChild(el("p", {
+          class: "daemon-lead",
+          text: view.warnings_dropped + " more arrived than the Hub relays in one view."
+        }));
+      }
     }
 
     return el("div", {}, [
@@ -1056,10 +1092,9 @@
     read.textContent = "Read " + PSL.dur(Date.now() - readAt) + " ago.";
 
     const ms = refreshMs(source.id);
-    // The sweep runs on its own clock. Timing it from the last read would hold
-    // the disc at full for however long the request takes, which reads as a
-    // stall rather than as a cycle.
-    if (state.daemonCycleAt[source.id] === undefined) state.daemonCycleAt[source.id] = Date.now();
+    // The sweep runs on its own clock, set by startTicker and refreshDaemon.
+    // Timing it from the last read would hold the disc at full for however
+    // long the request takes, which reads as a stall rather than as a cycle.
     const cycleAt = state.daemonCycleAt[source.id];
     const ring = next.parentNode.querySelector(".refresh-ring");
     const fill = ring && ring.querySelector(".refresh-ring-fill");
@@ -1080,27 +1115,34 @@
    * throw away the reader's open groups and their focus for nothing.
    */
   function refreshDaemon(source, index) {
-    if (state.daemonViews[source.id] === "refreshing") return;
+    // A separate flag rather than a sentinel in daemonViews: a render during
+    // the flight reads daemonViews, and a string there would crash it.
+    if (state.daemonInFlight[source.id]) return;
+    state.daemonInFlight[source.id] = true;
     state.daemonCycleAt[source.id] = Date.now();
     restartSweep(index, refreshMs(source.id));
     const previous = state.daemonViews[source.id];
-    state.daemonViews[source.id] = "refreshing";
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
-      .then(function (view) { state.daemonViews[source.id] = view; })
+      .then(function (view) {
+        // A transient error does not outrank data: the last good reading is
+        // kept and its age keeps counting, exactly as a dropped connection is
+        // handled below.
+        state.daemonViews[source.id] =
+          view.error_code && previous && !previous.error_code ? previous : view;
+      })
       .catch(function () {
         // Keep the last good reading rather than blanking the panel, and let
         // its age say how stale it now is.
         state.daemonViews[source.id] = previous;
       })
       .finally(function () {
+        delete state.daemonInFlight[source.id];
         const host = document.getElementById("daemon-top-" + index);
         const view = state.daemonViews[source.id];
-        if (!host || !view || typeof view === "string") return;
-        if (view.error_code) {
-          const cell = document.getElementById("daemon-detail-" + index);
-          if (cell) cell.replaceChildren(daemonPanel(source, index));
-          return;
-        }
+        if (!host || !view || view === "loading" || view.error_code) return;
+        // Not while the reader is inside it: rebuilding would close the
+        // interval select under their pointer. The next tick catches up.
+        if (host.contains(document.activeElement)) return;
         host.replaceChildren(daemonTopRow(source, view, index));
         tickRefresh(source, index);
       });
@@ -1148,12 +1190,17 @@
   function settingsCards(sourceId, view) {
     const cards = [];
     if (!view.config) {
+      const reason = view.config_unavailable_reason;
       cards.push(proseInto(el("p", { class: "daemon-lead" }),
-        view.config_unavailable_reason === "api_disabled"
+        reason === "api_disabled"
           ? "This daemon does not serve its configuration: `api_enabled` is off in its own "
             + "`[daemon]` section. Everything above came from the export instead."
-          : "This daemon did not answer for its configuration, so none is shown rather than a "
-            + "copy from some earlier moment."));
+          : reason === "unreadable"
+            ? "This daemon answered for its configuration with something the Hub could not "
+              + "relay, an error status or a body that is not the `[daemon]` object. The gauges "
+              + "above are the same daemon answering fine."
+            : "This daemon did not answer for its configuration, so none is shown rather than a "
+              + "copy from some earlier moment."));
     } else {
       DAEMON_GROUPS.forEach(function (spec) {
         const present = spec[2].filter(function (name) { return view.config[name] !== undefined; });
@@ -1458,15 +1505,29 @@
    * would take the focus out of the field being typed into.
    */
   function terminalSlot() {
-    const slot = el("div", { id: "terminal-panels", class: "terminal-stack" });
-    queueMicrotask(refreshTerminal);
-    return slot;
+    // No build queued here: submitRow's updateSubmit runs after the same
+    // render and builds the panels, so a second build would be thrown away.
+    state.terminalSig = null;
+    return el("div", { id: "terminal-panels", class: "terminal-stack" });
   }
 
+  /**
+   * Rebuilt only when what it would say changed. This runs on every keystroke
+   * through updateSubmit, and the command plus the overrides file are a
+   * complete signature of the panels: every conditional note keys off one of
+   * them or off the source, which the signature carries too.
+   */
   function refreshTerminal() {
     const slot = document.getElementById("terminal-panels");
     if (!slot) return;
-    slot.replaceChildren.apply(slot, terminalPanels(selectedSource()));
+    const source = selectedSource();
+    const sig = source
+      ? source.id + "|" + (PSL.analysisCommand(source, buildRequest(source)) || "") + "|"
+        + PSL.detectionToml(state.form.detection)
+      : "";
+    if (sig === state.terminalSig) return;
+    state.terminalSig = sig;
+    slot.replaceChildren.apply(slot, terminalPanels(source));
   }
 
   /**
@@ -1639,9 +1700,20 @@
           text: "There is no command line for this either. What this daemon is configured with, "
             + "and what it is holding at this moment, is on the Sources screen, on its own row."
         }),
-        el("a", { class: "pill-button pill-sm", href: "#/sources", text: "Open its row on Sources" })
+        sourcesRowLink()
       ])
     ]);
+  }
+
+  /** The label promises an open row, so the row arrives open: the sources
+      screen reads the flag and runs the first read itself. */
+  function sourcesRowLink() {
+    const link = el("a", { class: "pill-button pill-sm", href: "#/sources", text: "Open its row on Sources" });
+    link.addEventListener("click", function () {
+      const chosen = selectedSource();
+      if (chosen) state.daemonOpen[chosen.id] = true;
+    });
+    return link;
   }
 
   function backendControls(source) {

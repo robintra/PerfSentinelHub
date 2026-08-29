@@ -86,40 +86,52 @@ public static partial class ApiEndpoints
             async () => await client.FetchConfigAsync(source, cancellationToken),
             cancellationToken);
         var reportTask = TryReadAsync<byte[]>(
-            async () => await client.FetchReportSnapshotAsync(source, timeout, cancellationToken),
+            // Three times the ordinary budget: an export is heavier than a
+            // status read, which is why FetchReportSnapshotAsync takes its
+            // own timeout in the first place.
+            async () => await client.FetchReportSnapshotAsync(source, timeout * 3, cancellationToken),
             cancellationToken);
         await Task.WhenAll(statusTask, configTask, reportTask);
 
         var status = statusTask.Result;
         var config = configTask.Result;
-        var snapshot = ReadSnapshot(reportTask.Result.Value);
+        var report = reportTask.Result;
+        var snapshot = ReadSnapshot(report.Value);
+        var relayedConfig = ReadConfigObject(config.Value);
 
         return new DaemonViewData(
             source.Id,
             observedAtMs,
-            DaemonView.Classify(status.Value, snapshot.Warnings.Count),
+            // An unread export means the daemon's own hints are unknown, and
+            // "ok" is a claim about those hints as much as about the gauges.
+            DaemonView.Classify(status.Value, snapshot.Warnings.Count, report.ErrorCode is null),
             status.ErrorCode,
             status.Value,
-            ReadConfigObject(config.Value),
-            ConfigAbsence(config),
+            relayedConfig,
+            ConfigAbsence(config, relayedConfig),
             snapshot.DetectionConfigJson,
             snapshot.ScoringConfigJson,
             snapshot.EnergyModel,
             defaultsEngineVersion,
-            snapshot.Warnings);
+            report.ErrorCode,
+            snapshot.Warnings,
+            snapshot.Dropped);
     }
 
     /// <summary>
-    /// Which absence it is. A daemon answering 404 has its query API off, which
-    /// is a configuration statement an operator can act on, and not the same
-    /// thing as one that did not answer at all.
+    /// Which absence it is, three different actions for an operator: a 404 is
+    /// the daemon saying its query API is off, a network failure is nothing
+    /// answering, and everything else answered with something the Hub refused
+    /// to relay, an error status, an oversized section, or a body that is not
+    /// the [daemon] object.
     /// </summary>
-    private static string? ConfigAbsence(DaemonRead<byte[]> config) =>
+    private static string? ConfigAbsence(DaemonRead<byte[]> config, string? relayed) =>
         config switch
         {
-            { ErrorCode: not null } => "unreachable",
+            { ErrorCode: "network_error" or "timeout" } => "unreachable",
+            { ErrorCode: not null } => "unreadable",
             { Value: null } => "api_disabled",
-            _ => null
+            _ => relayed is null ? "unreadable" : null
         };
 
     /// <summary>
@@ -143,36 +155,84 @@ public static partial class ApiEndpoints
         }
     }
 
+    private const int MaxHints = 100;
+    private const int MaxHintChars = 2000;
+
     /// <summary>
     /// The three things a snapshot carries that /api/config does not: the
     /// detection thresholds, the scoring half of the green section, and the
-    /// hints the daemon writes about its own tuning.
+    /// hints the daemon writes about its own tuning. One parse of the body
+    /// serves all of them.
     /// </summary>
     private static DaemonSnapshotRead ReadSnapshot(byte[]? report)
     {
         if (report is null)
-            return new DaemonSnapshotRead(null, null, null, []);
+            return new DaemonSnapshotRead(null, null, null, [], 0);
 
-        var warnings = ReportSummary.TryParse(report, out _)?.Warnings ?? [];
         try
         {
             using var document = JsonDocument.Parse(report);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                return new DaemonSnapshotRead(null, null, null, warnings);
+                return new DaemonSnapshotRead(null, null, null, [], 0);
 
+            var (warnings, dropped) = ReadHints(root);
             var green = Section(root, "green_summary");
             return new DaemonSnapshotRead(
                 RawObject(root, "detection_config"),
                 green is { } summary ? RawObject(summary, "scoring_config") : null,
                 green is { } model ? Text(model, "energy_model") : null,
-                warnings);
+                warnings,
+                dropped);
         }
         catch (JsonException)
         {
-            return new DaemonSnapshotRead(null, null, null, warnings);
+            return new DaemonSnapshotRead(null, null, null, [], 0);
         }
     }
+
+    /// <summary>
+    /// The daemon's hints, wide enough that truncation is theoretical (the
+    /// daemon has ten advisor rules), and never silent when it happens: a cut
+    /// message carries a visible ellipsis and the dropped count goes on the
+    /// wire. ReportSummary's tighter run-storage bounds stay its own.
+    /// </summary>
+    private static (IReadOnlyList<ResultWarning> Warnings, int Dropped) ReadHints(JsonElement root)
+    {
+        var warnings = new List<ResultWarning>();
+        var dropped = 0;
+        if (root.TryGetProperty("warning_details", out var details) &&
+            details.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in details.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object)
+                    continue;
+                if (Text(entry, "kind") is not { } kind || Text(entry, "message") is not { } message)
+                    continue;
+                if (warnings.Count == MaxHints) { dropped++; continue; }
+                warnings.Add(new ResultWarning(kind, TruncateHint(message)));
+            }
+        }
+
+        if (warnings.Count > 0 || dropped > 0 ||
+            !root.TryGetProperty("warnings", out var legacy) ||
+            legacy.ValueKind != JsonValueKind.Array)
+            return (warnings, dropped);
+
+        foreach (var entry in legacy.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.String)
+                continue;
+            if (warnings.Count == MaxHints) { dropped++; continue; }
+            warnings.Add(new ResultWarning("unknown", TruncateHint(entry.GetString()!)));
+        }
+
+        return (warnings, dropped);
+    }
+
+    private static string TruncateHint(string message) =>
+        message.Length <= MaxHintChars ? message : message[..MaxHintChars] + "…";
 
     private static JsonElement? Section(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object
@@ -214,7 +274,8 @@ public static partial class ApiEndpoints
         string? DetectionConfigJson,
         string? ScoringConfigJson,
         string? EnergyModel,
-        IReadOnlyList<ResultWarning> Warnings);
+        IReadOnlyList<ResultWarning> Warnings,
+        int Dropped);
 }
 
 /// <summary>

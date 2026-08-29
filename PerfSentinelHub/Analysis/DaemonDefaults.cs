@@ -1,3 +1,7 @@
+using System.Buffers;
+using System.Text;
+using System.Text.Json;
+
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
@@ -12,11 +16,13 @@ namespace PerfSentinelHub.Analysis;
 /// have a different default, which is why the view names the version it
 /// compared against instead of asserting a value is wrong.
 ///
-/// Transcribed from `impl Default for DaemonConfig` and `for DetectConfig` in
-/// sentinel-core. The detection keys are DetectConfig's, which the export
-/// serialises, not the file keys the launcher's knobs carry.
+/// The [daemon] half is transcribed from `impl Default for DaemonConfig` in
+/// sentinel-core. The detection half is derived from the launcher's own knob
+/// schema so those eight numbers are stated once in this codebase, with only
+/// the export spellings (DetectConfig's field names, not the file keys the
+/// knobs carry) and the one string knob living here.
 /// </summary>
-internal static class DaemonDefaults
+public static class DaemonDefaults
 {
     public const string DaemonJson = """
         {
@@ -51,17 +57,28 @@ internal static class DaemonDefaults
         }
         """;
 
-    public const string DetectionJson = """
+    private static readonly Dictionary<string, string> ExportSpelling = new(StringComparer.Ordinal)
+    {
+        ["n_plus_one_min_occurrences"] = "n_plus_one_threshold",
+        ["window_duration_ms"] = "window_ms",
+        ["slow_query_threshold_ms"] = "slow_threshold_ms",
+        ["slow_query_min_occurrences"] = "slow_min_occurrences"
+    };
+
+    public static string DetectionJson { get; } = BuildDetectionJson();
+
+    private static string BuildDetectionJson()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
         {
-          "n_plus_one_threshold": 5,
-          "window_ms": 500,
-          "slow_threshold_ms": 500,
-          "slow_min_occurrences": 3,
-          "max_fanout": 20,
-          "chatty_service_min_calls": 15,
-          "pool_saturation_concurrent_threshold": 10,
-          "serialized_min_sequential": 3,
-          "sanitizer_aware_classification": "auto"
+            writer.WriteStartObject();
+            foreach (var knob in DetectionOverrides.Schema)
+                writer.WriteNumber(ExportSpelling.GetValueOrDefault(knob.Name, knob.Name), knob.Default);
+            writer.WriteString("sanitizer_aware_classification", "auto");
+            writer.WriteEndObject();
         }
-        """;
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
 }

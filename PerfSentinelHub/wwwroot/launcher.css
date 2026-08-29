@@ -869,7 +869,12 @@ body[data-screen="report"] .shell-footer { display: none; }
 .outcome .overline { display: block; margin-bottom: 12px; color: inherit; }
 .outcome-body { margin: 0 0 14px; font-size: 13.5px; line-height: 1.6; max-width: 120ch; color: inherit; }
 
-.counts { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 14px; border: 1px solid currentColor; border-radius: var(--r-sm); background: currentColor; overflow: hidden; }
+/* Not clipped: the move badge rises out of the top of this strip, and hidden
+   overflow cut it in half on the way. The rounding it was there for moves to
+   the cells at each end, which is where the corners actually are. */
+.counts { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 14px; border: 1px solid currentColor; border-radius: var(--r-sm); background: currentColor; }
+.count:first-child { border-top-left-radius: 7px; border-bottom-left-radius: 7px; }
+.count:last-child { border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
 /* Positioned so the move badge can float over the figure without taking any
    width from it: inline, it widened every cell and pushed uptime onto a second
    row of its own. */

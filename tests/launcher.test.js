@@ -202,3 +202,14 @@ test("the monitor command carries the interval the row is re-reading on", () => 
   assert.equal(PSL.monitorCommand({ base_url: "http://a b" }, 5),
     "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
 });
+
+test("only open folds are worth remembering", () => {
+  assert.deepEqual(PSL.openFolds({ a: true, b: false, c: true }), { a: true, c: true });
+  // Closed is the default, so nothing closed is written down.
+  assert.deepEqual(PSL.openFolds({ a: false }), {});
+  assert.deepEqual(PSL.openFolds({}), {});
+  assert.deepEqual(PSL.openFolds(null), {});
+  assert.deepEqual(PSL.openFolds(undefined), {});
+  // And nothing that is not exactly true counts as open.
+  assert.deepEqual(PSL.openFolds({ a: "true", b: 1, c: {}, d: true }), { d: true });
+});

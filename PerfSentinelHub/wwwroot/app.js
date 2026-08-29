@@ -186,6 +186,41 @@
     });
   }
 
+  // Folds outlive the page. A reader who opened a row, its settings and two of
+  // its groups should find all four the way they left them, so the four maps
+  // are one record rather than four, written whenever one of them changes.
+  const FOLD_STORAGE_KEY = "perf-sentinel-hub.folds";
+
+  function restoreFolds() {
+    let stored = null;
+    try {
+      stored = JSON.parse(localStorage.getItem(FOLD_STORAGE_KEY) || "null");
+    } catch (error) {
+      // Storage refused, or held something that is not JSON. Everything starts
+      // folded, which is what a first visit gets anyway.
+      stored = null;
+    }
+    if (!stored || typeof stored !== "object") return;
+    state.daemonOpen = PSL.openFolds(stored.row);
+    state.daemonSettingsOpen = PSL.openFolds(stored.settings);
+    state.daemonGroupOpen = PSL.openFolds(stored.group);
+    state.daemonTerminalOpen = PSL.openFolds(stored.terminal);
+  }
+
+  function saveFolds() {
+    try {
+      localStorage.setItem(FOLD_STORAGE_KEY, JSON.stringify({
+        row: PSL.openFolds(state.daemonOpen),
+        settings: PSL.openFolds(state.daemonSettingsOpen),
+        group: PSL.openFolds(state.daemonGroupOpen),
+        terminal: PSL.openFolds(state.daemonTerminalOpen)
+      }));
+    } catch (error) {
+      // A full or disabled store costs the reader the memory of their folds
+      // and nothing else, so there is nothing to report here.
+    }
+  }
+
   function renderShell() {
     const status = state.status;
     document.getElementById("version-hub").textContent = status ? status.version : "unknown";
@@ -436,7 +471,8 @@
       });
     });
 
-    const body = el("div", {}, [code, el("div", { class: "terminal-actions" }, [button, status])]);
+    const body = el("div", { class: "terminal-body" },
+      [code, el("div", { class: "terminal-actions" }, [button, status])]);
     (spec.notes || []).forEach(function (note) {
       if (!note) return;
       body.appendChild(note instanceof Node
@@ -457,7 +493,7 @@
     // lone chevron would make the reader open it to find out.
     const toggle = el("button", {
       type: "button",
-      class: "settings-more terminal-more",
+      class: "terminal-more",
       "aria-expanded": spec.fold.open ? "true" : "false"
     }, [el("span", { class: "overline", text: spec.head })]);
     body.hidden = !spec.fold.open;
@@ -855,6 +891,7 @@
     const open = button.getAttribute("aria-expanded") !== "true";
     button.setAttribute("aria-expanded", open ? "true" : "false");
     state.daemonOpen[source.id] = open;
+    saveFolds();
     const cell = document.getElementById("daemon-detail-" + index);
     if (!cell) return;
     cell.parentNode.hidden = !open;
@@ -926,7 +963,10 @@
         // the other way of reading them rather than part of that answer.
         fold: {
           open: state.daemonTerminalOpen[source.id] === true,
-          onToggle: function (open) { state.daemonTerminalOpen[source.id] = open; }
+          onToggle: function (open) {
+            state.daemonTerminalOpen[source.id] = open;
+            saveFolds();
+          }
         },
         text: PSL.monitorCommand(source, refreshSeconds(source.id)),
         copyLabel: "Copy the monitor command for " + source.name,
@@ -1347,6 +1387,7 @@
       const next = button.getAttribute("aria-expanded") !== "true";
       button.setAttribute("aria-expanded", next ? "true" : "false");
       state.daemonSettingsOpen[source.id] = next;
+      saveFolds();
       body.hidden = !next;
     });
     return el("div", { class: "settings-block" }, [button, body]);
@@ -1490,6 +1531,7 @@
       const next = button.getAttribute("aria-expanded") !== "true";
       button.setAttribute("aria-expanded", next ? "true" : "false");
       state.daemonGroupOpen[key] = next;
+      saveFolds();
       body.hidden = !next;
     });
     return el("section", { class: "settings-card" }, [button, body]);
@@ -1908,7 +1950,7 @@
     const link = el("a", { class: "pill-button pill-sm", href: "#/sources", text: "Open its row on Sources" });
     link.addEventListener("click", function () {
       const chosen = selectedSource();
-      if (chosen) state.daemonOpen[chosen.id] = true;
+      if (chosen) { state.daemonOpen[chosen.id] = true; saveFolds(); }
     });
     return link;
   }
@@ -3363,6 +3405,9 @@
   // ------------------------------------------------------------------ boot
 
   initTheme();
+  // Before the first render, so a row left open comes back open and reads its
+  // daemon on its own rather than waiting to be clicked again.
+  restoreFolds();
   // Escape closes the picker. Without it the only ways out are Apply, a quick
   // range or a click outside, and a keyboard user has none of them.
   globalThis.addEventListener("keydown", function (event) {

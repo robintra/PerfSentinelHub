@@ -302,6 +302,12 @@ adapts to the selected source's `kind` rather than offering an independent live-
 switch, since a switch would let the operator compose impossible states such as a three-hour window
 against a daemon that keeps ten minutes.
 
+Which folds a reader has opened is remembered in that browser's `localStorage`, under one key and
+as open folds only: a row, its terminal block, its settings and the groups inside them all come
+back the way they were left, and a row left open reads its daemon again on the next visit without
+being clicked. Nothing but those names is stored, and a browser that refuses storage simply starts
+everything folded.
+
 Neither command carries a placeholder. The endpoint is the source's own configured `BaseUrl`, and
 the monitor command carries the re-read interval the reader picked on that row, so a copied line is
 runnable as it stands and does not contradict the screen it came from. The one thing an operator

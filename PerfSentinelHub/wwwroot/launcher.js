@@ -461,6 +461,23 @@
     return gauges.every(function (g) { return !g || g.pct === null; }) ? "unknown" : "ok";
   }
 
+  /**
+   * The folds worth remembering: the open ones. A closed fold is the default,
+   * so storing it would only grow the record every time a reader tidies up
+   * after themselves, and leave the names of sources that no longer exist.
+   *
+   * @param {Record<string, boolean>} folds
+   * @returns {Record<string, true>}
+   */
+  function openFolds(folds) {
+    /** @type {Record<string, true>} */
+    const open = {};
+    Object.keys(folds || {}).forEach(function (key) {
+      if (folds[key] === true) open[key] = true;
+    });
+    return open;
+  }
+
   const ENGINE_REPOSITORY = "https://github.com/robintra/perf-sentinel";
 
   /**
@@ -543,6 +560,6 @@
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, analysisCommand, monitorCommand, detectionToml, quotedForShell,
-    lightState, mergeableView, mergeLight, refreshPlan, releaseUrl
+    lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds
   };
 })(globalThis);

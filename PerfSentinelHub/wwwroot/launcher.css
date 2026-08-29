@@ -1072,7 +1072,11 @@ body[data-screen="report"] .shell-footer { display: none; }
    is the block's title, so it keeps the overline's own tone. */
 .terminal-more .overline { color: var(--text-3); }
 .terminal-more:hover .overline { color: var(--brand-text); }
-.terminal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 11px; }
+.terminal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+/* The gap belongs to the body, not to the heading above it: a hidden body
+   generates no box, so a folded block has no space under its heading to sit
+   between the heading's margin and the card's own padding. */
+.terminal-body { margin-top: 11px; }
 /* Never soft-wrapped: the backslash continuations are shell syntax, and a
    visual wrap beside one would read as a line that is not there. */
 .terminal-code {
@@ -1144,6 +1148,7 @@ body[data-screen="report"] .shell-footer { display: none; }
    disclosure shape rather than two. */
 .row-toggle::before,
 .settings-more::before,
+.terminal-more::before,
 .settings-card-head::before {
   content: "";
   width: 7px;
@@ -1156,6 +1161,7 @@ body[data-screen="report"] .shell-footer { display: none; }
 }
 .row-toggle[aria-expanded="true"]::before,
 .settings-more[aria-expanded="true"]::before,
+.terminal-more[aria-expanded="true"]::before,
 .settings-card-head[aria-expanded="true"]::before { transform: rotate(45deg); }
 .row-toggle:hover { color: var(--brand-text); }
 .row-toggle:hover::before { border-color: var(--brand-text); }
@@ -1209,7 +1215,8 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* ------------------------------------------------ the settings, one click in */
 
 .settings-block { border-top: 1px solid var(--border); padding-top: 14px; }
-.settings-more {
+.settings-more,
+.terminal-more {
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -1221,7 +1228,8 @@ body[data-screen="report"] .shell-footer { display: none; }
   font-size: 11.5px;
   cursor: pointer;
 }
-.settings-more:hover::before { border-color: var(--brand-text); }
+.settings-more:hover::before,
+.terminal-more:hover::before { border-color: var(--brand-text); }
 /* Independent columns: a card only pushes the cards below it in its own one.
    The cards are dealt into them in JS, no CSS mechanism assigning children to
    columns keeps them independent. */

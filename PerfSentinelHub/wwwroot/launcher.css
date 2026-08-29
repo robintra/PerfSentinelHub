@@ -1037,7 +1037,24 @@ body[data-screen="report"] .shell-footer { display: none; }
 .knob-name { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--text); }
 .knob-default { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
 .knob-body { display: block; margin: 5px 0 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-2); max-width: 120ch; }
+.knob-controls { display: flex; align-items: center; gap: 10px; }
 .input-knob { width: 118px; font-variant-numeric: tabular-nums; }
+/* Still at the engine's own number, so it reads as untouched even though the
+   field now carries a value for the spinner to step from. */
+.input-knob[data-default] { color: var(--text-3); }
+.knob-reset {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.knob-reset:hover { color: var(--brand-text); }
+.advanced-actions { display: flex; justify-content: flex-end; margin: 12px 0 2px; }
 
 /* --------------------------------------------------- shared: help affordance */
 
@@ -1129,6 +1146,56 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* 120ch and not the 78ch the narrower panels use: measured, it wraps to the
    same number of lines as no limit at all in both the launcher column and the
    daemon panel, while keeping a line from running to 170 characters. */
+/* What has to be true before the command runs. Numbered because they are done
+   in order, and set apart from the prose under them because a step is an
+   instruction and the prose is only an explanation. */
+.steps-block {
+  margin-top: 14px;
+  padding: 12px 14px 13px;
+  /* The product's own info tone, the one .notice-block[data-tone="info"] uses
+     and the same hexes as the dashboard's: this block tells, where the warn
+     block a few centimetres above it cautions. */
+  border: 1px solid var(--info-bd);
+  border-radius: var(--r-sm);
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+.steps-head { display: flex; align-items: center; gap: 8px; color: inherit; }
+.steps {
+  counter-reset: step;
+  display: grid;
+  gap: 9px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.6;
+  color: inherit;
+}
+.steps li::before {
+  counter-increment: step;
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: .75;
+}
+/* The chips and the link inside a step read on the block's own ground. */
+.steps .code-inline { border-color: currentColor; background: transparent; color: inherit; }
+.steps .terminal-link { color: inherit; }
+
 /* Underlined, unlike the rest of the product's links: this one sits inside a
    sentence, where colour alone is not a strong enough tell that it is one. */
 .terminal-link {

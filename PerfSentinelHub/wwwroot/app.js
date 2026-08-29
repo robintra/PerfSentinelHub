@@ -189,8 +189,12 @@
       state.sources = state.sourcesError ? null : results[1];
       state.loading = false;
       if (state.sources && state.form.sourceId === null) {
+        // The one they were on last, if it is still configured. Falling back to
+        // the first reachable one is what a first visit gets.
+        const remembered = rememberedSource();
+        const kept = state.sources.find(function (source) { return source.id === remembered; });
         const usable = state.sources.find(function (source) { return source.reachable; });
-        state.form.sourceId = (usable || state.sources[0] || {}).id || null;
+        state.form.sourceId = (kept || usable || state.sources[0] || {}).id || null;
       }
       renderShell();
       onRoute();
@@ -201,6 +205,26 @@
   // its groups should find all four the way they left them, so the four maps
   // are one record rather than four, written whenever one of them changes.
   const FOLD_STORAGE_KEY = "perf-sentinel-hub.folds";
+  // Its own key rather than a field in the fold record: a chosen source is not
+  // a fold, and one name per thing survives the next thing worth remembering.
+  const SOURCE_STORAGE_KEY = "perf-sentinel-hub.source";
+
+  function rememberedSource() {
+    try {
+      return localStorage.getItem(SOURCE_STORAGE_KEY);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function saveSource(id) {
+    try {
+      if (id) localStorage.setItem(SOURCE_STORAGE_KEY, id);
+    } catch (error) {
+      // Storage refused. The next visit opens on the default source, which is
+      // where every visit used to open.
+    }
+  }
 
   function restoreFolds() {
     let stored = null;
@@ -431,15 +455,15 @@
    * it needs one on the machine it is typed into. The link pins the version
    * this Hub runs: that is the one the command above is spelled for.
    */
-  function engineNote() {
+  function engineNeed(parent) {
     const version = PSL.ENGINE;
-    const note = proseInto(el("p", { class: "terminal-note" }), version
-      ? "This runs the `perf-sentinel` binary itself, so the machine you type it into needs "
-        + "one. This Hub runs " + version + " and the command is spelled for it, an older "
-        + "engine may refuse a flag it does not have yet. Take the same build: "
-      : "This runs the `perf-sentinel` binary itself, so the machine you type it into needs "
-        + "one. This Hub reports no engine version, so there is none to match here: ");
-    note.appendChild(el("a", {
+    proseInto(parent, version
+      ? "Install the `perf-sentinel` binary on the machine you will type this into. This Hub "
+        + "runs " + version + " and the command is spelled for it, an older engine may refuse a "
+        + "flag it does not have yet. Take the same build: "
+      : "Install the `perf-sentinel` binary on the machine you will type this into. This Hub "
+        + "reports no engine version, so there is none to match here: ");
+    parent.appendChild(el("a", {
       class: "terminal-link",
       href: PSL.releaseUrl(version),
       // Someone else's site in someone else's tab: the Hub keeps the page the
@@ -448,8 +472,40 @@
       rel: "noopener noreferrer",
       text: version ? "perf-sentinel " + version + " on GitHub" : "the perf-sentinel releases"
     }));
-    note.appendChild(document.createTextNode("."));
-    return note;
+    parent.appendChild(document.createTextNode("."));
+    return parent;
+  }
+
+  function engineNote() {
+    return engineNeed(el("p", { class: "terminal-note" }));
+  }
+
+  /** A circled i, for a block that tells rather than warns. */
+  function infoGlyph(size) {
+    return svg([
+      ["circle", { cx: "12", cy: "12", r: "9" }],
+      ["path", { d: "M12 11.2v5M12 7.8v.2" }]
+    ], size);
+  }
+
+  /**
+   * What has to be true before the command above can run, in the order you
+   * would do it. Prose that only explains stays prose below: a numbered step
+   * is a promise that there is something to go and do.
+   */
+  function stepsBlock(steps) {
+    const present = steps.filter(Boolean);
+    return el("div", { class: "steps-block" }, [
+      el("div", { class: "steps-head" }, [
+        infoGlyph(14),
+        el("span", { class: "overline", text: "// what you need first" })
+      ]),
+      el("ol", { class: "steps" }, present.map(function (step) {
+        return step instanceof Node
+          ? el("li", {}, [step])
+          : proseInto(el("li", {}), step);
+      }))
+    ]);
   }
 
   function terminalBlock(spec) {
@@ -1685,6 +1741,7 @@
       were answers about a different source. */
   function selectSource(id) {
     state.form.sourceId = id;
+    saveSource(id);
     state.form.ackUnreachable = false;
     state.form.ackHeavy = false;
     state.form.pickerOpen = false;
@@ -1850,34 +1907,39 @@
       text: command,
       copyLabel: "Copy the analysis command",
       notes: [
+        // What to go and do, then what it means. The two were one list, which
+        // made a prerequisite read like a remark and a remark like a chore.
+        stepsBlock([
+          engineNeed(el("span", {})),
+          !trace && !state.form.service.trim()
+            ? "Fill in the service name above. The command carries an empty one as it stands, "
+              + "and the engine refuses it as it stands."
+            : null,
+          source.auth_header_name
+            ? "Export `PERF_SENTINEL_SOURCE_TOKEN` with the whole header line, `"
+              + source.auth_header_name + "` and its value, not the value on its own. The Hub "
+              + "holds one for this source and does not disclose it, so the command reads yours."
+            : null,
+          changed > 0
+            ? "Save the `.perf-sentinel.toml` below next to where you run the command. "
+              + (changed === 1 ? "The threshold you moved has" : "The thresholds you moved have")
+              + " no command-line flag, so the engine reads "
+              + (changed === 1 ? "it" : "them") + " from that file."
+            : null
+        ]),
         "This is the same request the button above sends, written as the engine's own "
           + "arguments. It runs wherever perf-sentinel is installed and does not pass through "
           + "this Hub: no worker slot, no queue, and no report kept here for "
           + state.status.limits.report_retention_hours + " hours.",
-        engineNote(),
         "It prints its findings to the terminal. There is no dashboard at the end of it and no "
           + "link to share, which is the trade for not spending a worker.",
         trace
           ? "An ID resolves to exactly one trace, so the engine takes neither a window nor a "
             + "trace cap here, exactly as the form above stops offering them."
           : null,
-        !trace && !state.form.service.trim()
-          ? "No service name yet, so the command carries an empty one. It is shown as it stands "
-            + "and will be refused as it stands."
-          : null,
-        source.auth_header_name
-          ? "This source needs an auth header. The Hub holds one and does not disclose it, so "
-            + "the command reads yours from `PERF_SENTINEL_SOURCE_TOKEN` instead. Export the whole "
-            + "header line, `" + source.auth_header_name + "` and the value, not the value on its own."
-          : null,
         PSL.quotedForShell(command)
           ? "Quoted for a POSIX shell. PowerShell and cmd quote differently, and this line is "
             + "not valid in either."
-          : null,
-        changed > 0
-          ? (changed === 1 ? "1 detection threshold is" : changed + " detection thresholds are")
-            + " changed above. They have no command-line flag: the engine reads them from a "
-            + "file, so the command carries `-c .perf-sentinel.toml` and the file it expects is below."
           : null
       ]
     })];
@@ -3253,6 +3315,10 @@
     const count = detectionCount();
     badge.hidden = count === 0;
     badge.textContent = count === 1 ? "1 changed" : count + " changed";
+    const resetAll = document.getElementById("advanced-reset");
+    // Nothing to put back when nothing was moved, and a button that does
+    // nothing is a button that has to be tried to be understood.
+    if (resetAll) resetAll.hidden = count === 0;
   }
 
   /**
@@ -3299,35 +3365,85 @@
       })
     ]);
 
+    // One button for the lot, beside the count so the two agree at a glance.
+    const resetAll = el("button", {
+      type: "button",
+      id: "advanced-reset",
+      class: "pill-button pill-sm advanced-reset",
+      text: "Reset every threshold"
+    });
+    resetAll.addEventListener("click", function () {
+      state.form.detection = {};
+      updateSubmit();
+      render();
+    });
+    body.appendChild(el("div", { class: "advanced-actions" }, [resetAll]));
+
     knobs.forEach(function (knob) {
       body.appendChild(detectionRow(knob));
     });
 
     const panel = el("details", { class: "advanced" }, [summary, body]);
-    if (detectionCount() > 0) panel.setAttribute("open", "open");
+    // Open because the reader left it open, or because a threshold in it is
+    // set and hiding that would hide what the run is about to do.
+    panel.open = state.panelOpen.advanced === true || detectionCount() > 0;
+    panel.addEventListener("toggle", function () {
+      // Only a change the reader made: every render rebuilds this panel and
+      // sets `open` above, which fires this same event.
+      if (state.panelOpen.advanced === panel.open) return;
+      state.panelOpen.advanced = panel.open;
+      saveFolds();
+    });
     queueMicrotask(refreshDetectionCount);
     return panel;
   }
 
   function detectionRow(knob) {
     const current = state.form.detection[knob.name];
+    const identifier = "knob-" + knob.name;
     const input = el("input", {
+      id: identifier,
       type: "number",
       class: "input input-knob",
       min: String(knob.min),
       max: String(knob.max),
-      placeholder: String(knob.default),
-      value: current === undefined ? "" : String(current)
+      // The default as a value, not as a placeholder. Empty, the field had
+      // nothing for the spinner to step from, so the up arrow jumped to the
+      // minimum: 10 became 2. It stays in the muted tone until it is moved,
+      // and a value equal to the default is still not an override.
+      value: current === undefined ? String(knob.default) : String(current)
     });
-    input.addEventListener("input", function () { setDetection(knob.name, input.value, knob); });
+    const reset = el("button", {
+      type: "button",
+      class: "knob-reset",
+      "aria-label": "Reset " + knob.name + " to " + knob.default,
+      text: "reset"
+    });
 
-    return el("label", { class: "knob" }, [
-      el("span", { class: "knob-head" }, [
+    function mark() {
+      const moved = state.form.detection[knob.name] !== undefined;
+      input.toggleAttribute("data-default", !moved);
+      reset.hidden = !moved;
+    }
+    mark();
+
+    input.addEventListener("input", function () {
+      setDetection(knob.name, input.value, knob);
+      mark();
+    });
+    reset.addEventListener("click", function () {
+      input.value = String(knob.default);
+      setDetection(knob.name, input.value, knob);
+      mark();
+    });
+
+    return el("div", { class: "knob" }, [
+      el("label", { class: "knob-head", for: identifier }, [
         el("span", { class: "knob-name", text: knob.name }),
         el("span", { class: "knob-default", text: "default " + knob.default })
       ]),
       el("span", { class: "knob-body", text: DETECTION_COPY[knob.name] || "" }),
-      input
+      el("div", { class: "knob-controls" }, [input, reset])
     ]);
   }
 

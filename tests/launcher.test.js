@@ -112,3 +112,43 @@ test("a light refresh classifies from its gauges plus the kept hints", () => {
   assert.equal(PSL.lightState({ traces: unknown, analysis_queue: unknown, findings: unknown }, 0), "unknown");
   assert.equal(PSL.lightState({ traces: under, analysis_queue: unknown, findings: under }, 0), "ok");
 });
+
+test("a light refresh only merges onto a view that carries the rest", () => {
+  const full = { error_code: null, warnings: [], config: { api_enabled: true }, state: "ok" };
+
+  assert.equal(PSL.mergeableView(undefined), null);
+  assert.equal(PSL.mergeableView("loading"), null);
+  assert.equal(PSL.mergeableView({ error_code: "source_unreachable" }), null);
+  // A light body has no warnings of its own, so it is never a base for another.
+  assert.equal(PSL.mergeableView({ error_code: null, traces: null }), null);
+  assert.equal(PSL.mergeableView(full), full);
+});
+
+test("a merged light view keeps the settings and takes the gauges", () => {
+  const under = { value: 1, capacity: 100, pct: 1, at_capacity: false };
+  const at = { value: 99, capacity: 100, pct: 99, at_capacity: true };
+  const previous = {
+    error_code: null, observed_at_ms: 1000, version: "0.16.0", uptime_seconds: 10,
+    warnings: [{ kind: "tuning", message: "m" }], warnings_dropped: 0,
+    config: { api_enabled: true }, state: "advised",
+    traces: under, analysis_queue: under, findings: under
+  };
+  const light = {
+    observed_at_ms: 2000, version: "0.16.0", uptime_seconds: 70,
+    traces: at, analysis_queue: under, findings: under
+  };
+
+  const merged = PSL.mergeLight(previous, light);
+
+  assert.equal(merged.observed_at_ms, 2000);
+  assert.equal(merged.uptime_seconds, 70);
+  assert.deepEqual(merged.traces, at);
+  // What a light read cannot see is the last full read's, unchanged.
+  assert.deepEqual(merged.config, previous.config);
+  assert.deepEqual(merged.warnings, previous.warnings);
+  // And the state follows the new gauges, not the state that came with them.
+  assert.equal(merged.state, "near_capacity");
+  // The previous view is left alone: the panel may still be rendering it.
+  assert.equal(previous.state, "advised");
+  assert.deepEqual(previous.traces, under);
+});

@@ -833,8 +833,11 @@
         const target = document.getElementById("daemon-detail-" + index);
         if (target) target.replaceChildren(daemonPanel(source, index));
         // And the row may have been folded in the meantime, in which case
-        // starting to poll it would contradict the fold.
-        if (state.daemonOpen[source.id]) startTicker(source, index);
+        // starting to poll it would contradict the fold. An error is not
+        // re-read either: reopening the fold is the retry, the same rule the
+        // fold applies, and the error panel carries no countdown to write to.
+        const failed = state.daemonViews[source.id].error_code;
+        if (state.daemonOpen[source.id] && !failed) startTicker(source, index);
       });
   }
 
@@ -1149,26 +1152,18 @@
     state.daemonInFlight[source.id] = true;
     restartCycle(source.id, index);
     const previous = state.daemonViews[source.id];
-    const full = Date.now() - (state.daemonFullReadAt[source.id] || 0) >= FULL_READ_EVERY_MS;
+    // A light read is only ever an overlay on a full one, so a row with
+    // nothing to lay it over reads in full however recently it was read: the
+    // gauges alone would render as a view with no settings and no hints.
+    const kept = PSL.mergeableView(previous);
+    const full = !kept || Date.now() - (state.daemonFullReadAt[source.id] || 0) >= FULL_READ_EVERY_MS;
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon" + (full ? "" : "?refresh=status"))
       .then(function (view) {
         // A transient error does not outrank data: the last good reading is
         // kept and its age keeps counting, exactly as a dropped connection is
         // handled below.
-        if (view.error_code && previous && !previous.error_code) return;
-        if (!full && previous && !previous.error_code) {
-          // A light body carries the gauges alone: they land on the kept view,
-          // and the state is theirs plus the hints of the last full read.
-          view = Object.assign({}, previous, {
-            observed_at_ms: view.observed_at_ms,
-            version: view.version,
-            uptime_seconds: view.uptime_seconds,
-            traces: view.traces,
-            analysis_queue: view.analysis_queue,
-            findings: view.findings,
-            state: PSL.lightState(view, previous.warnings.length)
-          });
-        }
+        if (view.error_code && kept) return;
+        if (!full) view = PSL.mergeLight(kept, view);
         state.daemonViews[source.id] = view;
         state.daemonReadAt[source.id] = Date.now();
         if (full) state.daemonFullReadAt[source.id] = Date.now();
@@ -1209,7 +1204,8 @@
       settingsColumns(settingsCards(source.id, view)));
     // The preamble sits above the columns rather than inside them, or it would
     // flow into the first one as if it were a card.
-    const body = el("div", {}, [view.config ? settingsPreamble(view) : null, cards]);
+    const body = el("div", {},
+      [view.config ? settingsPreamble(view) : configAbsenceNote(view), cards]);
     body.hidden = !open;
 
     const button = el("button", {
@@ -1243,30 +1239,38 @@
    * sideways under the reader's own click.
    */
   function settingsColumns(cards) {
+    // Never more columns than cards: an empty one still takes its share of the
+    // width, so three of them would render a lone card at a third of the row.
+    const count = Math.min(SETTINGS_COLUMNS, cards.length);
     const columns = [];
-    for (let index = 0; index < SETTINGS_COLUMNS; index++)
+    for (let index = 0; index < count; index++)
       columns.push(el("div", { class: "settings-col" }));
-    cards.forEach(function (card, index) {
-      columns[index % SETTINGS_COLUMNS].appendChild(card);
-    });
+    cards.forEach(function (card, index) { columns[index % count].appendChild(card); });
     return columns;
+  }
+
+  /**
+   * Why no settings are shown, as prose above the cards rather than dealt into
+   * a column as if it were one: a paragraph in a third of the row reads as a
+   * card that lost its rows.
+   */
+  function configAbsenceNote(view) {
+    const reason = view.config_unavailable_reason;
+    return proseInto(el("p", { class: "daemon-lead" }),
+      reason === "api_disabled"
+        ? "This daemon does not serve its configuration: `api_enabled` is off in its own "
+          + "`[daemon]` section. Everything above came from the export instead."
+        : reason === "unreadable"
+          ? "This daemon answered for its configuration with something the Hub could not "
+            + "relay, an error status or a body that is not the `[daemon]` object. The gauges "
+            + "above are the same daemon answering fine."
+          : "This daemon did not answer for its configuration, so none is shown rather than a "
+            + "copy from some earlier moment.");
   }
 
   function settingsCards(sourceId, view) {
     const cards = [];
-    if (!view.config) {
-      const reason = view.config_unavailable_reason;
-      cards.push(proseInto(el("p", { class: "daemon-lead" }),
-        reason === "api_disabled"
-          ? "This daemon does not serve its configuration: `api_enabled` is off in its own "
-            + "`[daemon]` section. Everything above came from the export instead."
-          : reason === "unreadable"
-            ? "This daemon answered for its configuration with something the Hub could not "
-              + "relay, an error status or a body that is not the `[daemon]` object. The gauges "
-              + "above are the same daemon answering fine."
-            : "This daemon did not answer for its configuration, so none is shown rather than a "
-              + "copy from some earlier moment."));
-    } else {
+    if (view.config) {
       DAEMON_GROUPS.forEach(function (spec) {
         const present = spec[2].filter(function (name) { return view.config[name] !== undefined; });
         if (present.length > 0) {

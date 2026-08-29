@@ -1194,10 +1194,6 @@ body[data-screen="report"] .shell-footer { display: none; }
   cursor: pointer;
 }
 .settings-more:hover::before { border-color: var(--brand-text); }
-/* A grid, not CSS columns: columns pack by height, so opening one group
-   re-shuffled every card into a different column under the reader's click.
-   Folded by default the cards are uniform, rows carry no holes, and an open
-   card only deepens its own row while every card keeps its place. */
 /* Independent columns: a card only pushes the cards below it in its own one.
    The cards are dealt into them in JS, no CSS mechanism assigning children to
    columns keeps them independent. */

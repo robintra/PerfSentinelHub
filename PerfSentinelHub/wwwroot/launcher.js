@@ -448,6 +448,42 @@
     return gauges.every(function (g) { return !g || g.pct === null; }) ? "unknown" : "ok";
   }
 
+  /**
+   * The last view a light refresh can merge onto, or null when there is none:
+   * undefined before the first read, the "loading" sentinel during it, an error
+   * body, or a light body that never carried the rest. Null is the caller's
+   * signal to read in full rather than light.
+   *
+   * @param {any} view
+   * @returns {any}
+   */
+  function mergeableView(view) {
+    return view && typeof view === "object" && !view.error_code && Array.isArray(view.warnings)
+      ? view
+      : null;
+  }
+
+  /**
+   * A light body laid over the last full view: the gauges and the version are
+   * the light read's, the settings and the daemon's hints stay the full read's,
+   * and the state is derived from both.
+   *
+   * @param {any} previous a view mergeableView returned
+   * @param {any} light
+   * @returns {any}
+   */
+  function mergeLight(previous, light) {
+    return Object.assign({}, previous, {
+      observed_at_ms: light.observed_at_ms,
+      version: light.version,
+      uptime_seconds: light.uptime_seconds,
+      traces: light.traces,
+      analysis_queue: light.analysis_queue,
+      findings: light.findings,
+      state: lightState(light, previous.warnings.length)
+    });
+  }
+
   global.PSL = {
     setVersions,
     get ENGINE() { return ENGINE; },
@@ -455,6 +491,7 @@
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
-    shq, analysisCommand, monitorCommand, detectionToml, quotedForShell, lightState
+    shq, analysisCommand, monitorCommand, detectionToml, quotedForShell,
+    lightState, mergeableView, mergeLight
   };
 })(globalThis);

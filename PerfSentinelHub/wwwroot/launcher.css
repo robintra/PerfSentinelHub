@@ -1234,6 +1234,9 @@ body[data-screen="report"] .shell-footer { display: none; }
 }
 /* One grid item, whatever the step is made of. */
 .step-text { min-width: 0; }
+/* A line to run rather than a term being named, so it gets its own line and
+   room to breathe. */
+.step-line { display: block; width: fit-content; max-width: 100%; margin: 7px 0; padding: 6px 9px; white-space: pre-wrap; }
 /* The chips read on the block's own ground. The link keeps the product's green:
    a link is a link everywhere here, and the tone of the block it sits in is
    about what the block is, not about where the link goes. */

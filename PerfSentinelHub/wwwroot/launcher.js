@@ -386,6 +386,23 @@
     { id: "powershell", label: "PowerShell", wrap: "`", quote: psq }
   ];
 
+  /**
+   * The line that puts a value in an environment variable, in the shell's own
+   * syntax. The two differ by more than a keyword: PowerShell assigns into the
+   * `env:` drive and wants the spaces around the equals sign.
+   *
+   * @param {string} shellId
+   * @param {string} name
+   * @param {string} value
+   * @returns {string}
+   */
+  function exportLine(shellId, name, value) {
+    const shell = shellById(shellId);
+    return shell.id === "powershell"
+      ? "$env:" + name + " = " + shell.quote(value)
+      : "export " + name + "=" + shell.quote(value);
+  }
+
   function shellById(id) {
     return SHELLS.find(function (shell) { return shell.id === id; }) || SHELLS[0];
   }
@@ -646,7 +663,7 @@
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
-    shq, psq, SHELLS, shellById, defaultShell,
+    shq, psq, SHELLS, shellById, defaultShell, exportLine,
     analysisCommand, monitorCommand, detectionToml, quotedForShell,
     lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
     gaugeTone, gaugeMove

@@ -508,6 +508,34 @@
     return engineNeed(el("p", { class: "terminal-note" }));
   }
 
+  /**
+   * The step that trips people up: it names a variable, and a reader who has
+   * never met the flag cannot tell what goes in it or where. So it shows the
+   * line to run, in the shell they picked, with their own credential to drop
+   * in. Only ever shown for a source the Hub itself reaches with a header, so
+   * an open backend on an intranet never sees any of this.
+   */
+  function tokenStep(source) {
+    const header = source.auth_header_name + ": …";
+    const step = el("span", {});
+    proseInto(step, "This source is behind an `" + source.auth_header_name + "` header. Run this "
+      + "in the same terminal, before the command, with your own credential where the dots are:");
+    const line = el("code", {
+      class: "code-inline step-line",
+      text: PSL.exportLine(state.shell, "PERF_SENTINEL_SOURCE_TOKEN", header)
+    });
+    SPELL.set(line, function (shellId) {
+      return PSL.exportLine(shellId, "PERF_SENTINEL_SOURCE_TOKEN", header);
+    });
+    line.setAttribute("data-spell", "");
+    step.appendChild(line);
+    proseInto(step, "The whole header line goes in, name included, not the value on its own. The "
+      + "Hub holds a header of its own for this source and never discloses it, which is why the "
+      + "command reads yours from a variable rather than carrying a secret where `ps` would "
+      + "show it to everyone on the machine.");
+    return step;
+  }
+
   /** An arrow turning back on itself: put this value where it was. */
   function undoGlyph(size) {
     return svg([
@@ -2022,11 +2050,7 @@
             ? "Fill in the service name above. The command carries an empty one as it stands, "
               + "and the engine refuses it as it stands."
             : null,
-          source.auth_header_name
-            ? "Export `PERF_SENTINEL_SOURCE_TOKEN` with the whole header line, `"
-              + source.auth_header_name + "` and its value, not the value on its own. The Hub "
-              + "holds one for this source and does not disclose it, so the command reads yours."
-            : null,
+          source.auth_header_name ? tokenStep(source) : null,
           changed > 0
             ? "Save the `.perf-sentinel.toml` below next to where you run the command. "
               + (changed === 1 ? "The threshold you moved has" : "The thresholds you moved have")

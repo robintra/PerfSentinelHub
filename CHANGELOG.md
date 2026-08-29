@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The auth-header step shows the line that sets the variable, in the chosen shell's own syntax,
+  rather than naming a variable and leaving the reader to work out the rest. A source the Hub
+  reaches without a header shows none of it.
 - Printed commands carry a tab per shell, POSIX or PowerShell, each with its own quoting and line
   continuation. The first visit opens on the platform's own, and the choice is remembered.
 - Scrollbars follow the theme, using the dashboard's own three rules rather than the browser's

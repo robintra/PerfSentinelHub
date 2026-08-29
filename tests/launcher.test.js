@@ -292,3 +292,17 @@ test("a command continues its line the way its own shell does", () => {
   assert.equal(PSL.monitorCommand({ base_url: "http://a b" }, 5, "powershell"),
     "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
 });
+
+test("setting an environment variable is written the way each shell writes it", () => {
+  const header = "Authorization: …";
+  assert.equal(PSL.exportLine("posix", "PERF_SENTINEL_SOURCE_TOKEN", header),
+    "export PERF_SENTINEL_SOURCE_TOKEN='Authorization: …'");
+  // PowerShell assigns into the env: drive, and wants the spaces.
+  assert.equal(PSL.exportLine("powershell", "PERF_SENTINEL_SOURCE_TOKEN", header),
+    "$env:PERF_SENTINEL_SOURCE_TOKEN = 'Authorization: …'");
+  // A quote in the value is escaped by each shell's own rule.
+  assert.equal(PSL.exportLine("posix", "V", "a'b"), "export V='a'\\''b'");
+  assert.equal(PSL.exportLine("powershell", "V", "a'b"), "$env:V = 'a''b'");
+  // An unknown shell is the POSIX one, as everywhere else.
+  assert.match(PSL.exportLine("nonsense", "V", "x"), /^export V=/);
+});

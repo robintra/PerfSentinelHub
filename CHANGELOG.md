@@ -26,6 +26,8 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- Scrollbars follow the theme, using the dashboard's own three rules rather than the browser's
+  default grey.
 - A detection threshold's field carries the engine's default rather than showing it as a
   placeholder, so the spinner steps from 10 to 11 instead of jumping to the minimum. Each one can
   be put back on its own, and a button puts every one back at once.

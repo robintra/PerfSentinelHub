@@ -17,6 +17,12 @@ body {
 }
 a { color: var(--brand-text); text-decoration: none; }
 button { font: inherit; }
+/* The dashboard's own scrollbar, rule for rule: the two surfaces are read in
+   one session, and the browser default is the one thing on this page that does
+   not follow the theme. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
 
 /* The wordmark pair swaps on the resolved theme, exactly as the dashboard

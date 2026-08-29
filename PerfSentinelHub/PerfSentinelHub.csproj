@@ -4,6 +4,12 @@
         <Version>0.1.0</Version>
         <InvariantGlobalization>false</InvariantGlobalization>
         <PublishAot>true</PublishAot>
+        <!-- Implied by PublishAot at publish time, stated here so the generator
+             also runs at build: an endpoint shape it cannot handle then fails
+             here rather than at publish. It does not quiet the IDE, whose
+             analysis does not run the generator and so reports IL2026/IL3050
+             on every MapGet, warnings neither the build nor the binary has. -->
+        <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
         <RuntimeIdentifiers>linux-x64;linux-arm64;osx-arm64;win-x64</RuntimeIdentifiers>
         <Copyright>Copyright (C) 2026 Robin Trassard</Copyright>
         <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>

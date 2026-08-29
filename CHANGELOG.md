@@ -44,8 +44,13 @@ All notable changes to PerfSentinelHub are recorded here.
 - Fleet health's headings align with their own cells. The last-success, unreachable-for and
   producer columns right-align their values while their headings stayed left, and the producer
   column disagreed with itself: two of its three cases aligned right and the third did not.
-- The two notes on the fleet health screen fit on one line. Their 76ch and 78ch limits resolved to
-  roughly half the width they had, which cost each of them a second line for nothing.
+- Line length is one value across the stylesheet, 120ch, replacing limits between 58ch and 80ch
+  that each resolved to about half the room their column had. Measured on the rendered screens,
+  every block now wraps to the same number of lines it would with no limit at all, while a line
+  still stops short of 170 characters. Six blocks were costing a line for nothing, among them the
+  sentence under the run button and the gloss under each detection threshold.
+- A link that follows prose inside a notice is spaced from it, rather than reading as one more
+  line of the sentence above.
 - The daemon panel no longer inherits the sources table's monospace face. A table of values is
   right to be monospaced and a panel of prose is not, and the two had been the same thing since
   the panel is a cell of that table. Names and values stay mono by asking for it.

@@ -429,7 +429,10 @@ button { font: inherit; }
 .notice { display: flex; gap: 11px; padding: 16px; border-radius: var(--r-sm); background: var(--surface-3); }
 .notice svg { flex: 0 0 auto; width: 17px; height: 17px; margin-top: 1px; color: var(--text-3); }
 .notice p { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.5; color: var(--text); }
-.notice-sub { margin-top: 6px !important; font-size: 12.5px !important; font-weight: 400 !important; line-height: 1.55 !important; max-width: 62ch; color: var(--text-2) !important; }
+/* A control after the prose needs more air than the 6px that separates two
+   paragraphs, or it reads as another line of the sentence above it. */
+.notice .pill-button { margin-top: 14px; }
+.notice-sub { margin-top: 6px !important; font-size: 12.5px !important; font-weight: 400 !important; line-height: 1.55 !important; max-width: 120ch; color: var(--text-2) !important; }
 
 .field { margin-bottom: 18px; }
 .field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 7px; font-size: 12px; font-weight: 500; color: var(--text-2); }
@@ -685,7 +688,7 @@ button { font: inherit; }
 .band-scale-grid span { text-align: right; padding-right: 2px; }
 .band-scale-grid span:last-child { padding-right: 0; }
 
-.band-body { margin: 0; font-size: 12px; line-height: 1.6; max-width: 80ch; }
+.band-body { margin: 0; font-size: 12px; line-height: 1.6; max-width: 120ch; }
 
 .sink { margin-top: 14px; padding: 13px 15px; border-radius: 10px; background: var(--surface-3); }
 .sink-rows { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 7px 12px; margin: 9px 0 0; }
@@ -724,7 +727,7 @@ button { font: inherit; }
 .notice-block > svg { flex: 0 0 auto; margin-top: 2px; }
 .notice-block-text { min-width: 0; }
 .notice-block-title { margin: 0 0 5px; font-size: 13px; font-weight: 600; color: inherit; }
-.notice-block-body { margin: 0 0 4px; font-size: 12.5px; line-height: 1.55; color: inherit; opacity: .92; max-width: 78ch; }
+.notice-block-body { margin: 0 0 4px; font-size: 12.5px; line-height: 1.55; color: inherit; opacity: .92; max-width: 120ch; }
 .notice-block .checkbox { margin-top: 10px; color: inherit; font-weight: 500; }
 .notice-block .checkbox input { width: 16px; height: 16px; }
 /* Same treatment the dashboard gives .ps-code-inline, on --surface-3 rather
@@ -772,7 +775,7 @@ button { font: inherit; }
   cursor: pointer;
 }
 .submit:disabled { background: var(--surface-3); color: var(--text-3); opacity: .7; cursor: not-allowed; }
-.submit-sentence { margin: 0; max-width: 58ch; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.submit-sentence { margin: 0; max-width: 120ch; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 .submit-sentence[data-blocked="true"] { color: var(--text-3); }
 
 /* ----------------------------------------------- screen: dashboard handoff */
@@ -877,7 +880,7 @@ body[data-screen="report"] .shell-footer { display: none; }
 .outcome[data-tone="info"] { background: var(--info-bg); border-color: var(--info-bd); color: var(--info-fg); }
 .outcome[data-tone="muted"] { background: var(--surface-3); border-color: var(--border-2); color: var(--text-2); }
 .outcome .overline { display: block; margin-bottom: 12px; color: inherit; }
-.outcome-body { margin: 0 0 14px; font-size: 13.5px; line-height: 1.6; max-width: 78ch; color: inherit; }
+.outcome-body { margin: 0 0 14px; font-size: 13.5px; line-height: 1.6; max-width: 120ch; color: inherit; }
 
 .counts { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 14px; border: 1px solid currentColor; border-radius: var(--r-sm); background: currentColor; overflow: hidden; }
 .count { flex: 1 1 auto; min-width: 104px; padding: 11px 18px; background: var(--surface-2); }
@@ -984,13 +987,13 @@ body[data-screen="report"] .shell-footer { display: none; }
 }
 .advanced-body { padding: 0 18px 18px; }
 .advanced-body > .notice-block { margin-bottom: 16px; }
-.advanced-lead { margin: 0 0 16px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); max-width: 78ch; }
+.advanced-lead { margin: 0 0 16px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); max-width: 120ch; }
 
 .knob { display: block; padding: 12px 0; border-top: 1px solid var(--border); }
 .knob-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
 .knob-name { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--text); }
 .knob-default { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
-.knob-body { display: block; margin: 5px 0 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-2); max-width: 74ch; }
+.knob-body { display: block; margin: 5px 0 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-2); max-width: 120ch; }
 .input-knob { width: 118px; font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------- shared: help affordance */
@@ -1074,6 +1077,11 @@ body[data-screen="report"] .shell-footer { display: none; }
   color: var(--text-3);
   max-width: 120ch;
 }
+
+/* Line length: one limit for the whole sheet, 120ch. Measured on the rendered
+   screens, it wraps every block to the same number of lines as no limit at all
+   while keeping a line off 170 characters. The values it replaced, 58 to 80ch,
+   resolved to about half the room their columns had. */
 
 /* Type scale, taken from the dashboard: prose never goes below 11.5px, and
    anything smaller is a glyph, a badge or a short value. The help dot at 10px

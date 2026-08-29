@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The gauge move badge rises at a constant speed, its travel and its fade being two animations
+  rather than one set of keyframes carrying both, and it starts clear of all but the top of the
+  figure instead of halfway down it.
 - A daemon row's gauges float what moved since the previous read over the figure itself, out of
   the flow and unselectable, so it neither widens a cell nor lands in a copied selection, and they take a tone once
   they are within 75 % or 90 % of the cap they publish.

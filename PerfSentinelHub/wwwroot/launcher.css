@@ -873,7 +873,10 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* Positioned so the move badge can float over the figure without taking any
    width from it: inline, it widened every cell and pushed uptime onto a second
    row of its own. */
-.count { position: relative; flex: 1 1 auto; min-width: 104px; padding: 11px 18px; background: var(--surface-2); }
+/* Four more pixels of headroom than the sides ask for: the move badge starts
+   just clear of the figure, and without them it would have to start halfway
+   down the number it is reporting on, or be clipped by the strip. */
+.count { position: relative; flex: 1 1 auto; min-width: 104px; padding: 15px 18px 11px; background: var(--surface-2); }
 .count-n { display: block; margin-bottom: 2px; font-family: var(--font-mono); font-size: 19px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .count-n[data-tone="crit"] { color: var(--crit-fg); }
 .count-n[data-tone="warn"] { color: var(--warn-fg); }
@@ -887,29 +890,40 @@ body[data-screen="report"] .shell-footer { display: none; }
 .count-move {
   position: absolute;
   left: 18px;
-  top: 11px;
+  /* Its own line above the figure, clearing all but the top tenth of it. */
+  top: 0;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
-  animation: count-move 2.4s ease-out forwards;
+  /* Its own layer: without it the glyphs are re-rasterised on every frame of
+     the rise, which reads as a stutter on a 12 px travel. */
+  will-change: transform, opacity;
+  /* One animation per property. A single set of keyframes carrying both made
+     the rise inherit the fade's easing, so it sped up and slowed down instead
+     of drifting. Linear over 2.4 s is 5 px a second, which is a drift. */
+  animation: count-rise 2.4s linear forwards, count-fade 2.4s ease-out forwards;
 }
 .count-move[data-dir="up"] { color: var(--crit-fg); }
 .count-move[data-dir="down"] { color: var(--ok-fg); }
-@keyframes count-move {
-  0% { opacity: 0; transform: translateY(7px); }
-  16% { opacity: 1; transform: translateY(3px); }
-  62% { opacity: 1; transform: translateY(-3px); }
-  100% { opacity: 0; transform: translateY(-11px); }
+/* Measured, not guessed: the cell's 15px of headroom puts a 17px badge at rest
+   with 2 of the figure's 25px behind it, so it starts covering a twelfth of the
+   number and rises clear of it. */
+@keyframes count-rise {
+  from { transform: translateY(0); }
+  to { transform: translateY(-12px); }
+}
+@keyframes count-fade {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 /* It still comes and goes, it just does not travel to get there. */
 @media (prefers-reduced-motion: reduce) {
-  @keyframes count-move {
-    0%, 62% { opacity: 1; transform: none; }
-    100% { opacity: 0; transform: none; }
-  }
+  .count-move { animation: count-fade 2.4s ease-out forwards; }
 }
 .count-l { display: block; font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
 

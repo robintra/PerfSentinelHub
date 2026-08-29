@@ -357,7 +357,7 @@
   }
 
   /**
-   * The third version segment appears only when producers disagree with the
+   * The last version segment, and it appears only when a producer is behind the
    * engine. It names the spread across the fleet, not one source.
    */
   function renderFleetSkew() {
@@ -699,6 +699,9 @@
     });
     if (spec.id) code.id = spec.id;
     const status = el("span", { class: "terminal-status", role: "status" });
+    // What this block holds, for the sentences below: the same scaffold renders
+    // a command and a configuration file, and neither noun fits both.
+    const subject = spec.download ? "file" : "command";
     const label = el("span", { text: "Copy" });
     const button = el("button", {
       type: "button",
@@ -717,7 +720,8 @@
         if (copied) button.setAttribute("data-copied", "true");
         status.textContent = copied
           ? "Copied."
-          : "This browser refused the copy. The command is selected, use your own copy key.";
+          : "This browser refused the copy. The " + subject
+            + " is selected, use your own copy key.";
         clearTimeout(timer);
         timer = setTimeout(function () {
           label.textContent = "Copy";
@@ -731,7 +735,7 @@
       spell ? shellTabs(code, spell) : null,
       code,
       el("div", { class: "terminal-actions" },
-        spec.download ? [button, downloadButton(code, spec.download), status] : [button, status])
+        spec.download ? [button, downloadButton(code, spec.download, status), status] : [button, status])
     ]);
     (spec.notes || []).forEach(function (note) {
       if (!note) return;
@@ -781,21 +785,28 @@
    * The blob is built at click time from the node, like the copy button, so a
    * fragment that changed under the reader is not the one that lands on disk.
    */
-  function downloadButton(code, filename) {
+  function downloadButton(code, filename, status) {
     const button = el("button", {
       type: "button",
-      class: "pill-button",
+      class: "pill-button terminal-download",
       "aria-label": "Download " + filename
     }, [downloadGlyph(), el("span", { text: "Download" })]);
+    let timer = 0;
     button.addEventListener("click", function () {
       const url = URL.createObjectURL(new Blob([code.textContent], { type: "application/toml" }));
+      // No insertion: a programmatic click on an anchor carrying a download
+      // attribute does not need the element to be in the document.
       const link = el("a", { href: url, download: filename });
-      document.body.appendChild(link);
       link.click();
-      link.remove();
-      // Not revoked in the same tick: a browser that has not started reading
-      // the blob yet would find it gone and cancel the download.
-      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+      // Long enough for the browser to have taken the blob, short enough not to
+      // hold one per click for half a minute.
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      // Said, because a blocked download is otherwise indistinguishable from a
+      // click that was never received.
+      status.textContent = "Sent " + filename + " to your browser. It decides where it lands, "
+        + "and may rename a file whose name starts with a dot.";
+      clearTimeout(timer);
+      timer = setTimeout(function () { status.textContent = ""; }, 6000);
     });
     return button;
   }
@@ -2188,9 +2199,9 @@
           "Every threshold this file leaves out keeps the engine's own default, and the Hub only "
             + "records a value that actually departs from one. A run launched from the button "
             + "above carries the same numbers, so the two are comparable with each other.",
-          "Download puts it in your browser's download folder under a name that starts with a "
-            + "dot, so a file manager hides it by default. Move it next to where you run the "
-            + "command, which is the directory the `-c` above names it from."
+          "Download hands it to your browser, which chooses the folder and may rename a file "
+            + "whose name starts with a dot. Wherever it lands, it has to end up in the "
+            + "directory you run the command from, under the name the `-c` above gives it."
         ]
       }));
     }

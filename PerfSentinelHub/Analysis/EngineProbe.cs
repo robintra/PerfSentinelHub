@@ -5,9 +5,10 @@ using PerfSentinelHub.Configuration;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// Reads the version of the perf-sentinel binary the Hub runs, once, at
-/// startup. A missing or unusable binary leaves the version null and the Hub
-/// starts anyway: collection and the read API do not depend on it.
+/// Reads the version of the perf-sentinel binary the Hub runs, and whether it
+/// takes `--daemon-url`, once, at startup and before the listener opens. A
+/// missing or unusable binary leaves the version null and the Hub starts
+/// anyway: collection and the read API do not depend on it.
 /// </summary>
 public sealed partial class EngineProbe(
     IOptions<HubOptions> options,

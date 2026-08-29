@@ -46,6 +46,12 @@ builder.Services.AddOptions<HubOptions>()
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
 builder.Services.AddSingleton<EngineProbe>();
+// Registered here, on builder.Services, so it starts before the listener does:
+// Build() adds the web host's own hosted service after every registration made
+// on the builder, and hosted services start one after another. The probe has
+// therefore answered before the first request arrives, which is what lets a run
+// trust SupportsDaemonUrl instead of racing it. Moving this after Build(), or
+// into the web host, would silently hand the first runs a static report.
 builder.Services.AddHostedService(provider => provider.GetRequiredService<EngineProbe>());
 builder.Services.AddSingleton<ImportGate>();
 builder.Services.AddSingleton<DaemonViewGate>();

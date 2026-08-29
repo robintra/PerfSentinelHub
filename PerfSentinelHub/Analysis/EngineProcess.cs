@@ -30,7 +30,8 @@ public static class EngineProcess
         IEnumerable<string> arguments,
         long maxOutputBytes,
         string workingDirectory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         // Process.Start refuses a working directory that does not exist, and the
         // engine's first run happens before anything has written a report.
@@ -49,6 +50,8 @@ public static class EngineProcess
         };
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+            startInfo.Environment[name] = value;
 
         using var process = Process.Start(startInfo)
             ?? throw new IOException($"The engine at {binaryPath} did not start.");

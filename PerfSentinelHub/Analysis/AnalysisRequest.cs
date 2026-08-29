@@ -28,6 +28,8 @@ public sealed record AnalysisRequest
 
     private const int MaxServiceLength = 256;
     private const int MaxTraceIdLength = 64;
+    public const string AuthTokenVariable = "PERF_SENTINEL_SOURCE_TOKEN";
+
     private const int DefaultMaxTraces = 100;
 
     private static readonly JsonElement EmptyObject = ParseEmptyObject();
@@ -92,7 +94,8 @@ public sealed record AnalysisRequest
     {
         var arguments = new List<string>
         {
-            source.EngineSubcommand!,
+            source.EngineSubcommand
+                ?? throw new InvalidOperationException("A daemon is read over HTTP, never queried by the engine."),
             "--endpoint",
             source.EndpointArgument,
             "--format",
@@ -102,6 +105,16 @@ public sealed record AnalysisRequest
         {
             arguments.Add("-c");
             arguments.Add(configPath);
+        }
+
+        if (source.AuthHeaderName is not null)
+        {
+            // The same variable the launcher's printed command names, so the
+            // run the Hub launches and the command an operator copies are one
+            // request. The value travels as process environment, never as an
+            // argument a process list could show.
+            arguments.Add("--auth-header-env");
+            arguments.Add(AuthTokenVariable);
         }
 
         if (TraceId is not null)

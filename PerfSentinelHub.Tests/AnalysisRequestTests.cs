@@ -140,6 +140,36 @@ public sealed class AnalysisRequestTests
     }
 
     [Fact]
+    public void An_authenticated_source_reads_its_header_from_the_environment()
+    {
+        // The flag names the same variable the launcher's printed command
+        // does, and the value itself never enters the argument list.
+        var source = Source(SourceKinds.Tempo) with
+        {
+            AuthHeaderName = "Authorization",
+            AuthHeaderValue = "Bearer secret" // gitleaks:allow -- synthetic test credential
+        };
+        var service = Parse("""{"service":"orders","lookback":"1h"}""", SourceKinds.Tempo, out _);
+        var trace = Parse("""{"trace_id":"abc123def456"}""", SourceKinds.Tempo, out _);
+
+        foreach (var arguments in new[]
+        {
+            service!.ToEngineArguments(source, null),
+            trace!.ToEngineArguments(source, null)
+        })
+        {
+            var flag = arguments.ToList().IndexOf("--auth-header-env");
+            Assert.True(flag >= 0);
+            Assert.Equal(AnalysisRequest.AuthTokenVariable, arguments[flag + 1]);
+            Assert.DoesNotContain(arguments, argument => argument.Contains("secret"));
+        }
+
+        Assert.DoesNotContain(
+            "--auth-header-env",
+            service.ToEngineArguments(Source(SourceKinds.Tempo), null));
+    }
+
+    [Fact]
     public void A_daemon_has_no_subcommand_because_it_is_read_rather_than_queried()
     {
         Assert.Null(Source(SourceKinds.Daemon).EngineSubcommand);

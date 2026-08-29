@@ -147,7 +147,15 @@ public sealed partial class AnalysisRunner(
             request.ToEngineArguments(source, configPath),
             MaxReportJsonBytes,
             _analysis.ReportDirectory,
-            cancellationToken);
+            cancellationToken,
+            source.AuthHeaderName is null
+                ? null
+                : new Dictionary<string, string>
+                {
+                    // Curl form, the shape --auth-header-env documents.
+                    [AnalysisRequest.AuthTokenVariable] =
+                        $"{source.AuthHeaderName}: {source.AuthHeaderValue}"
+                });
         return result.Succeeded
             ? result.StandardOutput
             : throw new EngineFailedException(ClassifyEngineFailure(result.StandardError));

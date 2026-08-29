@@ -39,7 +39,7 @@ public sealed record DetectionOverrides
     public bool IsEmpty => _values.Count == 0;
 
     /// <summary>The overrides that differ from the engine's defaults, in wire order.</summary>
-    public IEnumerable<KeyValuePair<string, int>> Values =>
+    private IEnumerable<KeyValuePair<string, int>> Values =>
         Knobs.Where(knob => _values.ContainsKey(knob.Name))
             .Select(knob => new KeyValuePair<string, int>(knob.Name, _values[knob.Name]));
 

@@ -239,6 +239,9 @@ public static partial class ApiEndpoints
             details.ValueKind != JsonValueKind.Array)
             return (warnings, dropped);
 
+        // Not a LINQ Where: JsonElement's enumerator is a struct, and going
+        // through IEnumerable to move one guard would box it on every read.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var entry in details.EnumerateArray())
         {
             if (entry.ValueKind != JsonValueKind.Object)
@@ -262,6 +265,9 @@ public static partial class ApiEndpoints
             legacy.ValueKind != JsonValueKind.Array)
             return (warnings, dropped);
 
+        // Not a LINQ Where: JsonElement's enumerator is a struct, and going
+        // through IEnumerable to move one guard would box it on every read.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var entry in legacy.EnumerateArray())
         {
             if (entry.ValueKind != JsonValueKind.String)
@@ -321,5 +327,5 @@ public static partial class ApiEndpoints
 /// </summary>
 public sealed class DaemonViewGate() : RequestGate(MaxReads)
 {
-    public const int MaxReads = 2;
+    private const int MaxReads = 2;
 }

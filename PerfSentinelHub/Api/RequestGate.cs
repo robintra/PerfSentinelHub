@@ -14,15 +14,11 @@ public abstract class RequestGate(int maxConcurrent) : IDisposable
 
     public void Exit() => _gate.Release();
 
+    // One managed field and no finalizer, so there is no second Dispose to
+    // route through and no subclass has ever had anything to add to it.
     public void Dispose()
     {
-        Dispose(disposing: true);
+        _gate.Dispose();
         GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (disposing)
-            _gate.Dispose();
     }
 }

@@ -26,6 +26,8 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The footer's step strip is gone. It was static markup shown on every screen, it described only
+  the analysis form, and one of the four steps it named had no section on that form either.
 - Folds are remembered between visits in the browser's own storage, and a fold closed over open
   children keeps them open for the next time it is opened.
 - The daemon row's terminal block folds, closed by default, and sits one surface step above the

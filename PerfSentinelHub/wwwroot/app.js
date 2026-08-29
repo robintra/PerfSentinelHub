@@ -1922,7 +1922,10 @@
     // Assigned only when it differs, so the element the operator is dragging or
     // typing into is left alone.
     if (number && number.value !== value) number.value = value;
-    if (number) number.toggleAttribute("data-over", over);
+    if (number) {
+      number.toggleAttribute("data-over", over);
+      number.setAttribute("data-band", band.key);
+    }
     if (slider) {
       const clamped = String(Math.min(Math.max(state.form.maxTraces, 1), cap));
       if (slider.value !== clamped) slider.value = clamped;
@@ -2486,6 +2489,7 @@
       value: String(state.form.maxTraces)
     });
     if (over) number.setAttribute("data-over", "true");
+    number.setAttribute("data-band", band.key);
     number.addEventListener("input", function () { setMaxTraces(Number(number.value)); });
 
     const head = el("div", { class: "traces-head" }, [
@@ -2520,8 +2524,16 @@
       }));
 
     const block = el("div", { class: "field" }, [
-      el("label", { class: "field-label" }, [
-        el("span", { text: "Max traces" }),
+      // A div and not a label: the "?" is a button, which a label may not
+      // contain, and the real binding is the `for` on the name beside it.
+      el("div", { class: "field-label" }, [
+        el("label", { for: "traces-number", text: "Max traces" }),
+        helpDot("This and the window travel to the backend in one search, the window as its "
+          + "time bounds, this as its limit. It is a ceiling and not a target, so a window "
+          + "holding fewer traces returns fewer. When it holds more, the backend picks which "
+          + "ones and they are not an even spread, so narrow the window when you need a given "
+          + "stretch covered. Traces come back whole rather than sampled, so this number bounds "
+          + "what the run costs."),
         el("span", { class: "field-gloss", text: "how much comes back, not how far back" })
       ]),
       head,

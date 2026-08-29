@@ -45,6 +45,7 @@
     // that drives both the countdown and the fetch.
     daemonRefreshMs: {},
     daemonTickers: {},
+    daemonCycleAt: {},
     form: {
       sourceId: null,
       mode: "service",
@@ -940,17 +941,56 @@
       state.daemonRefreshMs[source.id] = Number(select.value);
       startTicker(source, index);
     });
+    const ring = refreshRing();
+    if (ms) ring.querySelector(".refresh-ring-fill").style.setProperty("--cycle", ms + "ms");
 
-    // The bar is decoration, the sentence is the information: under reduced
-    // motion the bar stops moving and the countdown still counts.
-    const bar = el("div", { class: "refresh-bar", "aria-hidden": "true" }, [el("i")]);
+    // The ring is decoration, the sentence is the information: under reduced
+    // motion the ring stops moving and the countdown still counts.
     return el("div", { class: "refresh" }, [
       el("span", { class: "sink-sub refresh-read", id: "refresh-read-" + index }),
+      ring,
       el("span", { class: "refresh-next", id: "refresh-next-" + index, role: "status" }),
-      bar,
       el("span", { class: "refresh-label", text: "every" }),
       select
     ]);
+  }
+
+  // A solid disc drawn as one stroked circle: at half the radius with a stroke
+  // as thick as the diameter, the stroke covers the whole disc, so the dash
+  // sweeps a filled wedge rather than an outline.
+  const RING_R = 6;
+  const RING_LENGTH = 2 * Math.PI * RING_R;
+
+  /**
+   * The cycle as a filling disc. It sweeps once per interval and carries on
+   * into the next one: the sweep is timed from the cycle's own start rather
+   * than from the last read, so the network time of a read does not show up as
+   * a pause at full.
+   */
+  function refreshRing() {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    node.setAttribute("viewBox", "0 0 24 24");
+    node.setAttribute("width", "14");
+    node.setAttribute("height", "14");
+    node.setAttribute("aria-hidden", "true");
+    node.setAttribute("class", "refresh-ring");
+
+    const track = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    track.setAttribute("cx", "12");
+    track.setAttribute("cy", "12");
+    track.setAttribute("r", "11");
+    track.setAttribute("class", "refresh-ring-track");
+    node.appendChild(track);
+
+    const fill = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    fill.setAttribute("cx", "12");
+    fill.setAttribute("cy", "12");
+    fill.setAttribute("r", String(RING_R));
+    fill.setAttribute("class", "refresh-ring-fill");
+    node.appendChild(fill);
+
+    node.style.setProperty("--ring-length", String(RING_LENGTH));
+    return node;
   }
 
   /**
@@ -960,11 +1000,33 @@
    */
   function startTicker(source, index) {
     stopTicker(source.id);
+    state.daemonCycleAt[source.id] = Date.now();
+    restartSweep(index, refreshMs(source.id));
     tickRefresh(source, index);
     if (!refreshMs(source.id)) return;
     state.daemonTickers[source.id] = setInterval(function () {
       tickRefresh(source, index);
     }, 1000);
+  }
+
+  /**
+   * The sweep is one looping CSS animation whose duration is the interval, not
+   * a value written every second: a per-second write can only land on whole
+   * seconds, so the last slice of the disc never got drawn before the cycle
+   * turned over. Restarted only to resynchronise it with a read.
+   */
+  function restartSweep(index, ms) {
+    const host = document.getElementById("refresh-next-" + index);
+    const fill = host && host.parentNode.querySelector(".refresh-ring-fill");
+    if (!fill) return;
+    if (!ms) {
+      fill.style.animation = "none";
+      return;
+    }
+    fill.style.animation = "none";
+    fill.style.setProperty("--cycle", ms + "ms");
+    void fill.getBoundingClientRect();
+    fill.style.animation = "";
   }
 
   function stopTicker(sourceId) {
@@ -986,15 +1048,21 @@
     read.textContent = "Read " + PSL.dur(Date.now() - readAt) + " ago.";
 
     const ms = refreshMs(source.id);
-    const bar = next.parentNode.querySelector(".refresh-bar > i");
+    // The sweep runs on its own clock. Timing it from the last read would hold
+    // the disc at full for however long the request takes, which reads as a
+    // stall rather than as a cycle.
+    if (state.daemonCycleAt[source.id] === undefined) state.daemonCycleAt[source.id] = Date.now();
+    const cycleAt = state.daemonCycleAt[source.id];
+    const ring = next.parentNode.querySelector(".refresh-ring");
+    const fill = ring && ring.querySelector(".refresh-ring-fill");
     if (!ms) {
       next.textContent = "Not re-reading.";
-      if (bar) bar.style.width = "0%";
+      if (ring) ring.hidden = true;
       return;
     }
-    const left = Math.max(0, readAt + ms - Date.now());
+    if (ring) ring.hidden = false;
+    const left = Math.max(0, cycleAt + ms - Date.now());
     next.textContent = "Next in " + Math.ceil(left / 1000) + " s.";
-    if (bar) bar.style.width = (100 - (left / ms) * 100).toFixed(1) + "%";
     if (left <= 0) refreshDaemon(source, index);
   }
 
@@ -1005,6 +1073,8 @@
    */
   function refreshDaemon(source, index) {
     if (state.daemonViews[source.id] === "refreshing") return;
+    state.daemonCycleAt[source.id] = Date.now();
+    restartSweep(index, refreshMs(source.id));
     const previous = state.daemonViews[source.id];
     state.daemonViews[source.id] = "refreshing";
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")

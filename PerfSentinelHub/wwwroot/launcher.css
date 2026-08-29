@@ -323,7 +323,7 @@ button { font: inherit; }
    "running", so the pulse carried no information of its own. */
 @media (prefers-reduced-motion: reduce) {
   .shell-theme-glyph svg { animation: none !important; }
-  .refresh-bar > i { transition: none; }
+  .refresh-ring-fill { animation: none; }
   .status-pill[data-status="running"] { animation: none; opacity: 1; }
   .skeleton { animation: none; }
 }
@@ -1274,19 +1274,21 @@ body[data-screen="report"] .shell-footer { display: none; }
 .refresh-next { font-family: var(--font-mono); }
 /* Decoration. The countdown sentence beside it is the information, so this
    going still under reduced motion costs the reader nothing. */
-.refresh-bar {
-  width: 46px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--surface-3);
-  overflow: hidden;
+.refresh-ring { flex: none; transform: rotate(-90deg); }
+.refresh-ring-track { fill: var(--surface-3); stroke: var(--border-2); stroke-width: 1; }
+/* Stroked at twice the radius, so the stroke covers the disc and the dash
+   sweeps a filled wedge instead of an outline. */
+.refresh-ring-fill {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 12;
+  stroke-dasharray: var(--ring-length);
+  stroke-dashoffset: var(--ring-length);
+  animation: refresh-sweep var(--cycle, 5000ms) linear infinite;
 }
-.refresh-bar > i {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: var(--text-3);
-  transition: width 1s linear;
+@keyframes refresh-sweep {
+  from { stroke-dashoffset: var(--ring-length); }
+  to { stroke-dashoffset: 0; }
 }
 .refresh-label { font-size: 10.5px; color: var(--text-3); }
 .refresh-select {

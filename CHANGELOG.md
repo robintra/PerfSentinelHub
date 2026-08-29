@@ -25,7 +25,8 @@ All notable changes to PerfSentinelHub are recorded here.
   the monitor makes, so the response names the version they came from and the view says so when
   the daemon runs a different one.
 - A daemon's row re-reads on an interval the reader picks, off or 5 to 60 seconds, with the
-  countdown to the next read beside it. The same knob `query monitor --refresh` carries, plus an
+  countdown to the next read beside it, and a disc that fills over the interval and carries
+  straight into the next one. The same knob `query monitor --refresh` carries, plus an
   off position the command has no use for: a terminal session is opened to watch, a table row is
   often opened to read one setting. A read only replaces the gauges and the hints, never the
   settings, which do not change without a restart, so open groups and focus survive it. Folding

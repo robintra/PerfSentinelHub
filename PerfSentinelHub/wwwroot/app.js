@@ -2041,6 +2041,12 @@
         + "A terminal does not need either.",
       spell: function (shellId) { return PSL.analysisCommand(source, request, shellId); },
       copyLabel: "Copy the analysis command",
+      // Folded by default: the button above it is the way this Hub is meant to
+      // be used, and this is the alternative for whoever wants it.
+      fold: {
+        open: state.panelOpen.terminal === true,
+        onToggle: function (open) { state.panelOpen.terminal = open; saveFolds(); }
+      },
       notes: [
         // What this is, then what it takes to run it. Nobody goes and installs
         // a binary before knowing what the line above them does.

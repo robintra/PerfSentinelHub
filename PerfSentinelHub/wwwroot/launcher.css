@@ -263,6 +263,9 @@ button { font: inherit; }
   background: transparent;
   color: var(--text-3);
 }
+/* Stated on the component, not hoped from an ancestor: chips inside the mono
+   sources table were rendering mono against the comment above. */
+.chip { font-family: var(--font-ui); }
 
 .status-pill {
   display: inline-flex;
@@ -353,8 +356,10 @@ button { font: inherit; }
 .table td:last-child, .table th:last-child { padding-right: 18px; }
 .table tr[data-unreachable] { background: var(--crit-bg); }
 /* --text-3 is calibrated against the grey surfaces and lands at 4.49 on this
-   row's red one. The chip is the only tertiary text that sits on it. */
-.table tr[data-unreachable] .chip-declared { color: var(--text-2); }
+   row's red one, so the row swaps the token for everything tertiary on it:
+   the declared chip, and the muted producer cell that sits on exactly the
+   rows most likely to be unreachable. */
+.table tr[data-unreachable] { --text-3: var(--text-2); }
 .table-strong { font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .table-mono { font-family: var(--font-mono); }
 .table-muted { color: var(--text-3); }
@@ -747,7 +752,8 @@ button { font: inherit; }
 
 .cost { padding: 18px; }
 .cost-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 14px; }
-.cost-sub { font-size: 11.5px; color: var(--text-3); }
+.cost-sub, .terminal-sub, .terminal-status,
+.refresh-read, .refresh-next, .refresh-label { font-size: 11.5px; color: var(--text-3); }
 .cost-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
@@ -1047,7 +1053,6 @@ body[data-screen="report"] .shell-footer { display: none; }
 .terminal-stack { display: flex; flex-direction: column; gap: 14px; }
 .terminal { padding: 16px 18px 18px; }
 .terminal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 11px; }
-.terminal-sub { font-size: 11.5px; color: var(--text-3); }
 /* Never soft-wrapped: the backslash continuations are shell syntax, and a
    visual wrap beside one would read as a line that is not there. */
 .terminal-code {
@@ -1069,7 +1074,6 @@ body[data-screen="report"] .shell-footer { display: none; }
   background: var(--ok-bg);
   color: var(--ok-fg);
 }
-.terminal-status { font-size: 11.5px; color: var(--text-3); }
 /* 120ch and not the 78ch the narrower panels use: measured, it wraps to the
    same number of lines as no limit at all in both the launcher column and the
    daemon panel, while keeping a line from running to 170 characters. */
@@ -1109,7 +1113,8 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* The same caret as the advanced panel's summary, so the product has one
    disclosure shape rather than two. */
 .row-toggle::before,
-.settings-more::before {
+.settings-more::before,
+.settings-card-head::before {
   content: "";
   width: 7px;
   height: 7px;
@@ -1120,7 +1125,8 @@ body[data-screen="report"] .shell-footer { display: none; }
   transition: transform .15s ease;
 }
 .row-toggle[aria-expanded="true"]::before,
-.settings-more[aria-expanded="true"]::before { transform: rotate(45deg); }
+.settings-more[aria-expanded="true"]::before,
+.settings-card-head[aria-expanded="true"]::before { transform: rotate(45deg); }
 .row-toggle:hover { color: var(--brand-text); }
 .row-toggle:hover::before { border-color: var(--brand-text); }
 
@@ -1163,6 +1169,9 @@ body[data-screen="report"] .shell-footer { display: none; }
 .daemon-top { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
 .daemon-top .counts { margin-bottom: 0; border-color: var(--border); background: var(--border); }
 .daemon-top .outcome-warning:last-child { margin-bottom: 0; }
+/* warn restates the base rule so DAEMON_HINT_TONE's mapping is real, not a
+   coincidence of what the base happens to be. */
+.outcome-warning-kind[data-tone="warn"] { background: var(--warn-bg); color: var(--warn-fg); }
 .outcome-warning-kind[data-tone="crit"] { background: var(--crit-bg); color: var(--crit-fg); }
 .outcome-warning-kind[data-tone="info"] { background: var(--info-bg); color: var(--info-fg); }
 .outcome-warning-kind[data-tone="muted"] { background: var(--surface-3); color: var(--text-3); }
@@ -1240,7 +1249,6 @@ body[data-screen="report"] .shell-footer { display: none; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.setting-v .chip-declared { font-family: var(--font-ui); }
 .setting-note {
   grid-column: 1 / -1;
   margin: 3px 0 0;
@@ -1274,17 +1282,7 @@ body[data-screen="report"] .shell-footer { display: none; }
   text-align: left;
   cursor: pointer;
 }
-.settings-card-head::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-right: 1.5px solid var(--text-3);
-  border-bottom: 1.5px solid var(--text-3);
-  transform: rotate(-45deg);
-  transition: transform .15s ease;
-}
-.settings-card-head[aria-expanded="true"]::before { transform: rotate(45deg); }
+.settings-card-head::before { width: 6px; height: 6px; }
 .settings-card-head:hover .overline { color: var(--brand-text); }
 .settings-card-head:hover::before { border-color: var(--brand-text); }
 .settings-card-head .overline { min-width: 0; }
@@ -1312,7 +1310,6 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* ------------------------------------------------- the re-read interval */
 
 .refresh { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.refresh-read, .refresh-next { font-size: 11.5px; color: var(--text-3); }
 .refresh-next { font-family: var(--font-mono); }
 /* Decoration. The countdown sentence beside it is the information, so this
    going still under reduced motion costs the reader nothing. */
@@ -1320,19 +1317,22 @@ body[data-screen="report"] .shell-footer { display: none; }
 .refresh-ring-track { fill: var(--surface-3); stroke: var(--border-2); stroke-width: 1; }
 /* Stroked at twice the radius, so the stroke covers the disc and the dash
    sweeps a filled wedge instead of an outline. */
+/* pathLength=100 on the circle, so the dash counts in percent with no
+   circumference constant shared with the JS. Stroke twice the radius keeps
+   the wedge solid, and 10.5 tops out on the track's inner edge (r 11 minus
+   half its 1-unit stroke) instead of painting over the border. */
 .refresh-ring-fill {
   fill: none;
   stroke: var(--text-3);
-  stroke-width: 12;
-  stroke-dasharray: var(--ring-length);
-  stroke-dashoffset: var(--ring-length);
+  stroke-width: 10.5;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
   animation: refresh-sweep var(--cycle, 5000ms) linear infinite;
 }
 @keyframes refresh-sweep {
-  from { stroke-dashoffset: var(--ring-length); }
+  from { stroke-dashoffset: 100; }
   to { stroke-dashoffset: 0; }
 }
-.refresh-label { font-size: 11.5px; color: var(--text-3); }
 .refresh-select {
   height: 24px;
   padding: 0 6px;

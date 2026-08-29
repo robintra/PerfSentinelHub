@@ -47,6 +47,10 @@
     daemonTickers: {},
     daemonCycleAt: {},
     daemonInFlight: {},
+    // When THIS browser last adopted a reading, on its own clock: subtracting
+    // the Hub's observed_at_ms from Date.now() would bake the clock skew
+    // between the two machines into "Read X ago".
+    daemonReadAt: {},
     terminalSig: null,
     form: {
       sourceId: null,
@@ -502,7 +506,7 @@
       // Showing the last known values here would be worse than showing none:
       // a stale health table is the one thing this page must never be.
       section.appendChild(el("div", { class: "banner", "data-tone": "crit" }, [
-        svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7.5v5M12 15.8v.2" }]], 16),
+        critGlyph(16),
         el("div", {
           text: "The Hub is not answering, so fleet health is unknown. This is the Hub itself, "
             + "not any one source. Nothing below is shown rather than showing values that may be stale."
@@ -729,7 +733,11 @@
     per_operation_coefficients: "Whether each operation kind carries its own energy coefficient "
       + "instead of one average across all I/O.",
     use_hourly_profiles: "Whether the hour-by-hour shape of the grid is applied rather than a "
-      + "flat average."
+      + "flat average.",
+    embodied_per_request_gco2: "Embodied carbon charged per request, the manufacture share of "
+      + "the figures rather than the electricity.",
+    network_energy_per_byte_kwh: "A coefficient the engine deprecated and no longer applies, "
+      + "published for configurations that still set it."
   };
 
   /**
@@ -804,8 +812,17 @@
     const cell = document.getElementById("daemon-detail-" + index);
     if (cell) cell.replaceChildren(daemonPanel(source, index));
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
-      .then(function (view) { state.daemonViews[source.id] = view; })
-      .catch(function () { state.daemonViews[source.id] = { error_code: "internal" }; })
+      .then(function (view) {
+        state.daemonViews[source.id] = view;
+        state.daemonReadAt[source.id] = Date.now();
+      })
+      .catch(function (error) {
+        // The gate's 503 is the Hub being briefly full, not the Hub failing:
+        // it clears in about a second and deserves its own sentence.
+        state.daemonViews[source.id] = {
+          error_code: /answered 503$/.test(String(error && error.message)) ? "hub_busy" : "internal"
+        };
+      })
       .finally(function () {
         // The table may have been rebuilt while this was in flight, so the
         // cell is found again rather than kept in a closure.
@@ -856,7 +873,7 @@
   function daemonError(code) {
     return el("div", { class: "daemon-panel" }, [
       el("div", { class: "banner", "data-tone": "crit" }, [
-        svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7.5v5M12 15.8v.2" }]], 16),
+        critGlyph(16),
         el("div", {}, [
           el("p", {}, [
             el("span", { text: "Reading this daemon's settings returned " }),
@@ -999,12 +1016,6 @@
     ]);
   }
 
-  // A solid disc drawn as one stroked circle: at half the radius with a stroke
-  // as thick as the diameter, the stroke covers the whole disc, so the dash
-  // sweeps a filled wedge rather than an outline.
-  const RING_R = 6;
-  const RING_LENGTH = 2 * Math.PI * RING_R;
-
   /**
    * The cycle as a filling disc. It sweeps once per interval and carries on
    * into the next one: the sweep is timed from the cycle's own start rather
@@ -1026,14 +1037,18 @@
     track.setAttribute("class", "refresh-ring-track");
     node.appendChild(track);
 
+    // A solid disc drawn as one stroked circle: at half the radius with a
+    // stroke as thick as the diameter, the stroke covers the whole disc, so
+    // the dash sweeps a filled wedge rather than an outline. r 5.25 puts the
+    // wedge's outer edge exactly on the track's inner edge instead of over
+    // it, and pathLength lets the stylesheet count in percent.
     const fill = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     fill.setAttribute("cx", "12");
     fill.setAttribute("cy", "12");
-    fill.setAttribute("r", String(RING_R));
+    fill.setAttribute("r", "5.25");
+    fill.setAttribute("pathLength", "100");
     fill.setAttribute("class", "refresh-ring-fill");
     node.appendChild(fill);
-
-    node.style.setProperty("--ring-length", String(RING_LENGTH));
     return node;
   }
 
@@ -1044,8 +1059,7 @@
    */
   function startTicker(source, index) {
     stopTicker(source.id);
-    state.daemonCycleAt[source.id] = Date.now();
-    restartSweep(index, refreshMs(source.id));
+    restartCycle(source.id, index);
     tickRefresh(source, index);
     if (!refreshMs(source.id)) return;
     state.daemonTickers[source.id] = setInterval(function () {
@@ -1073,6 +1087,12 @@
     fill.style.animation = "";
   }
 
+  /** The disc and the countdown clock restart together, from one place. */
+  function restartCycle(sourceId, index) {
+    state.daemonCycleAt[sourceId] = Date.now();
+    restartSweep(index, refreshMs(sourceId));
+  }
+
   function stopTicker(sourceId) {
     clearInterval(state.daemonTickers[sourceId]);
     delete state.daemonTickers[sourceId];
@@ -1087,8 +1107,7 @@
     const next = document.getElementById("refresh-next-" + index);
     if (!read || !next) { stopTicker(source.id); return; }
 
-    const view = state.daemonViews[source.id];
-    const readAt = view && view.observed_at_ms ? view.observed_at_ms : Date.now();
+    const readAt = state.daemonReadAt[source.id] || Date.now();
     read.textContent = "Read " + PSL.dur(Date.now() - readAt) + " ago.";
 
     const ms = refreshMs(source.id);
@@ -1119,16 +1138,16 @@
     // the flight reads daemonViews, and a string there would crash it.
     if (state.daemonInFlight[source.id]) return;
     state.daemonInFlight[source.id] = true;
-    state.daemonCycleAt[source.id] = Date.now();
-    restartSweep(index, refreshMs(source.id));
+    restartCycle(source.id, index);
     const previous = state.daemonViews[source.id];
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
       .then(function (view) {
         // A transient error does not outrank data: the last good reading is
         // kept and its age keeps counting, exactly as a dropped connection is
         // handled below.
-        state.daemonViews[source.id] =
-          view.error_code && previous && !previous.error_code ? previous : view;
+        if (view.error_code && previous && !previous.error_code) return;
+        state.daemonViews[source.id] = view;
+        state.daemonReadAt[source.id] = Date.now();
       })
       .catch(function () {
         // Keep the last good reading rather than blanking the panel, and let
@@ -1339,6 +1358,7 @@
   }
 
   function daemonValue(name, value) {
+    if (value === null) return "(not set)";
     if (name === "sampling_rate" || name === "correlation_min_confidence") return share(value);
     // Zero is not a percentage here, it switches the guard off entirely.
     if (name === "memory_high_water_pct") return value === 0 ? "off" : value + " %";
@@ -1601,7 +1621,7 @@
 
   function hubUnreachableBanner() {
     return el("div", { class: "banner", "data-tone": "crit" }, [
-      svg([["circle", { cx: "12", cy: "12", r: "9" }], ["path", { d: "M12 7.5v5M12 15.8v.2" }]], 16),
+      critGlyph(16),
       el("div", {
         text: "The Hub is not answering. This is the Hub itself and not any one source, so nothing "
           + "can be launched from here until it is back. Reload once it responds again."
@@ -2248,6 +2268,14 @@
       function (checked) { state.form.ackUnreachable = checked; updateSubmit(); }));
 
     return el("section", { class: "notice-block", "data-tone": "warn" }, [warningGlyph(17), text]);
+  }
+
+  /** The circle-exclamation every crit banner carries, drawn once. */
+  function critGlyph(size) {
+    return svg([
+      ["circle", { cx: "12", cy: "12", r: "9" }],
+      ["path", { d: "M12 7.5v5M12 15.8v.2" }]
+    ], size);
   }
 
   function warningGlyph(size) {

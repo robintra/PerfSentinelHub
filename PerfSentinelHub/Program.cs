@@ -67,7 +67,14 @@ builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandle
 // source, and keeping them apart is what lets the handler above stay described
 // as "how the Hub talks to a daemon".
 builder.Services.AddHttpClient(UpdateChecker.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
-    new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All, UseCookies = false });
+    // Redirects off for the same reason as the sources above: a 302 would send
+    // this request to a host that appears nowhere in the configuration.
+    new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.All,
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateChecker>());
 builder.Services.AddTransient<SourcePoller>();

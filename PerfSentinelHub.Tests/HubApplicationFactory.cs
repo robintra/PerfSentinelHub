@@ -38,6 +38,10 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
             services.PostConfigure<HubOptions>(options =>
             {
                 options.DatabasePath = _databasePath;
+                // Off rather than removed: the hosted service is registered by a
+                // factory, so it carries no ImplementationType for the filter
+                // above to match, and one flag stops it before its first request.
+                options.UpdateCheck = new UpdateCheckOptions { Enabled = false };
                 options.Sources = [new SourceOptions
                 {
                     Id = "test",

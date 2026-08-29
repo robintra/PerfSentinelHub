@@ -417,7 +417,21 @@
    * @returns {string}
    */
   function defaultShell(platform) {
-    return /win/i.test(String(platform || "")) ? "powershell" : "posix";
+    // Anchored, not a substring: "Darwin" contains "win", and a caller passing
+    // a Node style platform string would have handed macOS a PowerShell line.
+    return /^win/i.test(String(platform || "").trim()) ? "powershell" : "posix";
+  }
+
+  /**
+   * A shell id if it names one, null otherwise. shellById always answers with a
+   * shell, which is right for spelling a command and wrong for judging whether
+   * a remembered value is still one.
+   *
+   * @param {string | null | undefined} id
+   * @returns {string | null}
+   */
+  function knownShell(id) {
+    return SHELLS.some(function (shell) { return shell.id === id; }) ? String(id) : null;
   }
 
   /**
@@ -627,13 +641,13 @@
    *
    * @param {string | null} current
    * @param {string | null} latest
-   * @returns {{latest: string, gap: number} | null}
+   * @returns {{latest: string} | null}
    */
   function updateState(current, latest) {
     if (!current || !latest) return null;
     // Behind only. A build ahead of the newest release is a pre-release or a
     // local build, and telling its operator to downgrade would be wrong.
-    return vcmp(current, latest) < 0 ? { latest: latest, gap: minorGap(current, latest) } : null;
+    return vcmp(current, latest) < 0 ? { latest: latest } : null;
   }
 
   /**
@@ -703,7 +717,7 @@
     shq, psq, SHELLS, shellById, defaultShell, exportLine,
     analysisCommand, monitorCommand, detectionToml, quotedForShell,
     lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
-    hubReleaseUrl, updateState, CHART_PAGE: CHART_PAGE, CHART_COORDINATE: CHART_COORDINATE,
+    hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
     gaugeTone, gaugeMove
   };
 })(globalThis);

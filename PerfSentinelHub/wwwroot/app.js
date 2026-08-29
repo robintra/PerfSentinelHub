@@ -225,7 +225,9 @@
     }
     const platform = (navigator.userAgentData && navigator.userAgentData.platform)
       || navigator.platform;
-    state.shell = stored ? PSL.shellById(stored).id : PSL.defaultShell(platform);
+    // A stored id that no longer names a shell is worth no more than no id at
+    // all, so it falls back to the platform rather than to the first entry.
+    state.shell = PSL.knownShell(stored) || PSL.defaultShell(platform);
   }
 
   function saveShell(id) {
@@ -304,6 +306,15 @@
     renderSourcesBadge();
   }
 
+  /** Takes a chip segment out along with the separator that was added for it. */
+  function dropSegment(chip, selector) {
+    const existing = chip.querySelector(selector);
+    if (!existing) return;
+    const rule = existing.previousElementSibling;
+    if (rule && rule.classList.contains("shell-version-rule")) rule.remove();
+    existing.remove();
+  }
+
   /**
    * What the Hub last heard from GitHub, and only when it is news. Absent says
    * nothing either way: the check may be off, may not have run, or may not have
@@ -311,8 +322,9 @@
    */
   function renderUpdates() {
     const chip = document.getElementById("version-chip");
-    const existing = chip.querySelector(".shell-version-update");
-    if (existing) existing.remove();
+    // The rule belongs to the segment, so it goes with it. Removing one and not
+    // the other leaves a separator behind on every rebuild.
+    dropSegment(chip, ".shell-version-update");
     if (!state.status) return;
 
     const behind = [
@@ -345,8 +357,7 @@
    */
   function renderFleetSkew() {
     const chip = document.getElementById("version-chip");
-    let existing = chip.querySelector(".shell-version-skew");
-    if (existing) existing.remove();
+    dropSegment(chip, ".shell-version-skew");
     if (!state.sources || !state.status || !state.status.engine_version) return;
 
     const behind = state.sources
@@ -622,6 +633,7 @@
         type: "button",
         class: "cmd-tab",
         role: "tab",
+        "data-shell": shell.id,
         "aria-selected": shell.id === state.shell ? "true" : "false",
         tabindex: shell.id === state.shell ? "0" : "-1",
         text: shell.label
@@ -636,12 +648,13 @@
       // Every printed command on the page follows: the reader chose a shell,
       // not a tab on one block.
       document.querySelectorAll("[data-spell]").forEach(function (node) {
-        node.textContent = SPELL.get(node)(id);
+        const spellFor = SPELL.get(node);
+        if (spellFor) node.textContent = spellFor(id);
       });
       document.querySelectorAll(".cmd-tab").forEach(function (node) {
-        const selected = node.textContent === PSL.shellById(id).label;
+        // By id, not by the label a reader sees: two shells could share a word.
+        const selected = node.getAttribute("data-shell") === id;
         node.setAttribute("aria-selected", selected ? "true" : "false");
-        node.tabindex = selected ? 0 : -1;
         node.setAttribute("tabindex", selected ? "0" : "-1");
       });
     }

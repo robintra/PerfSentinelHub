@@ -271,6 +271,9 @@ test("the shell a first visit gets follows the platform", () => {
   assert.equal(PSL.defaultShell("MacIntel"), "posix");
   assert.equal(PSL.defaultShell("Linux x86_64"), "posix");
   // Nothing to go on is not Windows, so it is the line most machines run.
+  // "Darwin" contains "win", so the test has to be anchored.
+  assert.equal(PSL.defaultShell("Darwin"), "posix");
+  assert.equal(PSL.defaultShell("darwin"), "posix");
   assert.equal(PSL.defaultShell(null), "posix");
   assert.equal(PSL.defaultShell(""), "posix");
   assert.equal(PSL.shellById("nonsense").id, "posix");
@@ -315,13 +318,24 @@ test("updateState only speaks when both versions are known and one is older", ()
   // A build ahead of the newest release is a pre-release, not a downgrade.
   assert.equal(PSL.updateState("0.18.0", "0.17.0"), null, "ahead");
 
-  assert.deepEqual(PSL.updateState("0.16.0", "0.17.0"), { latest: "0.17.0", gap: 1 });
-  assert.deepEqual(PSL.updateState("0.14.2", "0.17.0"), { latest: "0.17.0", gap: 3 });
+  assert.deepEqual(PSL.updateState("0.16.0", "0.17.0"), { latest: "0.17.0" });
+  assert.deepEqual(PSL.updateState("0.14.2", "0.17.0"), { latest: "0.17.0" });
   // The Hub's own version has a fourth segment that never carries meaning.
   assert.equal(PSL.updateState("0.1.0.0", "0.1.0"), null, "four segments, same release");
-  assert.deepEqual(PSL.updateState("0.1.0.0", "0.2.0"), { latest: "0.2.0", gap: 1 });
+  assert.deepEqual(PSL.updateState("0.1.0.0", "0.2.0"), { latest: "0.2.0" });
 });
 
 test("hubReleaseUrl lands on the list, which exists before any release does", () => {
   assert.equal(PSL.hubReleaseUrl(), "https://github.com/robintra/PerfSentinelHub/releases");
+});
+
+test("knownShell answers null for anything that is not a shell id", () => {
+  assert.equal(PSL.knownShell("posix"), "posix");
+  assert.equal(PSL.knownShell("powershell"), "powershell");
+  // shellById would answer "posix" for all of these, which is right for
+  // spelling a command and wrong for judging a remembered value.
+  assert.equal(PSL.knownShell("fish"), null);
+  assert.equal(PSL.knownShell(""), null);
+  assert.equal(PSL.knownShell(null), null);
+  assert.equal(PSL.knownShell(undefined), null);
 });

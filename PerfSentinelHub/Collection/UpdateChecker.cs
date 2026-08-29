@@ -28,6 +28,7 @@ public sealed partial class UpdateChecker(
     private const int MaxBodyBytes = 256 * 1024;
 
     private readonly UpdateCheckOptions _settings = options.Value.UpdateCheck;
+    private readonly TimeSpan _timeout = options.Value.HttpTimeout;
 
     /// <summary>The newest published engine release, or null until one is read.</summary>
     public string? LatestEngineVersion { get; private set; }
@@ -76,7 +77,7 @@ public sealed partial class UpdateChecker(
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            timeout.CancelAfter(options.Value.HttpTimeout);
+            timeout.CancelAfter(_timeout);
 
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
             // GitHub refuses a request with no user agent, and the version
@@ -95,13 +96,27 @@ public sealed partial class UpdateChecker(
                 return null;
             }
 
+            // Refused before it is read, not after: a body copied whole and
+            // measured afterwards is not bounded at all.
+            if (response.Content.Headers.ContentLength > MaxBodyBytes)
+            {
+                LogTooLarge(logger, what);
+                return null;
+            }
+
             await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var limited = new MemoryStream();
-            await body.CopyToAsync(limited, timeout.Token);
-            if (limited.Length > MaxBodyBytes)
+            var buffer = new byte[16 * 1024];
+            while (true)
             {
-                LogUnavailable(logger, what, 0);
-                return null;
+                var read = await body.ReadAsync(buffer, timeout.Token);
+                if (read == 0) break;
+                if (limited.Length + read > MaxBodyBytes)
+                {
+                    LogTooLarge(logger, what);
+                    return null;
+                }
+                await limited.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
             }
 
             limited.Position = 0;
@@ -114,7 +129,10 @@ public sealed partial class UpdateChecker(
             if (version is not null) LogRead(logger, what, version);
             return version;
         }
-        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException
+        // A cancelled stopping token is the Hub shutting down, not a failure, so
+        // it leaves through the loop instead of being blamed on the network.
+        catch (Exception exception) when (!stoppingToken.IsCancellationRequested &&
+                                          exception is HttpRequestException or OperationCanceledException
                                               or JsonException or IOException)
         {
             // Never louder than a warning. A Hub behind an egress firewall is a
@@ -148,6 +166,10 @@ public sealed partial class UpdateChecker(
     [LoggerMessage(EventId = 1502, Level = LogLevel.Debug,
         Message = "No published {What} release to compare against, the endpoint answered {Status}.")]
     private static partial void LogUnavailable(ILogger logger, string what, int status);
+
+    [LoggerMessage(EventId = 1504, Level = LogLevel.Warning,
+        Message = "The newest {What} release was not read: the answer was larger than this Hub reads.")]
+    private static partial void LogTooLarge(ILogger logger, string what);
 
     [LoggerMessage(EventId = 1503, Level = LogLevel.Warning,
         Message = "Could not read the newest {What} release ({Reason}), so the Hub keeps reporting what it last knew.")]

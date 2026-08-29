@@ -87,7 +87,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     // Normalised here rather than at every reader: a capacity of zero and an
     // absent one are the same question, and only one of them has to be asked.
     private static long? ReadCapacity(JsonElement root, string name) =>
-        ReadGauge(root, name) is { } capacity && capacity > 0 ? capacity : null;
+        ReadGauge(root, name) is { } capacity and > 0 ? capacity : null;
 
     // The queue depth travels as a signed Prometheus gauge and can dip below
     // zero between a pop and its decrement.

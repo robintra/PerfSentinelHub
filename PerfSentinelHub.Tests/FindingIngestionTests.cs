@@ -264,7 +264,7 @@ public sealed class FindingIngestionTests : IDisposable
         // v2 replaced v1, so only v3 keeps a live predecessor chain of 2.
         var successor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
         Assert.NotNull(successor.Lineage);
-        Assert.Equal(2, successor.Lineage!.Predecessors);
+        Assert.Equal(2, successor.Lineage.Predecessors);
         Assert.Equal(1000L, successor.Lineage.OriginalFirstSeenMs);
     }
 
@@ -354,7 +354,7 @@ public sealed class FindingIngestionTests : IDisposable
             new Api.FindingQuery(null, null, null, 100), cancellationToken);
         var survivor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
         Assert.NotNull(survivor.Lineage);
-        Assert.Equal(2, survivor.Lineage!.Predecessors);
+        Assert.Equal(2, survivor.Lineage.Predecessors);
         Assert.Equal(1000L, survivor.Lineage.OriginalFirstSeenMs);
     }
 

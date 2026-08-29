@@ -245,6 +245,8 @@ button { font: inherit; }
 
 /* DM Sans, not mono: the prototype's chips read as labels, not as code. */
 .chip {
+  /* Not the table's monospace: a chip is a label, not a value. */
+  font-family: var(--font-ui);
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
@@ -265,7 +267,6 @@ button { font: inherit; }
 }
 /* Stated on the component, not hoped from an ancestor: chips inside the mono
    sources table were rendering mono against the comment above. */
-.chip { font-family: var(--font-ui); }
 
 .status-pill {
   display: inline-flex;
@@ -354,12 +355,14 @@ button { font: inherit; }
 .table td { padding: 12px; vertical-align: top; color: var(--text-2); border-bottom: 1px solid var(--border); }
 .table td:first-child, .table th:first-child { padding-left: 18px; }
 .table td:last-child, .table th:last-child { padding-right: 18px; }
-.table tr[data-unreachable] { background: var(--crit-bg); }
-/* --text-3 is calibrated against the grey surfaces and lands at 4.49 on this
-   row's red one, so the row swaps the token for everything tertiary on it:
-   the declared chip, and the muted producer cell that sits on exactly the
-   rows most likely to be unreachable. */
-.table tr[data-unreachable] { --text-3: var(--text-2); }
+.table tr[data-unreachable] {
+  background: var(--crit-bg);
+  /* --text-3 is calibrated against the grey surfaces and lands at 4.49 on this
+     row's red one, so the row swaps the token for everything tertiary on it:
+     the declared chip, and the muted producer cell that sits on exactly the
+     rows most likely to be unreachable. */
+  --text-3: var(--text-2);
+}
 .table-strong { font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .table-mono { font-family: var(--font-mono); }
 .table-muted { color: var(--text-3); }

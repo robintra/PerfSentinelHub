@@ -127,6 +127,26 @@ and `sources`.
 | `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
 | `Sources[].ImportApiKey` | none | Optional push credential; at least 32 characters, supplied through a Secret |
 
+### An https source with a private CA
+
+The Hub validates a source's certificate against the container's trust store, so
+an in-cluster daemon with a self-signed or internally-issued certificate is refused
+with `PartialChain` until its CA is in there. The runtime image is chiseled and has
+no shell, so `update-ca-certificates` cannot be run in it. Point `SSL_CERT_FILE` at a
+bundle instead, mounted from a ConfigMap:
+
+```yaml
+env:
+  - name: SSL_CERT_FILE
+    value: /etc/perf-sentinel-hub/certs/bundle.crt
+```
+
+The bundle has to be the public roots and your CA concatenated, in that order, not
+the CA alone: the variable replaces the default file rather than adding to it, and a
+Hub that only trusts your CA cannot reach anything on the public internet. Verified
+against the runtime this image is built on: with no variable the private certificate
+is refused and public TLS works, with the concatenated bundle both work.
+
 ## Import API
 
 `POST /api/import/findings?source_id=<id>` accepts the daemon's JSON envelope

@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- `Hub:Analysis:MaxTracesCap` is bounded by the engine's own limit on `--max-traces` rather than
+  by an unrelated 100000. A Hub configured in the gap accepted a count, drew it, printed it in the
+  copyable command, and only then failed the run on an engine argument error.
 - The dashed outline that marks a declared value reads at 3.5:1 rather than 1.2:1, on its own
   `--dash` token so the two places that draw it cannot drift apart.
 - Max traces carries a "?" saying what it does, and the number itself takes the band's colour

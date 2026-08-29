@@ -190,6 +190,10 @@ public sealed class ConfigurationTests
             new() { Workers = 0 },
             new() { Workers = 17 },
             new() { MaxTracesCap = 0 },
+            // Above the engine's own ceiling: accepted here, this only moved the
+            // failure to argument parsing, after the operator had been shown the
+            // number and the command carrying it.
+            new() { MaxTracesCap = AnalysisOptions.EngineMaxTraces + 1 },
             new() { Timeout = TimeSpan.Zero },
             new() { Timeout = TimeSpan.FromHours(2) },
             new() { ReportRetention = TimeSpan.Zero }

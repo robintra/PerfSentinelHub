@@ -114,7 +114,7 @@ and `sources`.
 | `Hub:Analysis:ReportDirectory` | `/data/reports` | Absolute, writable. Rendered reports live here |
 | `Hub:Analysis:IdentityHeader` | `X-Forwarded-User` | Header a reverse proxy sets with the requester's identity |
 | `Hub:Analysis:Workers` | `2` | 1–16 |
-| `Hub:Analysis:MaxTracesCap` | `2000` | 1–100000 |
+| `Hub:Analysis:MaxTracesCap` | `2000` | 1–10000, the engine's own limit on `--max-traces` |
 | `Hub:Analysis:Timeout` | `00:05:00` | Positive, at most one hour |
 | `Hub:Analysis:ReportRetention` | `1.00:00:00` (24 hours) | Positive duration |
 | `Hub:Sources` | none | At least one source |

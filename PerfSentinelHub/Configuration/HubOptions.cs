@@ -33,6 +33,10 @@ public sealed record AnalysisOptions
     // no account surface and records the value as a claim, never verifies it.
     public string IdentityHeader { get; set; } = "X-Forwarded-User";
     public int Workers { get; set; } = 2;
+    // The engine's own ceiling on --max-traces, which it enforces when it parses
+    // its arguments. A cap above it would pass every check here and then fail the
+    // run on an engine error the operator never asked for.
+    public const int EngineMaxTraces = 10_000;
     public int MaxTracesCap { get; set; } = 2000;
     // Span trees embedded in the rendered report. Passing this at all opts the
     // sink out of size targeting, which is why it is set: without it a wide
@@ -140,8 +144,9 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Analysis:IdentityHeader must be a header name.");
         if (analysis.Workers is < 1 or > 16)
             errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
-        if (analysis.MaxTracesCap is < 1 or > 100_000)
-            errors.Add("Hub:Analysis:MaxTracesCap must be between 1 and 100000.");
+        if (analysis.MaxTracesCap is < 1 or > AnalysisOptions.EngineMaxTraces)
+            errors.Add($"Hub:Analysis:MaxTracesCap must be between 1 and {AnalysisOptions.EngineMaxTraces}, "
+                + "the engine's own limit on --max-traces.");
         if (analysis.MaxTracesEmbedded is < 0 or > 10_000)
             errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
         if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))

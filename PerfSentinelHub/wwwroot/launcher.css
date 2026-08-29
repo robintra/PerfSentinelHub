@@ -1135,12 +1135,14 @@ body[data-screen="report"] .shell-footer { display: none; }
    between the heading's margin and the card's own padding. */
 .terminal-body { margin-top: 11px; }
 /* One row of tabs over the command, each spelling the same request for its own
-   shell. Squared off at the bottom so the line below reads as their panel. */
-.cmd-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+   shell. They sit on the panel rather than above it: no gap, and the selected
+   one carries the panel's own fill so the two read as one shape. Rounded at
+   the top only, for the same reason. */
+.cmd-tabs { display: flex; gap: 2px; }
 .cmd-tab {
-  padding: 5px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
+  padding: 6px 13px 7px;
+  border: 0;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
   background: transparent;
   color: var(--text-3);
   font-family: var(--font-mono);
@@ -1148,10 +1150,13 @@ body[data-screen="report"] .shell-footer { display: none; }
   cursor: pointer;
 }
 .cmd-tab:hover { color: var(--text-2); }
-.cmd-tab[aria-selected="true"] {
-  border-color: var(--border-2);
-  background: var(--surface-3);
-  color: var(--text);
+.cmd-tab[aria-selected="true"] { background: var(--surface-3); color: var(--text); }
+/* Only when the first tab is the selected one does anything sit over that
+   corner, and only then does its rounding leave a nick under the tab. Any
+   other tab, and the corner is the panel's own edge again. `:has` is already
+   the baseline here, `color-mix` below asks for a newer browser than it does. */
+.cmd-tabs:has(.cmd-tab:first-child[aria-selected="true"]) + .terminal-code {
+  border-top-left-radius: 0;
 }
 
 /* Never soft-wrapped: the backslash continuations are shell syntax, and a

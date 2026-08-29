@@ -2042,8 +2042,18 @@
       spell: function (shellId) { return PSL.analysisCommand(source, request, shellId); },
       copyLabel: "Copy the analysis command",
       notes: [
-        // What to go and do, then what it means. The two were one list, which
-        // made a prerequisite read like a remark and a remark like a chore.
+        // What this is, then what it takes to run it. Nobody goes and installs
+        // a binary before knowing what the line above them does.
+        "This is the same request the button above sends, written as the engine's own "
+          + "arguments. It runs wherever perf-sentinel is installed and does not pass through "
+          + "this Hub: no worker slot, no queue, and no report kept here for "
+          + state.status.limits.report_retention_hours + " hours.",
+        "It prints its findings to the terminal. There is no dashboard at the end of it and no "
+          + "link to share, which is the trade for not spending a worker.",
+        trace
+          ? "An ID resolves to exactly one trace, so the engine takes neither a window nor a "
+            + "trace cap here, exactly as the form above stops offering them."
+          : null,
         stepsBlock([
           engineNeed(el("span", {})),
           !trace && !state.form.service.trim()
@@ -2057,20 +2067,9 @@
               + " no command-line flag, so the engine reads "
               + (changed === 1 ? "it" : "them") + " from that file."
             : null
-        ]),
-        "This is the same request the button above sends, written as the engine's own "
-          + "arguments. It runs wherever perf-sentinel is installed and does not pass through "
-          + "this Hub: no worker slot, no queue, and no report kept here for "
-          + state.status.limits.report_retention_hours + " hours.",
-        "It prints its findings to the terminal. There is no dashboard at the end of it and no "
-          + "link to share, which is the trade for not spending a worker.",
-        trace
-          ? "An ID resolves to exactly one trace, so the engine takes neither a window nor a "
-            + "trace cap here, exactly as the form above stops offering them."
-          : null,
+        ])
         // The note that used to say which shell this was quoted for: the tabs
         // above the line say it, and they let the reader take the other one.
-        null
       ]
     })];
 
@@ -3466,7 +3465,10 @@
       // The glyph is aria-hidden, so the caution it carries needs words a
       // screen reader receives while the panel is still collapsed.
       el("span", { class: "visually-hidden", text: "Warning, expert settings." }),
-      el("span", { class: "overline", text: "// advanced · what the analysis looks for" }),
+      el("span", { class: "overline" }, [
+        el("span", { class: "over-warn", text: "// advanced users only" }),
+        document.createTextNode(" \u00b7 what the analysis looks for")
+      ]),
       el("span", { id: "advanced-count", class: "advanced-count", hidden: "hidden" })
     ]);
 

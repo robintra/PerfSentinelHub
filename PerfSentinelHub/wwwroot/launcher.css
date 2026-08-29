@@ -1024,6 +1024,8 @@ body[data-screen="report"] .shell-footer { display: none; }
   font-weight: 600;
 }
 .advanced-summary > svg { flex: 0 0 auto; color: var(--warn-fg); }
+/* Only the warning half of the overline, so the rest keeps reading as a label. */
+.over-warn { color: var(--warn-fg); }
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1184,7 +1186,7 @@ body[data-screen="report"] .shell-footer { display: none; }
    same number of lines as no limit at all in both the launcher column and the
    daemon panel, while keeping a line from running to 170 characters. */
 /* What has to be true before the command runs. Numbered because they are done
-   in order, and set apart from the prose under them because a step is an
+   in order, and set apart from the prose above them because a step is an
    instruction and the prose is only an explanation. */
 .steps-block {
   margin-top: 14px;

@@ -479,7 +479,11 @@
       tail.push("--max-traces " + String(request["max_traces"]));
     }
     if (source.auth_header_name) tail.push("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN");
-    if (Object.keys(request["detection"] || {}).length > 0) tail.push("-c .perf-sentinel.toml");
+    // Undotted, and named explicitly rather than left to the engine's discovery
+    // of `.perf-sentinel.toml` in the working directory: a browser strips the
+    // leading dot when it saves the file, so the dotted name is one the reader
+    // would have to restore before the command could find it.
+    if (Object.keys(request["detection"] || {}).length > 0) tail.push("-c perf-sentinel.toml");
     return tail.length === 0
       ? head.join(" ")
       : head.join(" ") + " " + shell.wrap + "\n  " + tail.join(" ");

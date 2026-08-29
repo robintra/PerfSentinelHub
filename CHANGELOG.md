@@ -26,7 +26,10 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
-- The generated `.perf-sentinel.toml` can be downloaded, not only copied. Copying left the
+- The generated config is named `perf-sentinel.toml`, without the leading dot, and the printed
+  command names it with `-c`. A browser strips that dot when it saves the file, so the dotted
+  name the command used to ask for was one no download ever produced.
+- The generated `perf-sentinel.toml` can be downloaded, not only copied. Copying left the
   reader to create the file themselves, which is the one step between the thresholds they set
   here and a run that honours them.
 - The fleet version summary counts only the sources running behind the Hub's engine. A fleet

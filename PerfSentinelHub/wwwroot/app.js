@@ -2177,7 +2177,7 @@
             : null,
           source.auth_header_name ? tokenStep(source) : null,
           changed > 0
-            ? "Save the `.perf-sentinel.toml` below next to where you run the command. "
+            ? "Put the `perf-sentinel.toml` below next to where you run the command. "
               + (changed === 1 ? "The threshold you moved has" : "The thresholds you moved have")
               + " no command-line flag, so the engine reads "
               + (changed === 1 ? "it" : "them") + " from that file."
@@ -2190,18 +2190,19 @@
 
     if (changed > 0) {
       panels.push(terminalBlock({
-        head: "// .perf-sentinel.toml",
+        head: "// perf-sentinel.toml",
         sub: "Only the thresholds you changed.",
         text: PSL.detectionToml(state.form.detection),
-        copyLabel: "Copy the .perf-sentinel.toml fragment",
-        download: ".perf-sentinel.toml",
+        copyLabel: "Copy the perf-sentinel.toml fragment",
+        download: "perf-sentinel.toml",
         notes: [
           "Every threshold this file leaves out keeps the engine's own default, and the Hub only "
             + "records a value that actually departs from one. A run launched from the button "
             + "above carries the same numbers, so the two are comparable with each other.",
-          "Download hands it to your browser, which chooses the folder and may rename a file "
-            + "whose name starts with a dot. Wherever it lands, it has to end up in the "
-            + "directory you run the command from, under the name the `-c` above gives it."
+          "The name carries no leading dot on purpose. The engine finds a `.perf-sentinel.toml` "
+            + "in the working directory on its own, but a browser strips that dot when it saves "
+            + "the file, so the command above names this one explicitly instead. Move it from "
+            + "wherever your browser puts it to the directory you run the command from."
         ]
       }));
     }

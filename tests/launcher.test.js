@@ -79,7 +79,10 @@ test("changed thresholds point the engine at a file, having no flag of their own
     tempo,
     { service: "orders", max_traces: 10, lookback: "1h", detection: { max_fanout: 9 } });
 
-  assert.ok(command.includes("-c .perf-sentinel.toml"));
+  // Undotted: a browser strips a leading dot when it saves the downloaded file,
+  // so the name the command asks for is the name the reader actually receives.
+  assert.ok(command.includes("-c perf-sentinel.toml"));
+  assert.ok(!command.includes("-c .perf-sentinel.toml"));
   assert.equal(PSL.detectionToml({ max_fanout: 9, n_plus_one_min_occurrences: 8 }),
     "[detection]\nmax_fanout = 9\nn_plus_one_min_occurrences = 8");
 });

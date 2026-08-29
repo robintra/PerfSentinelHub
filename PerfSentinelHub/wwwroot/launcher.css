@@ -745,7 +745,9 @@ button { font: inherit; }
    than --surface-2 so it still reads on a card that is itself --surface-2. */
 .code-inline {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  /* No size of its own: the dashboard's `code` rule sets the family and nothing
+     else, so a chip is always the size of the sentence it sits in rather than a
+     fixed size that reads large in one place and small in another. */
   /* A chip broken across lines splits its own background mid-token. */
   white-space: nowrap;
   background: var(--surface-3);
@@ -1090,10 +1092,12 @@ body[data-screen="report"] .shell-footer { display: none; }
   text-underline-offset: 2px;
 }
 
-/* No width cap: the columns it lives in bound it themselves. */
+/* No width cap: the columns it lives in bound it themselves. 12px, not the
+   11.5px floor: these are the longest paragraphs in the product, and the floor
+   is for captions and one-line hints, not for something read end to end. */
 .terminal-note {
   margin: 11px 0 0;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--text-3);
 }
@@ -1361,3 +1365,9 @@ body[data-screen="report"] .shell-footer { display: none; }
   font-size: 11px;
 }
 .refresh-select:hover { border-color: var(--brand); }
+/* Browsers count a clicked <select> as focus-visible, on the grounds that a
+   keyboard can drive the popup it opens. A reader who clicked it does not need
+   to be told where the focus went, one who tabbed to it does, so the ring goes
+   only while the pointer is what put it there. The flag is cleared on the first
+   key, which is the moment that stops being true. */
+.refresh-select[data-pointer]:focus-visible { outline: none; }

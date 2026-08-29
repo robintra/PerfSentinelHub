@@ -1051,6 +1051,10 @@
       if (choice[0] === ms) option.selected = true;
       select.appendChild(option);
     });
+    // Which device put the focus there, for the ring rule in the stylesheet.
+    select.addEventListener("pointerdown", function () { select.dataset.pointer = "true"; });
+    select.addEventListener("keydown", function () { delete select.dataset.pointer; });
+    select.addEventListener("blur", function () { delete select.dataset.pointer; });
     select.addEventListener("change", function () {
       state.daemonRefreshMs[source.id] = Number(select.value);
       startTicker(source, index);

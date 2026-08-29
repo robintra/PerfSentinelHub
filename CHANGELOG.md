@@ -26,6 +26,10 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The terminal blocks' prose reads at 12px like the rest of the screen rather than at the 11.5px
+  floor, and an inline code chip takes the size of the sentence it sits in instead of a fixed one.
+- Clicking the interval select no longer leaves a focus ring behind. Tabbing to it still draws one,
+  and so does the first key pressed after a click.
 - The monitor command carries `--refresh` at the interval the daemon row is re-reading on, and
   follows the reader's choice as they change it. Off drops the flag rather than printing a zero.
 - Every printed command now says it needs the `perf-sentinel` binary on the machine it is typed

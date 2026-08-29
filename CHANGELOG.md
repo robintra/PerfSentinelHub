@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- An open daemon row re-reads itself on a status-only request and takes the full export at most
+  once a minute, and a row whose read failed keeps asking with that same cheap request until the
+  daemon answers, then reads in full. A row left open now recovers on its own.
 - A report rendered from a daemon source is rendered with `--daemon-url` when the daemon's base
   URL is a bare origin, so its Refresh and acknowledgment controls work from the viewer's browser
   once the daemon's CORS allows the Hub's origin. A backend run against an authenticated source

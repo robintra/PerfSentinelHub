@@ -152,3 +152,21 @@ test("a merged light view keeps the settings and takes the gauges", () => {
   assert.equal(previous.state, "advised");
   assert.deepEqual(previous.traces, under);
 });
+
+test("what the next re-read of a row should cost", () => {
+  const full = { error_code: null, warnings: [] };
+  const failed = { error_code: "network_error" };
+
+  // Nothing on screen yet, or a read in flight: only a full read renders.
+  assert.equal(PSL.refreshPlan(undefined, 0, 60000), "full");
+  assert.equal(PSL.refreshPlan("loading", 0, 60000), "full");
+  // A row that failed asks the cheap question until something answers.
+  assert.equal(PSL.refreshPlan(failed, 0, 60000), "probe");
+  assert.equal(PSL.refreshPlan(failed, 999999, 60000), "probe");
+  // A row already showing a daemon rides on light reads until the full one is due.
+  assert.equal(PSL.refreshPlan(full, 5000, 60000), "light");
+  assert.equal(PSL.refreshPlan(full, 60000, 60000), "full");
+  assert.equal(PSL.refreshPlan(full, 60001, 60000), "full");
+  // A light body is never a base for another, so it reads in full instead.
+  assert.equal(PSL.refreshPlan({ error_code: null, traces: null }, 0, 60000), "full");
+});

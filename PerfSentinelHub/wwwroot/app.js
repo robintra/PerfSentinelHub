@@ -804,7 +804,8 @@
     if (!open) { stopTicker(source.id); return; }
     const view = state.daemonViews[source.id];
     if (view === "loading") return;
-    // An error is not kept as an answer: reopening the fold is the retry.
+    // An error is not kept as an answer. The row re-reads itself on its
+    // interval, and reopening the fold asks again straight away.
     if (view !== undefined && !view.error_code) { startTicker(source, index); return; }
     loadDaemon(source, index);
   }
@@ -833,11 +834,10 @@
         const target = document.getElementById("daemon-detail-" + index);
         if (target) target.replaceChildren(daemonPanel(source, index));
         // And the row may have been folded in the meantime, in which case
-        // starting to poll it would contradict the fold. An error is not
-        // re-read either: reopening the fold is the retry, the same rule the
-        // fold applies, and the error panel carries no countdown to write to.
-        const failed = state.daemonViews[source.id].error_code;
-        if (state.daemonOpen[source.id] && !failed) startTicker(source, index);
+        // starting to poll it would contradict the fold. A failed read still
+        // gets a ticker: its panel carries the same countdown, and the row
+        // recovers on its own rather than waiting to be refolded.
+        if (state.daemonOpen[source.id]) startTicker(source, index);
       });
   }
 
@@ -849,7 +849,7 @@
         el("div", { class: "skeleton", style: "height:150px" })
       ]);
     }
-    if (view.error_code) return daemonError(view.error_code);
+    if (view.error_code) return daemonError(source, index, view.error_code);
 
     return el("div", { class: "daemon-panel" }, [
       el("p", {
@@ -877,7 +877,11 @@
     ]);
   }
 
-  function daemonError(code) {
+  /**
+   * A failed read is not a dead end: the row keeps asking on the same interval
+   * the healthy rows use, and the first answer replaces this with the daemon.
+   */
+  function daemonError(source, index, code) {
     return el("div", { class: "daemon-panel" }, [
       el("div", { class: "banner", "data-tone": "crit" }, [
         critGlyph(16),
@@ -895,7 +899,12 @@
               + "observation made at a different time."
           })
         ])
-      ])
+      ]),
+      el("p", {
+        class: "daemon-lead",
+        text: "This row asks again on its own, and shows the daemon as soon as it answers."
+      }),
+      refreshControl(source, index)
     ]);
   }
 
@@ -920,7 +929,7 @@
           + "the hints, so the interval prices a small read, not the heavy one."),
         el("span", { class: "sink-sub refresh-read", id: "refresh-read-" + index })
       ]),
-      refreshControl(source, view, index),
+      refreshControl(source, index),
       countStrip([
         [gaugeText(view.traces), "active traces"],
         [gaugeText(view.analysis_queue), "analysis queue"],
@@ -998,7 +1007,7 @@
     return chosen === undefined ? DEFAULT_REFRESH_MS : chosen;
   }
 
-  function refreshControl(source, view, index) {
+  function refreshControl(source, index) {
     const ms = refreshMs(source.id);
     const select = el("select", { class: "refresh-select", "aria-label": "Re-read interval" });
     REFRESH_CHOICES.forEach(function (choice) {
@@ -1113,10 +1122,14 @@
   function tickRefresh(source, index) {
     const read = document.getElementById("refresh-read-" + index);
     const next = document.getElementById("refresh-next-" + index);
-    if (!read || !next) { stopTicker(source.id); return; }
+    // The countdown is the ticker's only requirement. A failed row carries one
+    // and no read age, having never had a read to age.
+    if (!next) { stopTicker(source.id); return; }
 
-    const readAt = state.daemonReadAt[source.id] || Date.now();
-    read.textContent = "Read " + PSL.dur(Date.now() - readAt) + " ago.";
+    if (read) {
+      const readAt = state.daemonReadAt[source.id] || Date.now();
+      read.textContent = "Read " + PSL.dur(Date.now() - readAt) + " ago.";
+    }
 
     const ms = refreshMs(source.id);
     // The sweep runs on its own clock, set by startTicker and refreshDaemon.
@@ -1153,20 +1166,37 @@
     restartCycle(source.id, index);
     const previous = state.daemonViews[source.id];
     // A light read is only ever an overlay on a full one, so a row with
-    // nothing to lay it over reads in full however recently it was read: the
-    // gauges alone would render as a view with no settings and no hints.
+    // nothing to lay it over asks the cheap question first, and only reads in
+    // full once it knows there is something to read.
     const kept = PSL.mergeableView(previous);
-    const full = !kept || Date.now() - (state.daemonFullReadAt[source.id] || 0) >= FULL_READ_EVERY_MS;
-    getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon" + (full ? "" : "?refresh=status"))
+    const plan = PSL.refreshPlan(
+      previous,
+      Date.now() - (state.daemonFullReadAt[source.id] || 0),
+      FULL_READ_EVERY_MS);
+    getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon"
+      + (plan === "full" ? "" : "?refresh=status"))
       .then(function (view) {
+        if (plan === "probe") {
+          // The daemon answers again: only a full read renders it, and that is
+          // the same read this row started with, skeleton and all.
+          if (!view.error_code) return loadDaemon(source, index);
+          // Still down, and possibly down differently: the panel is replaced
+          // only when the reason changed, and never under the reader's hands.
+          const stale = previous.error_code !== view.error_code;
+          state.daemonViews[source.id] = view;
+          const cell = document.getElementById("daemon-detail-" + index);
+          if (stale && cell && !cell.contains(document.activeElement))
+            cell.replaceChildren(daemonPanel(source, index));
+          return;
+        }
         // A transient error does not outrank data: the last good reading is
         // kept and its age keeps counting, exactly as a dropped connection is
         // handled below.
-        if (view.error_code && kept) return;
-        if (!full) view = PSL.mergeLight(kept, view);
+        if (view.error_code) return;
+        if (plan === "light") view = PSL.mergeLight(kept, view);
         state.daemonViews[source.id] = view;
         state.daemonReadAt[source.id] = Date.now();
-        if (full) state.daemonFullReadAt[source.id] = Date.now();
+        if (plan === "full") state.daemonFullReadAt[source.id] = Date.now();
       })
       .catch(function () {
         // Keep the last good reading rather than blanking the panel, and let

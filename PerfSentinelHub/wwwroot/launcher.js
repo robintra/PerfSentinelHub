@@ -55,7 +55,7 @@
     timeout: "it did not answer inside this Hub's HTTP timeout. Busy is as likely as down.",
     invalid_status: "it answered, but not with a status this Hub can read. Its /api/status has to carry a version string.",
     response_too_large: "it answered with more than this Hub reads in one go. A [daemon] section past that cap is worth reporting.",
-    hub_busy: "the Hub capped how many daemon reads run at once and this one hit the cap. It clears in about a second. Reopen the row to read again."
+    hub_busy: "the Hub capped how many daemon reads run at once and this one hit the cap. It clears in about a second."
   };
 
   /** @type {Record<import("../types").ErrorCode, string>} */
@@ -464,6 +464,27 @@
   }
 
   /**
+   * What the next re-read of an open row should cost.
+   *
+   *   full   the whole view: the only read that renders a panel, so it is what
+   *          a row starts with and what it returns to once a minute
+   *   light  the gauges alone, laid over the view already on screen
+   *   probe  the gauges alone again, but to find out whether a row that failed
+   *          can be read at all: an answer is followed by a full read
+   *
+   * @param {any} previous the view currently on screen, if any
+   * @param {number} sinceFullMs since the last full read
+   * @param {number} everyMs how often a full read is due
+   * @returns {"full" | "light" | "probe"}
+   */
+  function refreshPlan(previous, sinceFullMs, everyMs) {
+    if (mergeableView(previous)) return sinceFullMs >= everyMs ? "full" : "light";
+    // Only a view that failed is worth probing. Everything else, nothing read
+    // yet or a read in flight, starts over with the read that renders.
+    return previous && typeof previous === "object" && previous.error_code ? "probe" : "full";
+  }
+
+  /**
    * A light body laid over the last full view: the gauges and the version are
    * the light read's, the settings and the daemon's hints stay the full read's,
    * and the state is derived from both.
@@ -492,6 +513,6 @@
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, analysisCommand, monitorCommand, detectionToml, quotedForShell,
-    lightState, mergeableView, mergeLight
+    lightState, mergeableView, mergeLight, refreshPlan
   };
 })(globalThis);

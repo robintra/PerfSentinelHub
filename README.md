@@ -304,8 +304,9 @@ against a daemon that keeps ten minutes.
 
 A gauge is toned once it is close to a cap it published: red from 90 %, which is the engine's own
 advisor line and the same one that turns the row's verdict to near capacity, and amber from 75 %,
-which is the Hub's own step ahead of it. Each read also shows what moved since the one before it,
-beside the figure and gone a few seconds later, red for a rise and green for a fall: every one of
+which is the Hub's own step ahead of it. Each read also shows what moved since the one
+before it, rising off the figure it belongs to and fading out, red for a rise and green for a
+fall: every one of
 these counts toward a cap, so up is the direction that costs something. Uptime is neither toned nor
 tracked, having no cap and only one direction to go in.
 

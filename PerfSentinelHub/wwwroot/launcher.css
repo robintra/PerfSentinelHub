@@ -870,36 +870,44 @@ body[data-screen="report"] .shell-footer { display: none; }
 .outcome-body { margin: 0 0 14px; font-size: 13.5px; line-height: 1.6; max-width: 120ch; color: inherit; }
 
 .counts { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 14px; border: 1px solid currentColor; border-radius: var(--r-sm); background: currentColor; overflow: hidden; }
-.count { flex: 1 1 auto; min-width: 104px; padding: 11px 18px; background: var(--surface-2); }
+/* Positioned so the move badge can float over the figure without taking any
+   width from it: inline, it widened every cell and pushed uptime onto a second
+   row of its own. */
+.count { position: relative; flex: 1 1 auto; min-width: 104px; padding: 11px 18px; background: var(--surface-2); }
 .count-n { display: block; margin-bottom: 2px; font-family: var(--font-mono); font-size: 19px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .count-n[data-tone="crit"] { color: var(--crit-fg); }
 .count-n[data-tone="warn"] { color: var(--warn-fg); }
 .count-n[data-tone="info"] { color: var(--info-fg); }
 .count-n[data-tone="ok"] { color: var(--ok-fg); }
 .count-n[data-tone="muted"] { color: var(--text-3); }
-/* What the gauge moved by on the read just adopted: it arrives, holds long
-   enough to be read, and leaves. Up is the bad direction, every one of these
-   counts toward a cap. */
+/* What the gauge moved by on the read just adopted, rising off the figure it
+   belongs to and fading out. Out of the flow entirely: it overlaps the figure
+   on the way past rather than making room for itself, and it is neither
+   selectable nor clickable, being a thing that happened and not a value. */
 .count-move {
-  margin-left: 9px;
+  position: absolute;
+  left: 18px;
+  top: 11px;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  vertical-align: 3px;
-  animation: count-move 2.6s ease-out forwards;
+  animation: count-move 2.4s ease-out forwards;
 }
 .count-move[data-dir="up"] { color: var(--crit-fg); }
 .count-move[data-dir="down"] { color: var(--ok-fg); }
 @keyframes count-move {
-  0% { opacity: 0; transform: translateY(5px); }
-  10% { opacity: 1; transform: none; }
-  72% { opacity: 1; transform: none; }
-  100% { opacity: 0; transform: none; }
+  0% { opacity: 0; transform: translateY(7px); }
+  16% { opacity: 1; transform: translateY(3px); }
+  62% { opacity: 1; transform: translateY(-3px); }
+  100% { opacity: 0; transform: translateY(-11px); }
 }
-/* The badge still comes and goes, it just does not travel to get there. */
+/* It still comes and goes, it just does not travel to get there. */
 @media (prefers-reduced-motion: reduce) {
   @keyframes count-move {
-    0%, 72% { opacity: 1; transform: none; }
+    0%, 62% { opacity: 1; transform: none; }
     100% { opacity: 0; transform: none; }
   }
 }

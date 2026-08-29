@@ -1205,8 +1205,8 @@
   function settingsDisclosure(source, view) {
     const open = state.daemonSettingsOpen[source.id] === true;
     const count = view.config ? Object.keys(view.config).length : 0;
-    const cards = el("div", { class: "settings-cards" });
-    settingsCards(source.id, view).forEach(function (node) { cards.appendChild(node); });
+    const cards = el("div", { class: "settings-cards" },
+      settingsColumns(settingsCards(source.id, view)));
     // The preamble sits above the columns rather than inside them, or it would
     // flow into the first one as if it were a card.
     const body = el("div", {}, [view.config ? settingsPreamble(view) : null, cards]);
@@ -1228,6 +1228,28 @@
       body.hidden = !next;
     });
     return el("div", { class: "settings-block" }, [button, body]);
+  }
+
+  // Fixed, and not measured: the table around this sets min-width: 1090px and
+  // scrolls rather than shrink, so the room here never falls below three.
+  const SETTINGS_COLUMNS = 3;
+
+  /**
+   * Deals the cards into independent columns, round-robin so they still read
+   * left to right. Not a grid: a grid row is as tall as its tallest card, so
+   * opening one card pushed down every card in the rows below it, across all
+   * columns. Here a card only ever moves the cards under it in its own column.
+   * Not CSS columns either, which repack by height and so re-shuffled cards
+   * sideways under the reader's own click.
+   */
+  function settingsColumns(cards) {
+    const columns = [];
+    for (let index = 0; index < SETTINGS_COLUMNS; index++)
+      columns.push(el("div", { class: "settings-col" }));
+    cards.forEach(function (card, index) {
+      columns[index % SETTINGS_COLUMNS].appendChild(card);
+    });
+    return columns;
   }
 
   function settingsCards(sourceId, view) {

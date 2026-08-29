@@ -1198,12 +1198,21 @@ body[data-screen="report"] .shell-footer { display: none; }
    re-shuffled every card into a different column under the reader's click.
    Folded by default the cards are uniform, rows carry no holes, and an open
    card only deepens its own row while every card keeps its place. */
+/* Independent columns: a card only pushes the cards below it in its own one.
+   The cards are dealt into them in JS, no CSS mechanism assigning children to
+   columns keeps them independent. */
 .settings-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  display: flex;
+  align-items: flex-start;
   gap: 12px;
-  align-items: start;
   margin-top: 14px;
+}
+.settings-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .settings-card {
   border: 1px solid var(--border);

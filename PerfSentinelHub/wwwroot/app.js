@@ -1158,6 +1158,18 @@
   // buffers the export to refresh the hints, runs at most this often.
   const FULL_READ_EVERY_MS = 60000;
 
+  /**
+   * Swaps a rebuilt block in, unless the reader is inside it: rebuilding would
+   * close the interval select under their pointer. The next tick catches up.
+   * Returns whether the swap happened.
+   */
+  function replaceIfIdle(id, node) {
+    const host = document.getElementById(id);
+    if (!host || host.contains(document.activeElement)) return false;
+    host.replaceChildren(node);
+    return true;
+  }
+
   function refreshDaemon(source, index) {
     // A separate flag rather than a sentinel in daemonViews: a render during
     // the flight reads daemonViews, and a string there would crash it.
@@ -1168,11 +1180,13 @@
     // A light read is only ever an overlay on a full one, so a row with
     // nothing to lay it over asks the cheap question first, and only reads in
     // full once it knows there is something to read.
-    const kept = PSL.mergeableView(previous);
     const plan = PSL.refreshPlan(
       previous,
       Date.now() - (state.daemonFullReadAt[source.id] || 0),
       FULL_READ_EVERY_MS);
+    // Read from the plan rather than judged a second time: the plan only says
+    // "light" for a view that can be merged onto, so the two cannot disagree.
+    const kept = plan === "light" ? previous : null;
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon"
       + (plan === "full" ? "" : "?refresh=status"))
       .then(function (view) {
@@ -1181,12 +1195,10 @@
           // the same read this row started with, skeleton and all.
           if (!view.error_code) return loadDaemon(source, index);
           // Still down, and possibly down differently: the panel is replaced
-          // only when the reason changed, and never under the reader's hands.
+          // only when the reason changed.
           const stale = previous.error_code !== view.error_code;
           state.daemonViews[source.id] = view;
-          const cell = document.getElementById("daemon-detail-" + index);
-          if (stale && cell && !cell.contains(document.activeElement))
-            cell.replaceChildren(daemonPanel(source, index));
+          if (stale) replaceIfIdle("daemon-detail-" + index, daemonPanel(source, index));
           return;
         }
         // A transient error does not outrank data: the last good reading is
@@ -1205,13 +1217,9 @@
       })
       .finally(function () {
         delete state.daemonInFlight[source.id];
-        const host = document.getElementById("daemon-top-" + index);
         const view = state.daemonViews[source.id];
-        if (!host || !view || view === "loading" || view.error_code) return;
-        // Not while the reader is inside it: rebuilding would close the
-        // interval select under their pointer. The next tick catches up.
-        if (host.contains(document.activeElement)) return;
-        host.replaceChildren(daemonTopRow(source, view, index));
+        if (!view || view === "loading" || view.error_code) return;
+        if (!replaceIfIdle("daemon-top-" + index, daemonTopRow(source, view, index))) return;
         tickRefresh(source, index);
       });
   }

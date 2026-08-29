@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -108,6 +109,89 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_daemon_run_is_rendered_live_when_the_probed_engine_takes_the_flag()
+    {
+        // The pure helper above says what the URL should be, and EngineProbeTests
+        // says what the binary answers. This is the wire between them: without it
+        // a render that ignored the probe entirely would keep every test green.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(ReportJson, cancellationToken);
+        }, cancellationToken);
+        var options = RunnerOptions(StubEngine(
+            ReportJson, exitCode: 0, help: "      --daemon-url <URL>  live mode"));
+        var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
+        await probe.StartAsync(cancellationToken);
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(), options),
+            probe,
+            options,
+            NullLogger<AnalysisRunner>.Instance);
+        var source = new SourceOptions
+        {
+            Id = "live",
+            Name = "Live",
+            Environment = "production",
+            Kind = SourceKinds.Daemon,
+            BaseUrl = daemon.BaseUrl
+        };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.True(probe.SupportsDaemonUrl);
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        Assert.Contains(
+            $"--daemon-url {source.EndpointArgument}",
+            arguments,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_daemon_run_renders_static_when_the_engine_does_not_take_the_flag()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(ReportJson, cancellationToken);
+        }, cancellationToken);
+        // Same run, same source, a binary whose help names no such flag.
+        var options = RunnerOptions(StubEngine(
+            ReportJson, exitCode: 0, help: "      --output <FILE>  where to write"));
+        var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
+        await probe.StartAsync(cancellationToken);
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(), options),
+            probe,
+            options,
+            NullLogger<AnalysisRunner>.Instance);
+        var source = new SourceOptions
+        {
+            Id = "static",
+            Name = "Static",
+            Environment = "production",
+            Kind = SourceKinds.Daemon,
+            BaseUrl = daemon.BaseUrl
+        };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.False(probe.SupportsDaemonUrl);
+        // The run still produces its report: a missing flag costs the live
+        // controls, never the render.
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        Assert.DoesNotContain("--daemon-url", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Zero_traces_is_an_empty_success_rather_than_a_failure()
     {
         var runner = Runner(StubEngine(
@@ -178,9 +262,8 @@ public sealed class AnalysisRunnerTests : IDisposable
             Directory.Delete(_workspace, recursive: true);
     }
 
-    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null)
-    {
-        var options = Options.Create(new HubOptions
+    private IOptions<HubOptions> RunnerOptions(string? binaryPath, TimeSpan? timeout = null) =>
+        Options.Create(new HubOptions
         {
             Analysis = new AnalysisOptions
             {
@@ -189,6 +272,10 @@ public sealed class AnalysisRunnerTests : IDisposable
                 Timeout = timeout ?? TimeSpan.FromSeconds(30)
             }
         });
+
+    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null)
+    {
+        var options = RunnerOptions(binaryPath, timeout);
         return new AnalysisRunner(
             new DaemonClient(new HttpClient(), options),
             // Unprobed, so it reports no --daemon-url: these runs are backend
@@ -207,12 +294,17 @@ public sealed class AnalysisRunnerTests : IDisposable
         string reportJson,
         int exitCode,
         string standardError = "",
-        int sleepSeconds = 0)
+        int sleepSeconds = 0,
+        string help = "")
     {
         Directory.CreateDirectory(_workspace);
         var path = Path.Combine(_workspace, "perf-sentinel");
         File.WriteAllText(path, $"""
             #!/bin/sh
+            if [ "$1" = "report" ] && [ "$2" = "--help" ]; then
+              printf '%s' {Quote(help)}
+              exit 0
+            fi
             if [ "$1" = "report" ]; then
               echo "$@" > render-args.txt
               while [ $# -gt 0 ]; do

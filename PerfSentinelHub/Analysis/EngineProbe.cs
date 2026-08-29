@@ -55,15 +55,21 @@ public sealed partial class EngineProbe(
         timeout.CancelAfter(ProbeTimeout);
         try
         {
-            Version = ParseVersion(
-                await RunVersionAsync(path, _analysis.ReportDirectory, timeout.Token));
+            // Concurrent, and not one after the other: the deadline below is one
+            // budget for the pair, so a slow `--version` would otherwise eat the
+            // help probe's share of it and every daemon report would quietly
+            // render static. WhenAll observes both even when the first faults.
+            var version = RunVersionAsync(path, _analysis.ReportDirectory, timeout.Token);
+            var daemonUrl = ReadsDaemonUrlAsync(path, _analysis.ReportDirectory, timeout.Token);
+            await Task.WhenAll(version, daemonUrl);
+
+            Version = ParseVersion(version.Result);
             if (Version is null)
                 LogUnreadableVersion(logger, path);
             else
                 LogEngineVersion(logger, Version, path);
 
-            SupportsDaemonUrl = await ReadsDaemonUrlAsync(
-                path, _analysis.ReportDirectory, timeout.Token);
+            SupportsDaemonUrl = daemonUrl.Result;
             if (!SupportsDaemonUrl)
                 LogNoDaemonUrl(logger, path);
         }
@@ -141,7 +147,10 @@ public sealed partial class EngineProbe(
     [LoggerMessage(1404, LogLevel.Warning, "Engine binary {Path} could not be run.")]
     private static partial void LogProbeFailed(ILogger logger, Exception exception, string path);
 
+    // What was observed, not what was concluded: a help page that could not be
+    // read is not proof the flag is missing, and an operator wondering why
+    // their reports are static needs the difference.
     [LoggerMessage(1405, LogLevel.Information,
-        "Engine binary {Path} takes no --daemon-url, so daemon reports render static.")]
+        "No --daemon-url in `report --help` from {Path}, so daemon reports render static.")]
     private static partial void LogNoDaemonUrl(ILogger logger, string path);
 }

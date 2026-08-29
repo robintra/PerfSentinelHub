@@ -9,3 +9,4 @@
 #
 # The first entry validates a version that has never been published: the whole
 # point of the gate is to assert the lab saw the build before the tag exists.
+v0.1.0	d7f5889	2026-08-29	PASS

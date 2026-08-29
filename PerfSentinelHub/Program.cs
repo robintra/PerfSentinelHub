@@ -76,7 +76,15 @@ await app.Services.GetRequiredService<HubDatabase>()
 // theme handoff between them goes through sessionStorage, with no URL
 // parameter and no postMessage.
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    // Nothing here carries a fingerprint in its name, so a cached app.js can
+    // outlive the API it talks to across a Hub upgrade. Without a Cache-Control
+    // the browser picks its own freshness from the last-modified date and holds
+    // the old file for minutes. no-cache still revalidates against the ETag, so
+    // an unchanged file costs a 304 and not a download.
+    OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache"
+});
 
 app.MapHubApi();
 app.MapAnalysisApi();

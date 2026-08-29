@@ -26,6 +26,13 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- Native controls follow the theme: `color-scheme` is declared per theme, so the number steppers
+  stop rendering in the browser's light scheme on a dark page.
+- The re-read interval opens below its control instead of over it. A native select's menu is
+  placed by the OS and no CSS moves it, so the control opts into `appearance: base-select` and the
+  page paints and positions the picker itself. Browsers without it keep the native menu.
+- Static assets answer `no-cache`. Nothing under `wwwroot` carries a fingerprint, so a browser
+  choosing its own freshness could run an old `app.js` against a new API after an upgrade.
 - `Hub:Analysis:MaxTracesCap` is bounded by the engine's own limit on `--max-traces` rather than
   by an unrelated 100000. A Hub configured in the gap accepted a count, drew it, printed it in the
   copyable command, and only then failed the run on an engine argument error.

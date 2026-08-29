@@ -23,4 +23,17 @@ public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<H
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/health/live", cancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/health/ready", cancellationToken)).StatusCode);
     }
+
+    [Fact]
+    public async Task Static_assets_are_revalidated_rather_than_cached_by_age()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var asset = await _client.GetAsync("/app.js", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, asset.StatusCode);
+        // No name here carries a fingerprint, so the browser must ask every time
+        // rather than pick its own freshness from the last-modified date.
+        Assert.True(asset.Headers.CacheControl?.NoCache);
+        Assert.NotNull(asset.Headers.ETag);
+    }
 }

@@ -405,6 +405,7 @@
 
   function terminalBlock(spec) {
     const code = el("pre", { class: "terminal-code", tabindex: "0", text: spec.text });
+    if (spec.id) code.id = spec.id;
     const status = el("span", { class: "terminal-status", role: "status" });
     const label = el("span", { text: "Copy" });
     const button = el("button", {
@@ -417,7 +418,9 @@
     // screen at once, and a shared handle would let one revert cancel the other.
     let timer = 0;
     button.addEventListener("click", function () {
-      writeClipboard(code, spec.text).then(function (copied) {
+      // Read off the node, not off the spec: a command that changes under the
+      // reader would otherwise copy the line it replaced.
+      writeClipboard(code, code.textContent).then(function (copied) {
         label.textContent = copied ? "Copied" : "Copy";
         if (copied) button.setAttribute("data-copied", "true");
         status.textContent = copied
@@ -889,12 +892,15 @@
       terminalBlock({
         head: "// the same view in your terminal",
         sub: "The same figures, plus the tabs this screen leaves out.",
-        text: PSL.monitorCommand(source),
+        id: "monitor-command-" + index,
+        text: PSL.monitorCommand(source, refreshMs(source.id) / 1000),
         copyLabel: "Copy the monitor command for " + source.name,
         notes: [
-          "`query monitor` re-reads the same figures on its own interval, the one `--refresh` "
-            + "sets, and carries the energy and carbon breakdown this screen only summarises. "
-            + "This row re-reads too, on the interval beside the gauges above.",
+          "`query monitor` carries the energy and carbon breakdown this screen only summarises. "
+            + "It re-reads on the interval chosen above, and this line changes with it, so the "
+            + "terminal and this row never disagree about how often the daemon is asked. Set that "
+            + "to off and the command drops `--refresh`, leaving the engine its own default of "
+            + "five seconds.",
           engineNote(),
           source.auth_header_name
             ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
@@ -1048,6 +1054,10 @@
     select.addEventListener("change", function () {
       state.daemonRefreshMs[source.id] = Number(select.value);
       startTicker(source, index);
+      // Only the line is rewritten: the note under it is worded to hold at any
+      // interval, including off, so it never needs to be.
+      const printed = document.getElementById("monitor-command-" + index);
+      if (printed) printed.textContent = PSL.monitorCommand(source, Number(select.value) / 1000);
     });
     const ring = refreshRing();
     if (ms) ring.querySelector(".refresh-ring-fill").style.setProperty("--cycle", ms + "ms");

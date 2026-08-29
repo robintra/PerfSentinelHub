@@ -186,3 +186,19 @@ test("the download link points at the engine version the Hub runs", () => {
   assert.equal(PSL.releaseUrl("0.16.0?x=1"), list);
   assert.equal(PSL.releaseUrl("javascript:alert(1)"), list);
 });
+
+test("the monitor command carries the interval the row is re-reading on", () => {
+  const source = { id: "d", base_url: "http://daemon.svc:4318" };
+  const bare = "perf-sentinel query --daemon http://daemon.svc:4318 monitor";
+
+  assert.equal(PSL.monitorCommand(source, 30), bare + " --refresh 30");
+  assert.equal(PSL.monitorCommand(source, 5), bare + " --refresh 5");
+  // Not re-reading, so no interval to mirror: the engine keeps its own default.
+  assert.equal(PSL.monitorCommand(source, 0), bare);
+  assert.equal(PSL.monitorCommand(source), bare);
+  // --daemon is the parent's, --refresh is the subcommand's, in that order.
+  assert.match(PSL.monitorCommand(source, 10), /--daemon \S+ monitor --refresh 10$/);
+  // And an address that needs quoting still gets it.
+  assert.equal(PSL.monitorCommand({ base_url: "http://a b" }, 5),
+    "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
+});

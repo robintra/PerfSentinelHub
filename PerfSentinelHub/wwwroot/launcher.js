@@ -412,8 +412,21 @@
    * @param {import("../types").Source} source
    * @returns {string}
    */
-  function monitorCommand(source) {
-    return "perf-sentinel query --daemon " + shq(source.base_url) + " monitor";
+  /**
+   * `--daemon` belongs to the parent `query`, `--refresh` to `monitor`, so the
+   * order is not free. The interval is the one the row is already re-reading
+   * on: a reader who slowed this screen down means it, and the command they
+   * copy should not contradict the screen they copied it from.
+   *
+   * @param {any} source
+   * @param {number} [refreshSeconds] omitted, or 0, leaves the engine's own default
+   * @returns {string}
+   */
+  function monitorCommand(source, refreshSeconds) {
+    const command = "perf-sentinel query --daemon " + shq(source.base_url) + " monitor";
+    return Number.isInteger(refreshSeconds) && refreshSeconds > 0
+      ? command + " --refresh " + refreshSeconds
+      : command;
   }
 
   /**

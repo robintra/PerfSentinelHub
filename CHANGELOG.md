@@ -26,6 +26,8 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The monitor command carries `--refresh` at the interval the daemon row is re-reading on, and
+  follows the reader's choice as they change it. Off drops the flag rather than printing a zero.
 - Every printed command now says it needs the `perf-sentinel` binary on the machine it is typed
   into, and links the release of the version this Hub runs. The analysis block asks "prefer your
   terminal?" rather than offering itself as an afterthought.

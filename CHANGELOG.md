@@ -30,7 +30,8 @@ All notable changes to PerfSentinelHub are recorded here.
   once a minute, and a row whose read failed keeps asking with that same cheap request until the
   daemon answers, then reads in full. A row left open now recovers on its own.
 - A report rendered from a daemon source is rendered with `--daemon-url` when the daemon's base
-  URL is a bare origin, so its Refresh and acknowledgment controls work from the viewer's browser
+  URL is a bare origin and the configured engine binary takes that flag, which the Hub reads from
+  `report --help` at startup rather than assuming from the version, so its Refresh and acknowledgment controls work from the viewer's browser
   once the daemon's CORS allows the Hub's origin. A backend run against an authenticated source
   now works at all: the source's auth header reaches the engine through the environment variable
   the printed command names, never through an argument a process list could show.

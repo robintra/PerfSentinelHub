@@ -317,7 +317,11 @@ the render passes `--daemon-url`, and the dashboard's own Refresh and acknowledg
 talk to that daemon from the viewer's browser. Two conditions sit outside the Hub: the daemon's
 `[daemon.cors] allowed_origins` must carry the origin this Hub serves reports from, and the viewer
 must be able to reach the daemon directly. A daemon behind a path-based ingress gets a static
-report instead, because the engine's flag takes an origin and nothing else. Report links share
+report instead, because the engine's flag takes an origin and nothing else. So does every daemon
+source when the configured binary does not take `--daemon-url` at all: the engine declares it
+inside its `daemon` feature, so a binary built without that feature refuses the argument rather
+than ignoring it, and a run passing it would render nothing. The Hub asks the binary once at
+startup, through `report --help`, and renders static when the answer is no or unreadable. Report links share
 within network reach of the Hub and die with the retention window.
 
 On the fleet health screen, a daemon's row unfolds into the gauges it reports against their caps

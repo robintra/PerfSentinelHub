@@ -99,9 +99,12 @@ public sealed class AnalysisRunnerTests : IDisposable
         var prefixed = origin with { BaseUrl = new Uri("http://ingress.svc/daemon/") };
         var backend = origin with { Kind = SourceKinds.Tempo, BaseUrl = new Uri("http://tempo.svc:3200") };
 
-        Assert.Equal("http://daemon.svc:4318", AnalysisRunner.LiveDaemonUrl(origin));
-        Assert.Null(AnalysisRunner.LiveDaemonUrl(prefixed));
-        Assert.Null(AnalysisRunner.LiveDaemonUrl(backend));
+        Assert.Equal("http://daemon.svc:4318", AnalysisRunner.LiveDaemonUrl(origin, true));
+        Assert.Null(AnalysisRunner.LiveDaemonUrl(prefixed, true));
+        Assert.Null(AnalysisRunner.LiveDaemonUrl(backend, true));
+        // And an engine that does not take the flag renders every one of them
+        // static, rather than being handed an argument it refuses to parse.
+        Assert.Null(AnalysisRunner.LiveDaemonUrl(origin, false));
     }
 
     [Fact]
@@ -188,6 +191,9 @@ public sealed class AnalysisRunnerTests : IDisposable
         });
         return new AnalysisRunner(
             new DaemonClient(new HttpClient(), options),
+            // Unprobed, so it reports no --daemon-url: these runs are backend
+            // ones, where the flag never applies anyway.
+            new EngineProbe(options, NullLogger<EngineProbe>.Instance),
             options,
             NullLogger<AnalysisRunner>.Instance);
     }

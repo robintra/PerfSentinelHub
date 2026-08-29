@@ -16,12 +16,30 @@ public sealed partial class EngineProbe(
     // A `--version` line is a dozen bytes. Anything beyond this is not one,
     // and reading to the end would let a wrong binary size the buffer.
     private const int MaxOutputBytes = 1024;
+
+    // `report --help` is clap's own page, around 8 KiB on the engine this Hub
+    // embeds. Generous enough for a longer one, still a bounded read.
+    private const int MaxHelpBytes = 64 * 1024;
+
+    // Declared inside `#[cfg(feature = "daemon")]` in the engine, so a binary
+    // built without that feature does not ignore the flag, it refuses to parse
+    // it at all and renders nothing.
+    private const string DaemonUrlFlag = "--daemon-url";
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
 
     /// <summary>Null until probed, and null forever if the probe failed.</summary>
     public string? Version { get; private set; }
+
+    /// <summary>
+    /// Whether this binary's `report` accepts `--daemon-url`, which is what
+    /// makes a daemon's report live rather than a photograph. False until
+    /// probed, and false whenever the probe could not answer: the cost of
+    /// being wrong that way is a static report, where being wrong the other
+    /// way is a run that renders nothing.
+    /// </summary>
+    public bool SupportsDaemonUrl { get; private set; }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -42,6 +60,11 @@ public sealed partial class EngineProbe(
                 LogUnreadableVersion(logger, path);
             else
                 LogEngineVersion(logger, Version, path);
+
+            SupportsDaemonUrl = await ReadsDaemonUrlAsync(
+                path, _analysis.ReportDirectory, timeout.Token);
+            if (!SupportsDaemonUrl)
+                LogNoDaemonUrl(logger, path);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -63,6 +86,23 @@ public sealed partial class EngineProbe(
         var result = await EngineProcess.RunAsync(
             path, ["--version"], MaxOutputBytes, workingDirectory, cancellationToken);
         return result.Succeeded ? Encoding.UTF8.GetString(result.StandardOutput) : null;
+    }
+
+    /// <summary>
+    /// Asks the binary itself rather than inferring it from the version: two
+    /// binaries of the same version differ here if they were built with
+    /// different features.
+    /// </summary>
+    private static async Task<bool> ReadsDaemonUrlAsync(
+        string path,
+        string workingDirectory,
+        CancellationToken cancellationToken)
+    {
+        var result = await EngineProcess.RunAsync(
+            path, ["report", "--help"], MaxHelpBytes, workingDirectory, cancellationToken);
+        return result.Succeeded &&
+               Encoding.UTF8.GetString(result.StandardOutput)
+                   .Contains(DaemonUrlFlag, StringComparison.Ordinal);
     }
 
     // clap prints `perf-sentinel 0.16.0`. The version is the last token of the
@@ -99,4 +139,8 @@ public sealed partial class EngineProbe(
 
     [LoggerMessage(1404, LogLevel.Warning, "Engine binary {Path} could not be run.")]
     private static partial void LogProbeFailed(ILogger logger, Exception exception, string path);
+
+    [LoggerMessage(1405, LogLevel.Information,
+        "Engine binary {Path} takes no --daemon-url, so daemon reports render static.")]
+    private static partial void LogNoDaemonUrl(ILogger logger, string path);
 }

@@ -46,6 +46,40 @@ public sealed class EngineProbeTests : IDisposable
         Assert.Equal(expected, probe.Version);
     }
 
+    [Theory]
+    // The engine declares --daemon-url inside #[cfg(feature = "daemon")], so
+    // two binaries of the same version disagree here. The binary is asked
+    // rather than the version consulted.
+    [InlineData("      --daemon-url <URL>\n          Daemon URL for the HTML live mode.", true)]
+    [InlineData("      --output <FILE>\n          Where to write the report.", false)]
+    public async Task Whether_the_binary_takes_a_daemon_url_is_read_from_its_own_help(
+        string help,
+        bool expected)
+    {
+        var probe = Probe(WriteScript(
+            $"if [ \"$1\" = \"report\" ]; then printf '%s' \"{help}\"; exit 0; fi\n"
+            + "printf 'perf-sentinel 0.16.0'"));
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("0.16.0", probe.Version);
+        Assert.Equal(expected, probe.SupportsDaemonUrl);
+    }
+
+    [Fact]
+    public async Task A_binary_whose_help_cannot_be_read_renders_static_rather_than_failing()
+    {
+        // Refusing the help is not proof the flag is missing, but guessing the
+        // other way costs every daemon run its report.
+        var probe = Probe(WriteScript(
+            "if [ \"$1\" = \"report\" ]; then exit 2; fi\nprintf 'perf-sentinel 0.16.0'"));
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("0.16.0", probe.Version);
+        Assert.False(probe.SupportsDaemonUrl);
+    }
+
     [Fact]
     public async Task A_binary_that_fails_leaves_the_version_unknown()
     {

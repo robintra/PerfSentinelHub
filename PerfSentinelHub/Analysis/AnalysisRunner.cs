@@ -37,6 +37,7 @@ public sealed record RunOutcome(
 /// </summary>
 public sealed partial class AnalysisRunner(
     DaemonClient daemonClient,
+    EngineProbe engine,
     IOptions<HubOptions> options,
     ILogger<AnalysisRunner> logger)
 {
@@ -96,7 +97,12 @@ public sealed partial class AnalysisRunner(
             // Short-circuit kept on purpose: output that is not a report must
             // never reach the renderer.
             if (summary is null ||
-                !await RenderAsync(run.Id, reportJson, configPath, LiveDaemonUrl(source), timeout.Token))
+                !await RenderAsync(
+                    run.Id,
+                    reportJson,
+                    configPath,
+                    LiveDaemonUrl(source, engine.SupportsDaemonUrl),
+                    timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             summary.ReportBytes = RenderedBytes(run.Id);
@@ -165,13 +171,15 @@ public sealed partial class AnalysisRunner(
     }
 
     /// <summary>
-    /// The URL a daemon-source report can go live against, or null. The engine
-    /// only accepts an origin (path, query, userinfo and trailing slash are
-    /// rejected at parse), so a daemon reached through a path-based ingress
-    /// renders a static report rather than failing the whole run.
+    /// The URL a daemon-source report can go live against, or null. Three ways
+    /// to get null, and all three render a static report rather than fail a
+    /// run: a source that is not a daemon, a daemon reached through a
+    /// path-based ingress (the engine takes an origin and rejects path, query,
+    /// userinfo and trailing slash at parse), and an engine binary built
+    /// without its `daemon` feature, which does not know the flag at all.
     /// </summary>
-    public static string? LiveDaemonUrl(SourceOptions source) =>
-        source.Kind == SourceKinds.Daemon && source.BaseUrl!.AbsolutePath == "/"
+    public static string? LiveDaemonUrl(SourceOptions source, bool engineTakesTheFlag) =>
+        engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.BaseUrl!.AbsolutePath == "/"
             ? source.EndpointArgument
             : null;
 

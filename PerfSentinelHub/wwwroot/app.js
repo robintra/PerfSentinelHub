@@ -63,6 +63,9 @@
     // figure and then gone. Consumed by the render, so a rebuild for any other
     // reason does not replay a move that already had its moment.
     daemonMoves: {},
+    // Folds that belong to a screen rather than to a source. Kept in the same
+    // record, since a reader does not care which of the two a fold is.
+    panelOpen: {},
     terminalSig: null,
     form: {
       sourceId: null,
@@ -213,6 +216,11 @@
     state.daemonSettingsOpen = PSL.openFolds(stored.settings);
     state.daemonGroupOpen = PSL.openFolds(stored.group);
     state.daemonTerminalOpen = PSL.openFolds(stored.terminal);
+    // Written closed, unlike the rest: this one is open until folded, so the
+    // record has to carry the closing rather than the opening.
+    state.panelOpen = stored.panel && typeof stored.panel === "object"
+      ? { caps: stored.panel.caps !== false }
+      : {};
   }
 
   function saveFolds() {
@@ -221,7 +229,8 @@
         row: PSL.openFolds(state.daemonOpen),
         settings: PSL.openFolds(state.daemonSettingsOpen),
         group: PSL.openFolds(state.daemonGroupOpen),
-        terminal: PSL.openFolds(state.daemonTerminalOpen)
+        terminal: PSL.openFolds(state.daemonTerminalOpen),
+        panel: { caps: state.panelOpen.caps !== false }
       }));
     } catch (error) {
       // A full or disabled store costs the reader the memory of their folds
@@ -2342,15 +2351,37 @@
   }
 
   /** The sink-panel scaffold both info blocks share: head, subtitle, rows. */
-  function sinkBlock(head, sub, rows) {
+  function sinkBlock(head, sub, rows, fold) {
+    const body = el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
+      return [el("dt", { text: row[0] }), el("dd", { text: row[1] })];
+    }));
+    if (!fold) {
+      return el("div", { class: "sink" }, [
+        el("div", { class: "sink-head" }, [
+          el("span", { class: "overline", text: head }),
+          el("span", { class: "sink-sub", text: sub })
+        ]),
+        body
+      ]);
+    }
+
+    // The same fold as the daemon row's terminal block, down to the chevron:
+    // the heading and its subtitle stay put, only the rows go.
+    const toggle = el("button", {
+      type: "button",
+      class: "sink-more",
+      "aria-expanded": fold.open ? "true" : "false"
+    }, [el("span", { class: "overline", text: head })]);
+    body.hidden = !fold.open;
+    toggle.addEventListener("click", function () {
+      const next = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", next ? "true" : "false");
+      body.hidden = !next;
+      fold.onToggle(next);
+    });
     return el("div", { class: "sink" }, [
-      el("div", { class: "sink-head" }, [
-        el("span", { class: "overline", text: head }),
-        el("span", { class: "sink-sub", text: sub })
-      ]),
-      el("dl", { class: "sink-rows" }, rows.flatMap(function (row) {
-        return [el("dt", { text: row[0] }), el("dd", { text: row[1] })];
-      }))
+      el("div", { class: "sink-head" }, [toggle, el("span", { class: "sink-sub", text: sub })]),
+      body
     ]);
   }
 
@@ -2375,7 +2406,7 @@
     }).slice(0, 3);
     if (past.length === 0) return null;
 
-    return sinkBlock("What your own runs weighed", "Measured on this source, not predicted.",
+    return sinkBlock("// what your own runs weighed", "Measured on this source, not predicted.",
       past.map(function (run) {
         const traces = typeof run.request.max_traces === "number" ? run.request.max_traces : 100;
         return [PSL.bytes(run.result.report_bytes),
@@ -2466,8 +2497,14 @@
       ["no ceiling", "The file has no size target of its own once every finding is kept. A run "
         + "that finds a great deal produces a report that takes a moment to open."]
     ];
-    return sinkBlock("What comes back, and what it caps",
-      "From the sink and this Hub's settings, not predictions.", rows);
+    // Open unless the reader folded it: it says what the run will hand back,
+    // which is worth reading before pressing the button, but it is five rows
+    // long and someone who knows them should be able to put it away.
+    return sinkBlock("// what comes back, and what it caps",
+      "From the sink and this Hub's settings, not predictions.", rows, {
+        open: state.panelOpen.caps !== false,
+        onToggle: function (open) { state.panelOpen.caps = open; saveFolds(); }
+      });
   }
 
   function bandStyle(band) {

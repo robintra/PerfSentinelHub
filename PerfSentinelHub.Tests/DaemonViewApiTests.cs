@@ -17,15 +17,30 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
          "stored_findings":40,"max_retained_findings":10000}
         """;
 
+    // Every key a daemon publishes, so the defaults-coverage test actually
+    // exercises the whole section rather than a sample of it.
     private const string Config = """
-        {"listen_addr":"0.0.0.0","max_active_traces":1000,"trace_ttl_ms":30000,
-         "sampling_rate":0.5,"tls_configured":true,"ack_api_key_set":true,
-         "cors_allowed_origins":[]}
+        {"listen_addr":"0.0.0.0","listen_port":4318,"listen_port_grpc":4317,
+         "json_socket":"/tmp/perf-sentinel.sock","max_active_traces":1000,
+         "trace_ttl_ms":30000,"sampling_rate":0.5,"max_events_per_trace":1000,
+         "max_payload_size":16777216,"environment":"production",
+         "max_retained_findings":10000,"max_export_findings":1000,
+         "max_retained_traces":50,"ingest_queue_capacity":1024,
+         "analysis_queue_capacity":1024,"memory_high_water_pct":0,
+         "api_enabled":true,"tls_configured":true,"ack_enabled":true,
+         "ack_api_key_set":true,"cors_allowed_origins":[],
+         "archive_configured":false,"correlation_enabled":true,
+         "correlation_window_ms":600000,"correlation_lag_threshold_ms":5000,
+         "correlation_min_co_occurrences":5,"correlation_min_confidence":0.7,
+         "correlation_max_tracked_pairs":10000}
         """;
 
     private const string Report = """
         {"binary_version":"0.16.0",
-         "detection_config":{"n_plus_one_threshold":5,"max_fanout":20},
+         "detection_config":{"n_plus_one_threshold":5,"window_ms":500,
+           "slow_threshold_ms":500,"slow_min_occurrences":3,"max_fanout":20,
+           "chatty_service_min_calls":15,"pool_saturation_concurrent_threshold":10,
+           "serialized_min_sequential":3,"sanitizer_aware_classification":"auto"},
          "green_summary":{"energy_model":"measured","scoring_config":{"api_version":"1.0"}},
          "warning_details":[{"kind":"tuning","message":"ingest queue is undersized"}]}
         """;
@@ -65,6 +80,34 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
         Assert.Equal(5, view.GetProperty("detection_config").GetProperty("n_plus_one_threshold").GetInt32());
         Assert.Equal("1.0", view.GetProperty("scoring_config").GetProperty("api_version").GetString());
         Assert.Equal("measured", view.GetProperty("energy_model").GetString());
+    }
+
+    [Fact]
+    public async Task Every_setting_the_daemon_publishes_has_a_default_to_compare_against()
+    {
+        // A key missing here, or spelled the way the config file spells it
+        // rather than the way the engine serialises it, would silently read as
+        // unchanged on a value somebody did change.
+        var (view, _) = await ReadViewAsync(Answering);
+
+        AssertCovered(view, "config", "daemon_defaults");
+        AssertCovered(view, "detection_config", "detection_defaults");
+        // The comparison is only as good as the version it was taken from, and
+        // the reader has to be able to say which one that was.
+        Assert.False(string.IsNullOrWhiteSpace(view.GetProperty("defaults_engine_version").GetString()));
+    }
+
+    private static void AssertCovered(JsonElement view, string section, string defaults)
+    {
+        var known = view.GetProperty(defaults).EnumerateObject()
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var published = view.GetProperty(section).EnumerateObject()
+            .Select(property => property.Name)
+            .ToList();
+
+        Assert.NotEmpty(published);
+        Assert.DoesNotContain(published, name => !known.Contains(name));
     }
 
     [Fact]

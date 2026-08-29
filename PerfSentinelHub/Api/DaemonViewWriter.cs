@@ -36,6 +36,13 @@ public static class DaemonViewWriter
         WriteRawOrNull(writer, "config", view.ConfigJson);
         WriteStringOrNull(writer, "config_unavailable_reason", view.ConfigUnavailableReason);
         WriteRawOrNull(writer, "detection_config", view.DetectionConfigJson);
+        // The defaults ride along so a reader can mark what was changed, and
+        // the version they belong to rides with them: a daemon on another
+        // minor may have a different default, and the view says so instead of
+        // calling a value wrong.
+        WriteRawOrNull(writer, "daemon_defaults", DaemonDefaults.DaemonJson);
+        WriteRawOrNull(writer, "detection_defaults", DaemonDefaults.DetectionJson);
+        writer.WriteString("defaults_engine_version", view.DefaultsEngineVersion);
         WriteRawOrNull(writer, "scoring_config", view.ScoringConfigJson);
         WriteStringOrNull(writer, "energy_model", view.EnergyModel);
 
@@ -143,4 +150,7 @@ public sealed record DaemonViewData(
     string? DetectionConfigJson,
     string? ScoringConfigJson,
     string? EnergyModel,
+    // The engine version whose defaults are published alongside, which is the
+    // binary this Hub embeds and not necessarily the one the daemon runs.
+    string DefaultsEngineVersion,
     IReadOnlyList<ResultWarning> Warnings);

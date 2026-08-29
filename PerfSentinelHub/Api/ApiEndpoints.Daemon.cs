@@ -20,6 +20,7 @@ public static partial class ApiEndpoints
         HttpContext context,
         DaemonClient client,
         DaemonViewGate gate,
+        EngineProbe engine,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -55,6 +56,10 @@ public static partial class ApiEndpoints
                 source,
                 options.Value.HttpTimeout,
                 timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
+                // Null when this Hub has no binary configured. The defaults are
+                // still the ones it was built with, so they are still published
+                // and the reader is told they belong to nothing it can name.
+                engine.Version ?? "unknown",
                 cancellationToken);
             await DaemonViewWriter.WriteAsync(context.Response, view, cancellationToken);
         }
@@ -69,6 +74,7 @@ public static partial class ApiEndpoints
         SourceOptions source,
         TimeSpan timeout,
         long observedAtMs,
+        string defaultsEngineVersion,
         CancellationToken cancellationToken)
     {
         // Three independent reads: the latency is the slowest of them rather
@@ -99,6 +105,7 @@ public static partial class ApiEndpoints
             snapshot.DetectionConfigJson,
             snapshot.ScoringConfigJson,
             snapshot.EnergyModel,
+            defaultsEngineVersion,
             snapshot.Warnings);
     }
 

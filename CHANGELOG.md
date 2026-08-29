@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The fleet version summary counts only the sources running behind the Hub's engine. A fleet
+  ahead of it, which is a normal moment during a rollout, drew an amber warning whose arrow
+  pointed from the newer version down to the older one.
 - The Hub says "update available" when a newer release exists. It asks the GitHub releases API once a day what the
   newest published engine and Hub versions are, and the version chip names whichever of the two is
   behind, with a link to its release notes. A source running behind the Hub's own engine now says

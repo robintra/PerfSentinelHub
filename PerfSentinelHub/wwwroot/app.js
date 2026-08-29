@@ -365,9 +365,15 @@
     dropSegment(chip, ".shell-version-skew");
     if (!state.sources || !state.status || !state.status.engine_version) return;
 
+    // Behind only. A fleet ahead of the Hub is a normal moment during a rollout,
+    // and the arrow would have pointed from the newer version down to the older
+    // one, which reads as an instruction to downgrade.
     const behind = state.sources
       .map(function (source) { return source.producer_version; })
-      .filter(function (version) { return version && PSL.skew(version); });
+      .filter(function (version) {
+        const skew = version && PSL.skew(version);
+        return skew && skew.dir === "behind";
+      });
     if (behind.length === 0) return;
 
     const oldest = behind.sort(PSL.vcmp)[0];

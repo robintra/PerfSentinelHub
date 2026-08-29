@@ -31,8 +31,12 @@ public sealed class PollingTests : IDisposable
             requests.Add(($"{context.Request.Path}{context.Request.QueryString}", context.Request.Headers.Authorization));
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsJsonAsync(new { version = "0.11.2" }, cancellationToken);
-            else
+            else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(fixture, cancellationToken);
+            else
+                // The catch-all fake lost app.Map's free 404: without this, a
+                // future client read would be fed the findings body and pass.
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
 
         var options = new HubOptions { DatabasePath = _databasePath, HttpTimeout = TimeSpan.FromSeconds(2) };
@@ -96,8 +100,10 @@ public sealed class PollingTests : IDisposable
         {
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
-            else
+            else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(payload, cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);
@@ -214,8 +220,10 @@ public sealed class PollingTests : IDisposable
             }
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
-            else
+            else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(fixture, cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);

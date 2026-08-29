@@ -27,8 +27,8 @@ All notable changes to PerfSentinelHub are recorded here.
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
 - The generated config is named `perf-sentinel.toml`, without the leading dot, and the printed
-  command names it with `-c`. A browser strips that dot when it saves the file, so the dotted
-  name the command used to ask for was one no download ever produced.
+  command names it with `-c`. A downloaded file may not keep a leading dot, so the dotted name
+  the command used to ask for was one the reader could not count on having.
 - The generated `perf-sentinel.toml` can be downloaded, not only copied. Copying left the
   reader to create the file themselves, which is the one step between the thresholds they set
   here and a run that honours them.

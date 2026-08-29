@@ -79,8 +79,8 @@ test("changed thresholds point the engine at a file, having no flag of their own
     tempo,
     { service: "orders", max_traces: 10, lookback: "1h", detection: { max_fanout: 9 } });
 
-  // Undotted: a browser strips a leading dot when it saves the downloaded file,
-  // so the name the command asks for is the name the reader actually receives.
+  // Undotted: a downloaded file may not keep a leading dot, so the name the
+  // command asks for is the one the reader is most likely to actually have.
   assert.ok(command.includes("-c perf-sentinel.toml"));
   assert.ok(!command.includes("-c .perf-sentinel.toml"));
   assert.equal(PSL.detectionToml({ max_fanout: 9, n_plus_one_min_occurrences: 8 }),

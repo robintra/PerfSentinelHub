@@ -480,9 +480,9 @@
     }
     if (source.auth_header_name) tail.push("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN");
     // Undotted, and named explicitly rather than left to the engine's discovery
-    // of `.perf-sentinel.toml` in the working directory: a browser strips the
-    // leading dot when it saves the file, so the dotted name is one the reader
-    // would have to restore before the command could find it.
+    // of `.perf-sentinel.toml`, which is dotted and cwd-only: a downloaded file
+    // may not keep a leading dot, so the dotted name is one the reader might
+    // have to restore before the command could find it.
     if (Object.keys(request["detection"] || {}).length > 0) tail.push("-c perf-sentinel.toml");
     return tail.length === 0
       ? head.join(" ")

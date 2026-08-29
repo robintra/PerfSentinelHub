@@ -353,8 +353,10 @@ printed command and the submitted run cannot drift. It is one command and not th
 runs: the JSON output and the render step exist so the Hub can build a dashboard, and a terminal
 needs neither. Values are quoted for a POSIX shell with single quotes, which is the only form that
 holds for a service name carrying `$` or a quote. Detection overrides have no command-line flag,
-so a run that changed one carries `-c .perf-sentinel.toml` and the file is printed beside the
-command. An authenticated source prints `--auth-header-env` rather than its token, which the Hub
+so a run that changed one carries `-c perf-sentinel.toml` and the file is printed beside the
+command, ready to copy or to download. The name is undotted because the engine only discovers the
+dotted `.perf-sentinel.toml`, which a download may not preserve, so the command names the file
+rather than relying on that discovery. An authenticated source prints `--auth-header-env` rather than its token, which the Hub
 holds and never discloses.
 
 A report rendered from a daemon source goes live when the daemon's `BaseUrl` is a bare origin:

@@ -45,6 +45,10 @@
     // that drives both the countdown and the fetch.
     daemonRefreshMs: {},
     daemonTickers: {},
+    // The read's own deadline, separate from the one-second ticker that writes
+    // the countdown: a read timed off that ticker fires on the next whole
+    // second, which is up to a second after the disc has already closed.
+    daemonCycleTimers: {},
     daemonCycleAt: {},
     daemonInFlight: {},
     // When THIS browser last adopted a reading, on its own clock: subtracting
@@ -1218,7 +1222,7 @@
    */
   function startTicker(source, index) {
     stopTicker(source.id);
-    restartCycle(source.id, index);
+    restartCycle(source, index);
     tickRefresh(source, index);
     if (!refreshMs(source.id)) return;
     state.daemonTickers[source.id] = setInterval(function () {
@@ -1247,14 +1251,24 @@
   }
 
   /** The disc and the countdown clock restart together, from one place. */
-  function restartCycle(sourceId, index) {
-    state.daemonCycleAt[sourceId] = Date.now();
-    restartSweep(index, refreshMs(sourceId));
+  function restartCycle(source, index) {
+    state.daemonCycleAt[source.id] = Date.now();
+    restartSweep(index, refreshMs(source.id));
+    // The disc and the read now share one deadline instead of one starting the
+    // other: the read lands when the sweep closes, not on the beat after it.
+    clearTimeout(state.daemonCycleTimers[source.id]);
+    const ms = refreshMs(source.id);
+    if (!ms) return;
+    state.daemonCycleTimers[source.id] = setTimeout(function () {
+      refreshDaemon(source, index);
+    }, ms);
   }
 
   function stopTicker(sourceId) {
     clearInterval(state.daemonTickers[sourceId]);
     delete state.daemonTickers[sourceId];
+    clearTimeout(state.daemonCycleTimers[sourceId]);
+    delete state.daemonCycleTimers[sourceId];
   }
 
   function stopAllTickers() {
@@ -1288,7 +1302,6 @@
     if (ring) ring.hidden = false;
     const left = Math.max(0, cycleAt + ms - Date.now());
     next.textContent = "Next in " + Math.ceil(left / 1000) + " s.";
-    if (left <= 0) refreshDaemon(source, index);
   }
 
   /**
@@ -1315,9 +1328,14 @@
   function refreshDaemon(source, index) {
     // A separate flag rather than a sentinel in daemonViews: a render during
     // the flight reads daemonViews, and a string there would crash it.
-    if (state.daemonInFlight[source.id]) return;
+    if (state.daemonInFlight[source.id]) {
+      // Slower than its own interval. Wait a whole one rather than queue up
+      // behind it, and keep the cycle armed so the row does not go quiet.
+      restartCycle(source, index);
+      return;
+    }
     state.daemonInFlight[source.id] = true;
-    restartCycle(source.id, index);
+    restartCycle(source, index);
     const previous = state.daemonViews[source.id];
     // A light read is only ever an overlay on a full one, so a row with
     // nothing to lay it over asks the cheap question first, and only reads in

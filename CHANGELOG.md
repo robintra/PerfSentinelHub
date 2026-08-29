@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- A daemon row's re-read has its own deadline instead of waiting for the one-second countdown
+  ticker to notice it is due, so the read lands when the disc closes rather than up to a second
+  after it.
 - The gauge strip no longer clips what rises out of it, so a move badge is not cut in half on its
   way up. Its rounded corners come from the cells at each end instead.
 - The gauge move badge rises at a constant speed, its travel and its fade being two animations

@@ -9,6 +9,9 @@
     /* Legacy aliases kept so any un-migrated rule still resolves. */
     --font-sans: var(--font-ui);
     --r: 16px; --r-sm: 8px;
+    /* Only for the instant before the theme is stamped, and for anything that
+       reaches this sheet without it. Each theme below pins its own. */
+    color-scheme: light dark;
   }
   :root[data-theme="dark"] {
     --bg: #141a17; --surface: #1c241f; --surface-2: #252e28; --surface-3: #2d3730;
@@ -31,6 +34,10 @@
     --pill: #1e3b30; --pill-fg: #9fe9c6; --btn-bd: #2e4d41; --btn-fg: #5ecfa6;
     --fix-bg: #16382b; --fix-fg: #a5e8c9;
     --glow: none;
+    /* Native controls the page does not draw itself: number spinners, the
+       select popup, caret and default focus rings. Without it they render in
+       the browser's light scheme on top of a dark page. */
+    color-scheme: dark;
   }
   :root[data-theme="light"] {
     --bg: #ffffff; --surface: #f7f7f7; --surface-2: #ffffff; --surface-3: #eef1ef;
@@ -52,6 +59,7 @@
     --pill: #d6e9e3; --pill-fg: #0b523a; --btn-bd: #a7c7bc; --btn-fg: #186b4f;
     --fix-bg: #d6e9e3; --fix-fg: #0b523a;
     --glow: none;
+    color-scheme: light;
   }
   /* -------- density (comfort by default, toggled from the topbar gear) -------- */
   :root[data-density="compact"] { --r: 13px; --r-sm: 7px; }

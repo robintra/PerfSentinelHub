@@ -1546,3 +1546,35 @@ body[data-screen="report"] .shell-footer { display: none; }
    only while the pointer is what put it there. The flag is cleared on the first
    key, which is the moment that stops being true. */
 .refresh-select[data-pointer]:focus-visible { outline: none; }
+/* The OS draws a native select's menu over the control, aligning the selected
+   item with it, and no CSS moves it. Opting into the base appearance hands the
+   picker over as a real popover the page positions and paints itself. Where it
+   is unsupported the native menu stays, which is what there was before. */
+@supports (appearance: base-select) {
+  .refresh-select, .refresh-select::picker(select) { appearance: base-select; }
+  .refresh-select { display: inline-flex; align-items: center; gap: 6px; }
+  .refresh-select::picker-icon { color: var(--text-3); transition: transform .15s ease; }
+  .refresh-select:open::picker-icon { transform: rotate(180deg); }
+  .refresh-select::picker(select) {
+    position-area: block-end span-inline-end;
+    margin-block-start: 4px;
+    padding: 4px;
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .refresh-select option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    color: var(--text-2);
+  }
+  .refresh-select option:hover { background: var(--surface-3); color: var(--text); }
+  .refresh-select option:checked { color: var(--brand-text); }
+  .refresh-select option::checkmark { content: "\2713"; color: var(--brand-text); }
+  .refresh-select option:not(:checked)::checkmark { visibility: hidden; }
+}

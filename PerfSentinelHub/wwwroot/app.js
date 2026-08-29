@@ -519,10 +519,17 @@
   const SOURCE_COLUMNS = [
     "Source", "Type", "Env (declared)", "Health", "Last success", "Unreachable for", "Producer", "Last error"
   ];
+  // The columns whose cells are right-aligned. The headings have to follow, or
+  // a value sits under the gap beside its own label.
+  const SOURCE_COLUMNS_RIGHT = ["Last success", "Unreachable for", "Producer"];
 
   function sourcesTable(sources) {
     const head = el("tr", {}, SOURCE_COLUMNS.map(function (name) {
-      return el("th", { text: name, scope: "col" });
+      return el("th", {
+        text: name,
+        scope: "col",
+        "data-align": SOURCE_COLUMNS_RIGHT.indexOf(name) >= 0 ? "right" : null
+      });
     }));
     const body = sources.flatMap(sourceRow);
     return el("table", { class: "table" }, [
@@ -584,6 +591,7 @@
       return source.kind === "daemon"
         ? el("td", {
           class: "table-muted",
+          "data-align": "right",
           text: "unknown",
           title: "This daemon reports a producer version, but the Hub has not had a successful "
             + "response from it yet."

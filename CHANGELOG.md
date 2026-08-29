@@ -38,6 +38,14 @@ All notable changes to PerfSentinelHub are recorded here.
   dashboard does. The terminal monitor strips those backticks because a terminal cannot draw them,
   and a browser can. Inline code now carries the dashboard's own chip treatment, a background and
   a border rather than a font change alone, which is what makes it read as code at all.
+- Type sizes follow the dashboard's own scale: prose never drops below 11.5px, and anything
+  smaller is a glyph, a badge or a short value. Several labels and countdown lines had been set at
+  10.5px, which that scale reserves for things that are not sentences.
+- Fleet health's headings align with their own cells. The last-success, unreachable-for and
+  producer columns right-align their values while their headings stayed left, and the producer
+  column disagreed with itself: two of its three cases aligned right and the third did not.
+- The two notes on the fleet health screen fit on one line. Their 76ch and 78ch limits resolved to
+  roughly half the width they had, which cost each of them a second line for nothing.
 - The daemon panel no longer inherits the sources table's monospace face. A table of values is
   right to be monospaced and a panel of prose is not, and the two had been the same thing since
   the panel is a cell of that table. Names and values stay mono by asking for it.

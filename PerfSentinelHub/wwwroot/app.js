@@ -40,6 +40,7 @@
     daemonOpen: {},
     daemonViews: {},
     daemonSettingsOpen: {},
+    daemonGroupOpen: {},
     form: {
       sourceId: null,
       mode: "service",
@@ -322,6 +323,29 @@
     openTip = box;
   }
 
+  /**
+   * Text with its backticked spans rendered as code.
+   *
+   * The daemon writes setting names in backticks, the way its own documentation
+   * does. The terminal monitor strips them because a terminal cannot render
+   * them, and a browser can. An odd number of backticks is left alone rather
+   * than guessed at, so a stray one never turns the rest of a sentence into
+   * code.
+   */
+  function proseInto(parent, text) {
+    const parts = String(text).split("`");
+    if (parts.length % 2 === 0) {
+      parent.appendChild(document.createTextNode(String(text)));
+      return parent;
+    }
+    parts.forEach(function (part, index) {
+      if (part === "") return;
+      if (index % 2 === 1) parent.appendChild(el("code", { class: "code-inline", text: part }));
+      else parent.appendChild(document.createTextNode(part));
+    });
+    return parent;
+  }
+
   /** A label with its "?" beside it, which is the only place one belongs. */
   function titledOverline(text, help) {
     return el("div", { class: "title-row" }, [
@@ -376,7 +400,7 @@
       el("div", { class: "terminal-actions" }, [button, status])
     ]);
     (spec.notes || []).forEach(function (note) {
-      if (note) section.appendChild(el("p", { class: "terminal-note", text: note }));
+      if (note) section.appendChild(proseInto(el("p", { class: "terminal-note" }), note));
     });
     return section;
   }
@@ -769,17 +793,18 @@
       daemonTopRow(view),
       terminalBlock({
         head: "// the same view in your terminal",
-        sub: "Live, and refreshed on an interval.",
+        sub: "Live, which this screen is not.",
         text: PSL.monitorCommand(source),
         copyLabel: "Copy the monitor command for " + source.name,
         notes: [
-          "The same settings, re-read every 5 seconds, alongside the energy and carbon breakdown "
-            + "this screen only summarises. Add --refresh followed by a number of seconds to "
-            + "change the interval.",
+          "This screen read the daemon once, when the row was opened, and does not poll it. "
+            + "`query monitor` re-reads it every 5 seconds instead, and carries the energy and "
+            + "carbon breakdown this screen only summarises. Add `--refresh` followed by a number "
+            + "of seconds to change that interval.",
           source.auth_header_name
             ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
-              + "query monitor takes no such flag, so this command works only from somewhere that "
-              + "can reach the daemon directly."
+              + "`query monitor` takes no such flag, so this command works only from somewhere "
+              + "that can reach the daemon directly."
             : null
         ]
       }),
@@ -869,7 +894,7 @@
             "data-tone": DAEMON_HINT_TONE[hint.kind] || "muted",
             text: hint.kind
           }),
-          el("span", { class: "outcome-warning-message", text: hint.message })
+          proseInto(el("span", { class: "outcome-warning-message" }), hint.message)
         ]));
       });
     }
@@ -897,7 +922,7 @@
     const open = state.daemonSettingsOpen[source.id] === true;
     const count = view.config ? Object.keys(view.config).length : 0;
     const cards = el("div", { class: "settings-cards" });
-    settingsCards(view).forEach(function (node) { cards.appendChild(node); });
+    settingsCards(source.id, view).forEach(function (node) { cards.appendChild(node); });
     // The preamble sits above the columns rather than inside them, or it would
     // flow into the first one as if it were a card.
     const body = el("div", {}, [view.config ? settingsPreamble(view) : null, cards]);
@@ -921,27 +946,27 @@
     return el("div", { class: "settings-block" }, [button, body]);
   }
 
-  function settingsCards(view) {
+  function settingsCards(sourceId, view) {
     const cards = [];
     if (!view.config) {
-      cards.push(el("p", {
-        class: "daemon-lead",
-        text: view.config_unavailable_reason === "api_disabled"
-          ? "This daemon does not serve its configuration: api_enabled is off in its own [daemon] "
-            + "section. Everything above came from the export instead."
-          : "This daemon did not answer for its configuration, so none is shown rather than a copy "
-            + "from some earlier moment."
-      }));
+      cards.push(proseInto(el("p", { class: "daemon-lead" }),
+        view.config_unavailable_reason === "api_disabled"
+          ? "This daemon does not serve its configuration: `api_enabled` is off in its own "
+            + "`[daemon]` section. Everything above came from the export instead."
+          : "This daemon did not answer for its configuration, so none is shown rather than a "
+            + "copy from some earlier moment."));
     } else {
       DAEMON_GROUPS.forEach(function (spec) {
         const present = spec[2].filter(function (name) { return view.config[name] !== undefined; });
         if (present.length > 0) {
-          cards.push(settingsCard(spec[0], spec[1], present, view.config, view.daemon_defaults));
+          cards.push(settingsCard(
+            sourceId, spec[0], spec[1], present, view.config, view.daemon_defaults));
         }
       });
     }
     if (view.detection_config) {
       cards.push(settingsCard(
+        sourceId,
         "// detection thresholds",
         "What counts as a problem. The same knobs the launcher lets a run override on a backend.",
         Object.keys(view.detection_config),
@@ -952,6 +977,7 @@
       const scoring = Object.assign({}, view.scoring_config || {});
       if (view.energy_model) scoring.energy_model = view.energy_model;
       cards.push(settingsCard(
+        sourceId,
         "// carbon scoring",
         "Where the energy figures come from, not what they are.",
         Object.keys(scoring),
@@ -968,42 +994,76 @@
    * rather than assumed away.
    */
   function settingsPreamble(view) {
-    const note = el("p", { class: "settings-preamble" }, [
-      el("span", { text: "A value this daemon changed is marked, with the engine's default beside "
-        + "it. Compared against perf-sentinel " }),
-      el("span", { class: "code-inline", text: view.defaults_engine_version }),
-      el("span", { text: ", the binary this Hub embeds. It covers the [daemon] and [detection] "
-        + "sections and the scoring half of [green]. The gate thresholds under [thresholds] are "
-        + "not published as a section, so a value set there is real and simply not visible here." })
-    ]);
+    const note = proseInto(el("p", { class: "settings-preamble" }),
+      "A value this daemon changed is marked, with the engine's default beside it. Compared "
+        + "against perf-sentinel `" + view.defaults_engine_version + "`, the binary this Hub "
+        + "embeds. It covers the `[daemon]` and `[detection]` sections and the scoring half of "
+        + "`[green]`. The gate thresholds under `[thresholds]` are not published as a section, so "
+        + "a value set there is real and simply not visible here.");
     if (view.version && view.version !== view.defaults_engine_version) {
-      note.appendChild(el("span", {
-        class: "settings-preamble-skew",
-        text: " This daemon runs " + view.version + ", so a default could have moved between the "
-          + "two and a value marked as changed may only be a different default."
-      }));
+      proseInto(
+        note.appendChild(el("span", { class: "settings-preamble-skew" })),
+        " This daemon runs `" + view.version + "`, so a default could have moved between the two "
+          + "and a value marked as changed may only be a different default.");
     }
     return note;
   }
 
-  function settingsCard(head, sub, names, config, defaults) {
-    const card = el("section", { class: "settings-card" }, [
-      el("div", { class: "sink-head" }, [
-        el("span", { class: "overline", text: head }),
-        el("span", { class: "sink-sub", text: sub })
-      ])
+  /**
+   * One group, folded. Folded is the useful state: eight headings fit on a
+   * glance, and the count of departures on each says which one to open. The
+   * gloss lives in the body rather than the heading, or the folded list would
+   * be as long as the open one.
+   */
+  function settingsCard(sourceId, head, sub, names, config, defaults) {
+    const key = sourceId + "|" + head;
+    const open = state.daemonGroupOpen[key] === true;
+    const changed = names.filter(function (name) {
+      return isChanged(name, config[name], defaults);
+    }).length;
+
+    const heading = el("span", { class: "overline", text: head });
+    const button = el("button", {
+      type: "button",
+      class: "settings-card-head",
+      "aria-expanded": open ? "true" : "false"
+    }, [
+      heading,
+      el("span", { class: "settings-card-n", text: String(names.length) }),
+      changed > 0
+        ? el("span", { class: "settings-card-changed", text: changed + " changed" })
+        : null
     ]);
+
+    const body = el("div", { class: "settings-card-body" }, [
+      el("p", { class: "sink-sub settings-card-sub", text: sub })
+    ]);
+    body.hidden = !open;
     const rows = el("dl", { class: "settings-rows" });
     names.forEach(function (name) {
       rows.appendChild(settingRow(name, config[name], defaults));
     });
-    card.appendChild(rows);
-    return card;
+    body.appendChild(rows);
+
+    button.addEventListener("click", function () {
+      const next = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", next ? "true" : "false");
+      state.daemonGroupOpen[key] = next;
+      body.hidden = !next;
+    });
+    return el("section", { class: "settings-card" }, [button, body]);
+  }
+
+  /** A value that departs from the engine's default, when one is known. */
+  function isChanged(name, value, defaults) {
+    if (!defaults) return false;
+    const fallback = defaults[name];
+    return fallback !== undefined && JSON.stringify(value) !== JSON.stringify(fallback);
   }
 
   function settingRow(name, value, defaults) {
     const fallback = defaults ? defaults[name] : undefined;
-    const changed = fallback !== undefined && JSON.stringify(value) !== JSON.stringify(fallback);
+    const changed = isChanged(name, value, defaults);
     const row = el("div", { class: "setting" }, [
       el("dt", { class: "setting-k", text: name }),
       settingValue(name, value, changed)
@@ -1247,8 +1307,8 @@
           : null,
         source.auth_header_name
           ? "This source needs an auth header. The Hub holds one and does not disclose it, so "
-            + "the command reads yours from PERF_SENTINEL_SOURCE_TOKEN instead. Export the whole "
-            + "header line, " + source.auth_header_name + " and the value, not the value on its own."
+            + "the command reads yours from `PERF_SENTINEL_SOURCE_TOKEN` instead. Export the whole "
+            + "header line, `" + source.auth_header_name + "` and the value, not the value on its own."
           : null,
         PSL.quotedForShell(command)
           ? "Quoted for a POSIX shell. PowerShell and cmd quote differently, and this line is "
@@ -1257,7 +1317,7 @@
         changed > 0
           ? (changed === 1 ? "1 detection threshold is" : changed + " detection thresholds are")
             + " changed above. They have no command-line flag: the engine reads them from a "
-            + "file, so the command carries -c .perf-sentinel.toml and the file it expects is below."
+            + "file, so the command carries `-c .perf-sentinel.toml` and the file it expects is below."
           : null
       ]
     })];

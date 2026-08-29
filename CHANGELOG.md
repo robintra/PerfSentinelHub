@@ -14,11 +14,19 @@ All notable changes to PerfSentinelHub are recorded here.
   never change without a restart the Hub has no signal for and a stale gauge would defeat the
   point. The Hub derives one thing, whether a gauge crossed 90 % of its cap, on the same line the
   daemon's own monitor draws. Every recommendation is the daemon's.
+- `--text-3` moves from `#7d8c83` to `#95a199` in the dark theme, which finishes an accessibility
+  pass that had only been done on the light one: the old value fell to 3.97 against `--surface-2`
+  and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
+  rendered pages with translucent layers composited, every screen now passes in dark. The same
+  value is corrected in the engine's dashboard template, which is where these tokens come from.
 - The daemon view also publishes the engine's own defaults, so the fold marks what a daemon
   changed and shows the default beside it, the way the engine's `query monitor` does in its
   Config tab. The defaults belong to the binary this Hub embeds, which is the same approximation
   the monitor makes, so the response names the version they came from and the view says so when
   the daemon runs a different one.
+- Setting names the daemon writes in backticks render as code rather than as prose, the way the
+  dashboard does. The terminal monitor strips those backticks because a terminal cannot draw them,
+  and a browser can.
 - The fleet health screen unfolds a daemon's row onto that view, and the launcher prints the run
   it would submit as an engine command line for an operator who would rather use a terminal. The
   command is built from the object the form posts rather than from the form, so the two cannot

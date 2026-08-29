@@ -1220,3 +1220,48 @@ body[data-screen="report"] .shell-footer { display: none; }
 }
 .settings-preamble-skew { color: var(--warn-fg); }
 .setting-v[data-changed="true"] .chip-declared { border-color: var(--warn-bd); color: var(--warn-fg); }
+
+/* Each group folds on its own. Folded is the useful state: the headings fit on
+   a glance and the change count says which one to open. */
+.settings-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-card-head::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform .15s ease;
+}
+.settings-card-head[aria-expanded="true"]::before { transform: rotate(45deg); }
+.settings-card-head:hover .overline { color: var(--brand-text); }
+.settings-card-head:hover::before { border-color: var(--brand-text); }
+.settings-card-head .overline { min-width: 0; }
+.settings-card-n {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.settings-card-changed {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.settings-card-body { margin-top: 9px; }
+.settings-card-sub { display: block; margin: 0 0 4px; }

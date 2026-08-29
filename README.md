@@ -302,6 +302,10 @@ adapts to the selected source's `kind` rather than offering an independent live-
 switch, since a switch would let the operator compose impossible states such as a three-hour window
 against a daemon that keeps ten minutes.
 
+Both printed commands say where to get the engine, since neither runs through the Hub: the note
+links the release of the exact version this Hub runs, which is the version the flags are spelled
+for. Without a probed version the link falls back to the release list rather than inventing a tag.
+
 The launcher also prints the run as an engine command line, so an operator can take it to a
 terminal instead. It is built from the very object the form posts, never from the form, so the
 printed command and the submitted run cannot drift. It is one command and not the two the Hub

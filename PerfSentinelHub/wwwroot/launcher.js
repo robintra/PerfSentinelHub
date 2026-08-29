@@ -448,6 +448,23 @@
     return gauges.every(function (g) { return !g || g.pct === null; }) ? "unknown" : "ok";
   }
 
+  const ENGINE_REPOSITORY = "https://github.com/robintra/perf-sentinel";
+
+  /**
+   * Where to get the engine a printed command needs. Pinned to the version
+   * this Hub runs, since that is the one the command is spelled for. Anything
+   * that is not a plain version lands on the release list instead of building
+   * a URL out of it: the string comes from a binary's own --version.
+   *
+   * @param {string | null} version
+   * @returns {string}
+   */
+  function releaseUrl(version) {
+    return /^[0-9][0-9A-Za-z.+-]{0,63}$/.test(String(version || ""))
+      ? ENGINE_REPOSITORY + "/releases/tag/v" + version
+      : ENGINE_REPOSITORY + "/releases";
+  }
+
   /**
    * The last view a light refresh can merge onto, or null when there is none:
    * undefined before the first read, the "loading" sentinel during it, an error
@@ -513,6 +530,6 @@
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, analysisCommand, monitorCommand, detectionToml, quotedForShell,
-    lightState, mergeableView, mergeLight, refreshPlan
+    lightState, mergeableView, mergeLight, refreshPlan, releaseUrl
   };
 })(globalThis);

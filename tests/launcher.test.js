@@ -170,3 +170,19 @@ test("what the next re-read of a row should cost", () => {
   // A light body is never a base for another, so it reads in full instead.
   assert.equal(PSL.refreshPlan({ error_code: null, traces: null }, 0, 60000), "full");
 });
+
+test("the download link points at the engine version the Hub runs", () => {
+  assert.equal(PSL.releaseUrl("0.16.0"),
+    "https://github.com/robintra/perf-sentinel/releases/tag/v0.16.0");
+  assert.equal(PSL.releaseUrl("0.17.0-rc.1"),
+    "https://github.com/robintra/perf-sentinel/releases/tag/v0.17.0-rc.1");
+  // No version to pin, so the release list rather than a made-up tag.
+  const list = "https://github.com/robintra/perf-sentinel/releases";
+  assert.equal(PSL.releaseUrl(null), list);
+  assert.equal(PSL.releaseUrl(""), list);
+  assert.equal(PSL.releaseUrl("unknown"), list);
+  // And nothing that is not a version is ever pasted into the path.
+  assert.equal(PSL.releaseUrl("0.16.0/../../evil"), list);
+  assert.equal(PSL.releaseUrl("0.16.0?x=1"), list);
+  assert.equal(PSL.releaseUrl("javascript:alert(1)"), list);
+});

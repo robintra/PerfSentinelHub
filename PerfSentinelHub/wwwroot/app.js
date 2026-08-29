@@ -377,6 +377,32 @@
    * syntax rather than a layout choice, so it is decided in PSL beside the
    * quoting.
    */
+  /**
+   * Every command this product prints runs the engine binary, not the Hub, so
+   * it needs one on the machine it is typed into. The link pins the version
+   * this Hub runs: that is the one the command above is spelled for.
+   */
+  function engineNote() {
+    const version = PSL.ENGINE;
+    const note = proseInto(el("p", { class: "terminal-note" }), version
+      ? "This runs the `perf-sentinel` binary itself, so the machine you type it into needs "
+        + "one. This Hub runs " + version + " and the command is spelled for it, an older "
+        + "engine may refuse a flag it does not have yet. Take the same build: "
+      : "This runs the `perf-sentinel` binary itself, so the machine you type it into needs "
+        + "one. This Hub has none configured, so there is no version to match: ");
+    note.appendChild(el("a", {
+      class: "terminal-link",
+      href: PSL.releaseUrl(version),
+      // Someone else's site in someone else's tab: the Hub keeps the page the
+      // reader was working on, and hands the opener nothing.
+      target: "_blank",
+      rel: "noopener noreferrer",
+      text: version ? "perf-sentinel " + version + " on GitHub" : "the perf-sentinel releases"
+    }));
+    note.appendChild(document.createTextNode("."));
+    return note;
+  }
+
   function terminalBlock(spec) {
     const code = el("pre", { class: "terminal-code", tabindex: "0", text: spec.text });
     const status = el("span", { class: "terminal-status", role: "status" });
@@ -415,7 +441,10 @@
       el("div", { class: "terminal-actions" }, [button, status])
     ]);
     (spec.notes || []).forEach(function (note) {
-      if (note) section.appendChild(proseInto(el("p", { class: "terminal-note" }), note));
+      if (!note) return;
+      section.appendChild(note instanceof Node
+        ? note
+        : proseInto(el("p", { class: "terminal-note" }), note));
     });
     return section;
   }
@@ -866,6 +895,7 @@
           "`query monitor` re-reads the same figures on its own interval, the one `--refresh` "
             + "sets, and carries the energy and carbon breakdown this screen only summarises. "
             + "This row re-reads too, on the interval beside the gauges above.",
+          engineNote(),
           source.auth_header_name
             ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
               + "`query monitor` takes no such flag, so this command works only from somewhere "
@@ -1651,7 +1681,7 @@
     const changed = Object.keys(state.form.detection).length;
     const trace = state.form.mode === "trace";
     const panels = [terminalBlock({
-      head: "// or from your terminal",
+      head: "// prefer your terminal?",
       sub: "The same run, spelled out.",
       help: "The Hub runs this same binary. What is missing here is the JSON output and the "
         + "second command that renders it, which exist so the Hub can build a dashboard. "
@@ -1663,6 +1693,7 @@
           + "arguments. It runs wherever perf-sentinel is installed and does not pass through "
           + "this Hub: no worker slot, no queue, and no report kept here for "
           + state.status.limits.report_retention_hours + " hours.",
+        engineNote(),
         "It prints its findings to the terminal. There is no dashboard at the end of it and no "
           + "link to share, which is the trade for not spending a worker.",
         trace

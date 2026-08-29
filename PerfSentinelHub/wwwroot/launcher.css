@@ -1082,6 +1082,14 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* 120ch and not the 78ch the narrower panels use: measured, it wraps to the
    same number of lines as no limit at all in both the launcher column and the
    daemon panel, while keeping a line from running to 170 characters. */
+/* Underlined, unlike the rest of the product's links: this one sits inside a
+   sentence, where colour alone is not a strong enough tell that it is one. */
+.terminal-link {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* No width cap: the columns it lives in bound it themselves. */
 .terminal-note {
   margin: 11px 0 0;

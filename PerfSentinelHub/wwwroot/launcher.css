@@ -743,6 +743,8 @@ button { font: inherit; }
 .code-inline {
   font-family: var(--font-mono);
   font-size: 11.5px;
+  /* A chip broken across lines splits its own background mid-token. */
+  white-space: nowrap;
   background: var(--surface-3);
   border: 1px solid var(--border-2);
   border-radius: 5px;
@@ -1077,12 +1079,12 @@ body[data-screen="report"] .shell-footer { display: none; }
 /* 120ch and not the 78ch the narrower panels use: measured, it wraps to the
    same number of lines as no limit at all in both the launcher column and the
    daemon panel, while keeping a line from running to 170 characters. */
+/* No width cap: the columns it lives in bound it themselves. */
 .terminal-note {
   margin: 11px 0 0;
   font-size: 11.5px;
   line-height: 1.6;
   color: var(--text-3);
-  max-width: 120ch;
 }
 
 /* Line length: one limit for the whole sheet, 120ch. Measured on the rendered
@@ -1192,23 +1194,22 @@ body[data-screen="report"] .shell-footer { display: none; }
   cursor: pointer;
 }
 .settings-more:hover::before { border-color: var(--brand-text); }
-/* Columns and not a grid. The groups have very different lengths, and a grid
-   row is as tall as its tallest card, which left a hole under every short one.
-   Columns pack them by height instead, and the column count still follows the
-   width. Grid masonry would be the direct answer, but it is not shipped yet. */
+/* A grid, not CSS columns: columns pack by height, so opening one group
+   re-shuffled every card into a different column under the reader's click.
+   Folded by default the cards are uniform, rows carry no holes, and an open
+   card only deepens its own row while every card keeps its place. */
 .settings-cards {
-  columns: 330px 3;
-  column-gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 12px;
+  align-items: start;
   margin-top: 14px;
 }
 .settings-card {
-  /* A card split across two columns would read as two half-groups. */
-  break-inside: avoid;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--surface-2);
   padding: 13px 15px 14px;
-  margin-bottom: 12px;
 }
 .settings-rows { margin: 0; }
 .setting {
@@ -1309,7 +1310,7 @@ body[data-screen="report"] .shell-footer { display: none; }
 
 /* ------------------------------------------------- the re-read interval */
 
-.refresh { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.refresh { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 12px; }
 .refresh-next { font-family: var(--font-mono); }
 /* Decoration. The countdown sentence beside it is the information, so this
    going still under reduced motion costs the reader nothing. */

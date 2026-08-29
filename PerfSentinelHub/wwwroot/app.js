@@ -908,11 +908,12 @@
     const verdict = DAEMON_VERDICT[view.state] || DAEMON_VERDICT.unknown;
     const main = el("div", { class: "daemon-top-main" }, [
       el("div", { class: "sink-head" }, [
-        titledOverline("// right now", "Read from the daemon on the interval beside it. Each "
-          + "read is one request to this Hub and three from it to the daemon, so the interval is "
-          + "a cost as much as a freshness setting."),
-        refreshControl(source, view, index)
+        titledOverline("// right now", "Read from the daemon on the interval below. Each read is "
+          + "one request to this Hub and three from it to the daemon, so the interval is a cost "
+          + "as much as a freshness setting."),
+        el("span", { class: "sink-sub refresh-read", id: "refresh-read-" + index })
       ]),
+      refreshControl(source, view, index),
       countStrip([
         [gaugeText(view.traces), "active traces"],
         [gaugeText(view.analysis_queue), "analysis queue"],
@@ -1005,10 +1006,10 @@
     const ring = refreshRing();
     if (ms) ring.querySelector(".refresh-ring-fill").style.setProperty("--cycle", ms + "ms");
 
-    // The ring is decoration, the sentence is the information: under reduced
-    // motion the ring stops moving and the countdown still counts.
+    // Its own line under the heading, not squeezed beside it. The ring is
+    // decoration, the sentence is the information: under reduced motion the
+    // ring stops moving and the countdown still counts.
     return el("div", { class: "refresh" }, [
-      el("span", { class: "sink-sub refresh-read", id: "refresh-read-" + index }),
       ring,
       el("span", { class: "refresh-next", id: "refresh-next-" + index, role: "status" }),
       el("span", { class: "refresh-label", text: "every" }),

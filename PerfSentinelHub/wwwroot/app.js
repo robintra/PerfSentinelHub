@@ -216,11 +216,7 @@
     state.daemonSettingsOpen = PSL.openFolds(stored.settings);
     state.daemonGroupOpen = PSL.openFolds(stored.group);
     state.daemonTerminalOpen = PSL.openFolds(stored.terminal);
-    // Written closed, unlike the rest: this one is open until folded, so the
-    // record has to carry the closing rather than the opening.
-    state.panelOpen = stored.panel && typeof stored.panel === "object"
-      ? { caps: stored.panel.caps !== false }
-      : {};
+    state.panelOpen = PSL.openFolds(stored.panel);
   }
 
   function saveFolds() {
@@ -230,7 +226,7 @@
         settings: PSL.openFolds(state.daemonSettingsOpen),
         group: PSL.openFolds(state.daemonGroupOpen),
         terminal: PSL.openFolds(state.daemonTerminalOpen),
-        panel: { caps: state.panelOpen.caps !== false }
+        panel: PSL.openFolds(state.panelOpen)
       }));
     } catch (error) {
       // A full or disabled store costs the reader the memory of their folds
@@ -2373,16 +2369,22 @@
       "aria-expanded": fold.open ? "true" : "false"
     }, [el("span", { class: "overline", text: head })]);
     body.hidden = !fold.open;
+    const root = el("div", { class: "sink" }, [
+      el("div", { class: "sink-head" }, [toggle, el("span", { class: "sink-sub", text: sub })]),
+      body
+    ]);
+    // Marked rather than inferred from the hidden body: the heading's own
+    // bottom margin has nothing under it when folded, and .sink-head is shared
+    // with three blocks that do want it.
+    root.toggleAttribute("data-folded", !fold.open);
     toggle.addEventListener("click", function () {
       const next = toggle.getAttribute("aria-expanded") !== "true";
       toggle.setAttribute("aria-expanded", next ? "true" : "false");
       body.hidden = !next;
+      root.toggleAttribute("data-folded", !next);
       fold.onToggle(next);
     });
-    return el("div", { class: "sink" }, [
-      el("div", { class: "sink-head" }, [toggle, el("span", { class: "sink-sub", text: sub })]),
-      body
-    ]);
+    return root;
   }
 
   /**
@@ -2497,12 +2499,11 @@
       ["no ceiling", "The file has no size target of its own once every finding is kept. A run "
         + "that finds a great deal produces a report that takes a moment to open."]
     ];
-    // Open unless the reader folded it: it says what the run will hand back,
-    // which is worth reading before pressing the button, but it is five rows
-    // long and someone who knows them should be able to put it away.
+    // Folded until the reader opens it, like every other fold in the product,
+    // and remembered from then on.
     return sinkBlock("// what comes back, and what it caps",
       "From the sink and this Hub's settings, not predictions.", rows, {
-        open: state.panelOpen.caps !== false,
+        open: state.panelOpen.caps === true,
         onToggle: function (open) { state.panelOpen.caps = open; saveFolds(); }
       });
   }

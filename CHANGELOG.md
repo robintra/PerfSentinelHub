@@ -27,7 +27,7 @@ All notable changes to PerfSentinelHub are recorded here.
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
 - The launcher's sink blocks carry the `//` overline every other heading on that screen has, and
-  the one listing what a run hands back folds, open until the reader closes it.
+  the one listing what a run hands back folds, closed until the reader opens it.
 - A daemon row's re-read has its own deadline instead of waiting for the one-second countdown
   ticker to notice it is due, so the read lands when the disc closes rather than up to a second
   after it.

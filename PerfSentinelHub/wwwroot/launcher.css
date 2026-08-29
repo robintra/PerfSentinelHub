@@ -979,6 +979,9 @@ body[data-screen="report"] .shell-footer { display: none; }
 
 
 .sink-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 9px; }
+/* Nothing under the heading to be spaced from: folded, that margin would sit
+   between the heading and the block's own padding and read as a gap. */
+.sink[data-folded] .sink-head { margin-bottom: 0; }
 .sink-sub { font-size: 10.5px; color: var(--text-3); }
 
 /* ------------------------------------------------- advanced: detection knobs */

@@ -897,8 +897,11 @@
     const open = state.daemonSettingsOpen[source.id] === true;
     const count = view.config ? Object.keys(view.config).length : 0;
     const cards = el("div", { class: "settings-cards" });
-    cards.hidden = !open;
     settingsCards(view).forEach(function (node) { cards.appendChild(node); });
+    // The preamble sits above the columns rather than inside them, or it would
+    // flow into the first one as if it were a card.
+    const body = el("div", {}, [view.config ? settingsPreamble(view) : null, cards]);
+    body.hidden = !open;
 
     const button = el("button", {
       type: "button",
@@ -913,14 +916,13 @@
       const next = button.getAttribute("aria-expanded") !== "true";
       button.setAttribute("aria-expanded", next ? "true" : "false");
       state.daemonSettingsOpen[source.id] = next;
-      cards.hidden = !next;
+      body.hidden = !next;
     });
-    return el("div", { class: "settings-block" }, [button, cards]);
+    return el("div", { class: "settings-block" }, [button, body]);
   }
 
   function settingsCards(view) {
     const cards = [];
-    if (view.config) cards.push(settingsPreamble(view));
     if (!view.config) {
       cards.push(el("p", {
         class: "daemon-lead",
@@ -991,9 +993,11 @@
         el("span", { class: "sink-sub", text: sub })
       ])
     ]);
+    const rows = el("dl", { class: "settings-rows" });
     names.forEach(function (name) {
-      card.appendChild(settingRow(name, config[name], defaults));
+      rows.appendChild(settingRow(name, config[name], defaults));
     });
+    card.appendChild(rows);
     return card;
   }
 
@@ -1012,7 +1016,7 @@
     }
     const copy = settingCopy(name);
     if (copy) row.appendChild(el("dd", { class: "setting-note", text: copy }));
-    return el("dl", { class: "settings-rows" }, [row]);
+    return row;
   }
 
   function settingValue(name, value, changed) {

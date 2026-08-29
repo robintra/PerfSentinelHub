@@ -1119,16 +1119,15 @@ body[data-screen="report"] .shell-footer { display: none; }
 .daemon-verdict[data-tone="muted"] { background: var(--surface-3); color: var(--text-3); }
 
 /* The dashboard's Overview split. Gauges are wide, hints are a column of
-   sentences, and putting them side by side is what keeps the fold to a screen. */
+   sentences, and putting them side by side is what keeps the fold to a screen.
+   No narrow fallback: the table around it holds a 1090px minimum and scrolls,
+   so this panel never gets less room than it has here, whatever the viewport. */
 .daemon-top { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
 .daemon-top .counts { margin-bottom: 0; border-color: var(--border); background: var(--border); }
 .daemon-top .outcome-warning:last-child { margin-bottom: 0; }
 .outcome-warning-kind[data-tone="crit"] { background: var(--crit-bg); color: var(--crit-fg); }
 .outcome-warning-kind[data-tone="info"] { background: var(--info-bg); color: var(--info-fg); }
 .outcome-warning-kind[data-tone="muted"] { background: var(--surface-3); color: var(--text-3); }
-@media (max-width: 1180px) {
-  .daemon-top { grid-template-columns: 1fr; gap: 18px; }
-}
 
 /* ------------------------------------------------ the settings, one click in */
 
@@ -1146,20 +1145,23 @@ body[data-screen="report"] .shell-footer { display: none; }
   cursor: pointer;
 }
 .settings-more:hover::before { border-color: var(--brand-text); }
-/* Reflows to the width instead of running down one column: 44 settings in a
-   single stack is the reason this panel was three screens tall. */
+/* Columns and not a grid. The groups have very different lengths, and a grid
+   row is as tall as its tallest card, which left a hole under every short one.
+   Columns pack them by height instead, and the column count still follows the
+   width. Grid masonry would be the direct answer, but it is not shipped yet. */
 .settings-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: 12px;
-  align-items: start;
+  columns: 330px 3;
+  column-gap: 12px;
   margin-top: 14px;
 }
 .settings-card {
+  /* A card split across two columns would read as two half-groups. */
+  break-inside: avoid;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--surface-2);
   padding: 13px 15px 14px;
+  margin-bottom: 12px;
 }
 .settings-rows { margin: 0; }
 .setting {
@@ -1210,8 +1212,7 @@ body[data-screen="report"] .shell-footer { display: none; }
 }
 .daemon-source-note { margin: 0; font-size: 12px; color: var(--text-3); }
 .settings-preamble {
-  grid-column: 1 / -1;
-  margin: 0 0 2px;
+  margin: 14px 0 0;
   font-size: 11.5px;
   line-height: 1.6;
   color: var(--text-3);

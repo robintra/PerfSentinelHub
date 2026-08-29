@@ -302,6 +302,13 @@ adapts to the selected source's `kind` rather than offering an independent live-
 switch, since a switch would let the operator compose impossible states such as a three-hour window
 against a daemon that keeps ten minutes.
 
+A gauge is toned once it is close to a cap it published: red from 90 %, which is the engine's own
+advisor line and the same one that turns the row's verdict to near capacity, and amber from 75 %,
+which is the Hub's own step ahead of it. Each read also shows what moved since the one before it,
+beside the figure and gone a few seconds later, red for a rise and green for a fall: every one of
+these counts toward a cap, so up is the direction that costs something. Uptime is neither toned nor
+tracked, having no cap and only one direction to go in.
+
 Which folds a reader has opened is remembered in that browser's `localStorage`, under one key and
 as open folds only: a row, its terminal block, its settings and the groups inside them all come
 back the way they were left, and a row left open reads its daemon again on the next visit without

@@ -55,6 +55,10 @@
     // and once a minute the full read re-syncs hints, state and settings age.
     daemonFullReadAt: {},
     daemonTerminalOpen: {},
+    // What each gauge moved by on the read just adopted, shown once beside the
+    // figure and then gone. Consumed by the render, so a rebuild for any other
+    // reason does not replay a move that already had its moment.
+    daemonMoves: {},
     terminalSig: null,
     form: {
       sourceId: null,
@@ -1031,8 +1035,14 @@
    * hints beside them rather than under them. The settings are the long part
    * and stay behind one more click.
    */
+  function pct(gauge) { return gauge ? gauge.pct : null; }
+
   function daemonTopRow(source, view, index) {
     const verdict = DAEMON_VERDICT[view.state] || DAEMON_VERDICT.unknown;
+    // Read once and cleared: the badges belong to the read that produced them,
+    // not to every rebuild that happens to come after it.
+    const moves = state.daemonMoves[source.id] || {};
+    delete state.daemonMoves[source.id];
     const main = el("div", { class: "daemon-top-main" }, [
       el("div", { class: "sink-head" }, [
         titledOverline("// right now", "Read from the daemon on the interval below. A tick asks "
@@ -1042,9 +1052,13 @@
       ]),
       refreshControl(source, index),
       countStrip([
-        [gaugeText(view.traces), "active traces"],
-        [gaugeText(view.analysis_queue), "analysis queue"],
-        [gaugeText(view.findings), "findings stored"],
+        [gaugeText(view.traces), "active traces", PSL.gaugeTone(pct(view.traces)), moves.traces],
+        [gaugeText(view.analysis_queue), "analysis queue",
+          PSL.gaugeTone(pct(view.analysis_queue)), moves.analysis_queue],
+        [gaugeText(view.findings), "findings stored",
+          PSL.gaugeTone(pct(view.findings)), moves.findings],
+        // No cap and only one direction: an uptime that grows every read is
+        // not news, and a tone would say it is running out of something.
         [view.uptime_seconds == null ? "unknown" : PSL.dur(view.uptime_seconds * 1000), "uptime"]
       ]),
       el("p", {
@@ -1334,6 +1348,14 @@
         // handled below.
         if (view.error_code) return;
         if (plan === "light") view = PSL.mergeLight(kept, view);
+        // Against what was on screen a moment ago, so the badge answers "what
+        // changed while I was looking at it" rather than comparing two reads
+        // the reader never saw next to each other.
+        state.daemonMoves[source.id] = {
+          traces: PSL.gaugeMove(kept && kept.traces, view.traces),
+          analysis_queue: PSL.gaugeMove(kept && kept.analysis_queue, view.analysis_queue),
+          findings: PSL.gaugeMove(kept && kept.findings, view.findings)
+        };
         state.daemonViews[source.id] = view;
         state.daemonReadAt[source.id] = Date.now();
         if (plan === "full") state.daemonFullReadAt[source.id] = Date.now();
@@ -3014,11 +3036,30 @@
 
   function countStrip(counts) {
     return el("div", { class: "counts" }, counts.map(function (cell) {
-      return el("div", { class: "count" }, [
-        el("span", { class: "count-n", "data-tone": cell[2], text: cell[0] }),
-        el("span", { class: "count-l", text: cell[1] })
-      ]);
+      const figure = el("span", { class: "count-n", "data-tone": cell[2] },
+        [document.createTextNode(cell[0])]);
+      if (typeof cell[3] === "number") figure.appendChild(moveBadge(cell[3]));
+      return el("div", { class: "count" }, [figure, el("span", { class: "count-l", text: cell[1] })]);
     }));
+  }
+
+  /**
+   * How far a gauge moved since the last read. Up is the bad direction here:
+   * every one of these counts toward a cap, so a rise is ground lost and a
+   * fall is ground won, which is the opposite of the usual reading.
+   */
+  function moveBadge(move) {
+    const badge = el("span", {
+      class: "count-move",
+      "data-dir": move > 0 ? "up" : "down",
+      // The sign is in the text, not only in the colour: the badge has to say
+      // which way it went to a reader who does not see the red or the green.
+      text: (move > 0 ? "+" : "-") + group(Math.abs(move))
+    });
+    // Gone from the tree once it has faded, not merely transparent: a screen
+    // reader would otherwise still announce a badge nobody can see any more.
+    badge.addEventListener("animationend", function () { badge.remove(); });
+    return badge;
   }
 
   function actionRow(run, spec) {

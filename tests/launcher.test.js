@@ -213,3 +213,34 @@ test("only open folds are worth remembering", () => {
   // And nothing that is not exactly true counts as open.
   assert.deepEqual(PSL.openFolds({ a: "true", b: 1, c: {}, d: true }), { d: true });
 });
+
+test("a gauge takes a tone only once it is close to a cap it published", () => {
+  // 90 is the engine's own advisor line, the one that turns the row's verdict.
+  assert.equal(PSL.gaugeTone(90), "crit");
+  assert.equal(PSL.gaugeTone(100), "crit");
+  assert.equal(PSL.gaugeTone(89.9), "warn");
+  assert.equal(PSL.gaugeTone(75), "warn");
+  assert.equal(PSL.gaugeTone(74.9), null);
+  assert.equal(PSL.gaugeTone(0), null);
+  // No published cap, so nothing is known about how close to one it is.
+  assert.equal(PSL.gaugeTone(null), null);
+  assert.equal(PSL.gaugeTone(undefined), null);
+  assert.equal(PSL.gaugeTone(NaN), null);
+  assert.equal(PSL.gaugeTone("90"), null);
+});
+
+test("a gauge move is what changed, and nothing when nothing did", () => {
+  const at = value => ({ value, capacity: 10000 });
+
+  assert.equal(PSL.gaugeMove(at(8057), at(9310)), 1253);
+  assert.equal(PSL.gaugeMove(at(9310), at(9251)), -59);
+  // Unchanged, unknown either side, or no earlier reading at all.
+  assert.equal(PSL.gaugeMove(at(9310), at(9310)), null);
+  assert.equal(PSL.gaugeMove(null, at(9310)), null);
+  assert.equal(PSL.gaugeMove(at(9310), null), null);
+  assert.equal(PSL.gaugeMove({ value: null }, at(9310)), null);
+  assert.equal(PSL.gaugeMove(at(9310), { value: null }), null);
+  // Zero is a real reading, not a missing one.
+  assert.equal(PSL.gaugeMove(at(0), at(12)), 12);
+  assert.equal(PSL.gaugeMove(at(12), at(0)), -12);
+});

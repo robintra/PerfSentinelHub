@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- A daemon row's gauges show what moved since the previous read, and take a tone once they are
+  within 75 % or 90 % of the cap they publish.
+- The footer's credit sits in the middle of the bar now that it is alone in it.
 - The footer's step strip is gone. It was static markup shown on every screen, it described only
   the analysis form, and one of the four steps it named had no section on that form either.
 - Folds are remembered between visits in the browser's own storage, and a fold closed over open

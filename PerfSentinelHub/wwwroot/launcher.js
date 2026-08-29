@@ -478,6 +478,44 @@
     return open;
   }
 
+  /* The engine's own advisor line: at 90 % of a cap the daemon starts saying so
+     in its hints, and the row's verdict turns to near capacity. The 75 % step
+     below it is the Hub's, a heads-up before the daemon complains rather than a
+     second opinion about when it should. */
+  const GAUGE_WARN_PCT = 75;
+  const GAUGE_CRIT_PCT = 90;
+
+  /**
+   * The tone a gauge's own figure takes, or null to leave it in the plain text
+   * colour. Only a known percentage is toned: a gauge with no published cap
+   * says nothing about how close to one it is.
+   *
+   * @param {number | null | undefined} pct
+   * @returns {"crit" | "warn" | null}
+   */
+  function gaugeTone(pct) {
+    if (typeof pct !== "number" || !isFinite(pct)) return null;
+    if (pct >= GAUGE_CRIT_PCT) return "crit";
+    if (pct >= GAUGE_WARN_PCT) return "warn";
+    return null;
+  }
+
+  /**
+   * How far a gauge moved between two reads, or null when there is nothing to
+   * show: no earlier reading, a value either side is unknown, or one that did
+   * not move at all.
+   *
+   * @param {any} before
+   * @param {any} after
+   * @returns {number | null}
+   */
+  function gaugeMove(before, after) {
+    const from = before ? before.value : null;
+    const to = after ? after.value : null;
+    if (typeof from !== "number" || typeof to !== "number" || from === to) return null;
+    return to - from;
+  }
+
   const ENGINE_REPOSITORY = "https://github.com/robintra/perf-sentinel";
 
   /**
@@ -560,6 +598,7 @@
     dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, analysisCommand, monitorCommand, detectionToml, quotedForShell,
-    lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds
+    lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
+    gaugeTone, gaugeMove
   };
 })(globalThis);

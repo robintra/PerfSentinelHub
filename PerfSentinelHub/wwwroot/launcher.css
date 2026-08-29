@@ -176,9 +176,9 @@ button { font: inherit; }
 /* Same credit, same wording and same links as the dashboard's own footer: the
    two surfaces are read in one session and should sign themselves alike. */
 .shell-credit {
-  /* Alone in the footer now, so it keeps the right edge it always had rather
-     than sliding to the left one. */
-  margin-left: auto;
+  /* Alone in the footer, so it sits in the middle of it rather than clinging
+     to an edge it no longer shares with anything. */
+  margin: 0 auto;
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-3);
@@ -877,6 +877,32 @@ body[data-screen="report"] .shell-footer { display: none; }
 .count-n[data-tone="info"] { color: var(--info-fg); }
 .count-n[data-tone="ok"] { color: var(--ok-fg); }
 .count-n[data-tone="muted"] { color: var(--text-3); }
+/* What the gauge moved by on the read just adopted: it arrives, holds long
+   enough to be read, and leaves. Up is the bad direction, every one of these
+   counts toward a cap. */
+.count-move {
+  margin-left: 9px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 3px;
+  animation: count-move 2.6s ease-out forwards;
+}
+.count-move[data-dir="up"] { color: var(--crit-fg); }
+.count-move[data-dir="down"] { color: var(--ok-fg); }
+@keyframes count-move {
+  0% { opacity: 0; transform: translateY(5px); }
+  10% { opacity: 1; transform: none; }
+  72% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+/* The badge still comes and goes, it just does not travel to get there. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes count-move {
+    0%, 72% { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: none; }
+  }
+}
 .count-l { display: block; font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
 
 .outcome-warning { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); }

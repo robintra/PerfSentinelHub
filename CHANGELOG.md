@@ -14,6 +14,13 @@ All notable changes to PerfSentinelHub are recorded here.
   never change without a restart the Hub has no signal for and a stale gauge would defeat the
   point. The Hub derives one thing, whether a gauge crossed 90 % of its cap, on the same line the
   daemon's own monitor draws. Every recommendation is the daemon's.
+- `--brand-text` moves from `#11845d` to `#107a56` in the light theme. The brand green fell to
+  4.09 against the active tab's own background, 4.12 on `--surface-3` and 4.37 on `--surface`, so
+  the tab label, the settings disclosure and the footer link all sat under AA. The new value's
+  worst case is 4.65, and the perceived shift is one step of lightness on the same green. The
+  engine's dashboard template carries the same token and moves with it.
+- The declared-environment chip takes `--text-2` on an unreachable row. `--text-3` is calibrated
+  against the grey surfaces and lands at 4.49 on that row's red one.
 - `--text-3` moves from `#7d8c83` to `#95a199` in the dark theme, which finishes an accessibility
   pass that had only been done on the light one: the old value fell to 3.97 against `--surface-2`
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the

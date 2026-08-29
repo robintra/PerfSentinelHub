@@ -352,6 +352,9 @@ button { font: inherit; }
 .table td:first-child, .table th:first-child { padding-left: 18px; }
 .table td:last-child, .table th:last-child { padding-right: 18px; }
 .table tr[data-unreachable] { background: var(--crit-bg); }
+/* --text-3 is calibrated against the grey surfaces and lands at 4.49 on this
+   row's red one. The chip is the only tertiary text that sits on it. */
+.table tr[data-unreachable] .chip-declared { color: var(--text-2); }
 .table-strong { font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .table-mono { font-family: var(--font-mono); }
 .table-muted { color: var(--text-3); }

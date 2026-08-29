@@ -1252,12 +1252,12 @@
 
   /** The disc and the countdown clock restart together, from one place. */
   function restartCycle(source, index) {
+    const ms = refreshMs(source.id);
     state.daemonCycleAt[source.id] = Date.now();
-    restartSweep(index, refreshMs(source.id));
+    restartSweep(index, ms);
     // The disc and the read now share one deadline instead of one starting the
     // other: the read lands when the sweep closes, not on the beat after it.
     clearTimeout(state.daemonCycleTimers[source.id]);
-    const ms = refreshMs(source.id);
     if (!ms) return;
     state.daemonCycleTimers[source.id] = setTimeout(function () {
       refreshDaemon(source, index);
@@ -1272,7 +1272,10 @@
   }
 
   function stopAllTickers() {
-    Object.keys(state.daemonTickers).forEach(stopTicker);
+    // Both maps: a source can hold a cycle timer without holding a ticker, and
+    // walking only the tickers would leave that one running past the screen.
+    new Set(Object.keys(state.daemonTickers).concat(Object.keys(state.daemonCycleTimers)))
+      .forEach(stopTicker);
   }
 
   function tickRefresh(source, index) {
@@ -1318,14 +1321,21 @@
    * close the interval select under their pointer. The next tick catches up.
    * Returns whether the swap happened.
    */
-  function replaceIfIdle(id, node) {
+  function replaceIfIdle(id, build) {
     const host = document.getElementById(id);
     if (!host || host.contains(document.activeElement)) return false;
-    host.replaceChildren(node);
+    // Built here rather than by the caller: daemonTopRow consumes the move
+    // badges as it renders them, and building a row that is then discarded
+    // would spend that read's badges on nothing.
+    host.replaceChildren(build());
     return true;
   }
 
   function refreshDaemon(source, index) {
+    // A folded row is not being read. The cycle timer can fire in the very gap
+    // between the fold clearing it and this call arming the next one, and that
+    // one would then re-arm itself for good, on a row nobody is looking at.
+    if (state.daemonOpen[source.id] !== true) return;
     // A separate flag rather than a sentinel in daemonViews: a render during
     // the flight reads daemonViews, and a string there would crash it.
     if (state.daemonInFlight[source.id]) {
@@ -1358,7 +1368,7 @@
           // only when the reason changed.
           const stale = previous.error_code !== view.error_code;
           state.daemonViews[source.id] = view;
-          if (stale) replaceIfIdle("daemon-detail-" + index, daemonPanel(source, index));
+          if (stale) replaceIfIdle("daemon-detail-" + index, function () { return daemonPanel(source, index); });
           return;
         }
         // A transient error does not outrank data: the last good reading is
@@ -1387,7 +1397,9 @@
         delete state.daemonInFlight[source.id];
         const view = state.daemonViews[source.id];
         if (!view || view === "loading" || view.error_code) return;
-        if (!replaceIfIdle("daemon-top-" + index, daemonTopRow(source, view, index))) return;
+        if (!replaceIfIdle("daemon-top-" + index, function () {
+          return daemonTopRow(source, view, index);
+        })) return;
         tickRefresh(source, index);
       });
   }

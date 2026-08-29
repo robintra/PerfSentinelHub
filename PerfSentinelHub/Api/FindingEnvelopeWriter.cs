@@ -38,34 +38,8 @@ public static partial class FindingEnvelopeWriter
             using var document = envelope;
             writer.WriteStartObject();
             WriteOriginalProperties(writer, document.RootElement);
-
-            writer.WriteNumber("first_seen", row.FirstSeenMs);
-            writer.WriteNumber("last_seen", row.LastSeenMs);
-            writer.WriteString("max_confidence", row.MaxConfidence);
-            // Derived, never stored: active within the grace window,
-            // likely_resolved when the endpoint still heartbeats from a
-            // reachable source without the finding, not_observed otherwise.
-            writer.WriteString("status", row.Status);
-            if (row.Lineage is { } lineage)
-            {
-                writer.WriteStartObject("lineage");
-                writer.WriteNumber("original_first_seen", lineage.OriginalFirstSeenMs);
-                writer.WriteNumber("predecessors", lineage.Predecessors);
-                writer.WriteEndObject();
-            }
-            writer.WriteStartArray("sources");
-            foreach (var source in row.Sources.OrderBy(item => item.SourceId, StringComparer.Ordinal))
-            {
-                var ageSeconds = Math.Max(0, (now.ToUnixTimeMilliseconds() - source.LastSeenMs) / 1000);
-                writer.WriteStartObject();
-                writer.WriteString("name", source.SourceName);
-                writer.WriteString("environment", source.Environment);
-                writer.WriteString("producer_version", source.ProducerVersion);
-                writer.WriteNumber("age_seconds", ageSeconds);
-                writer.WriteString("status", source.UnreachableSinceMs is null ? "ok" : "unreachable_since");
-                writer.WriteEndObject();
-            }
-            writer.WriteEndArray();
+            WriteHubFields(writer, row);
+            WriteSources(writer, row, now);
             writer.WriteEndObject();
 
             // Flush as we go: a full 10 000-envelope page would otherwise sit in memory at once.
@@ -83,6 +57,49 @@ public static partial class FindingEnvelopeWriter
 
     [LoggerMessage(1800, LogLevel.Error, "Finding {Signature} has an unreadable envelope and was skipped.")]
     private static partial void LogUnreadableEnvelope(ILogger logger, Exception exception, string signature);
+
+    /// <summary>
+    /// What the Hub knows and the daemon does not: how long this finding has
+    /// been around, and what it is now.
+    /// </summary>
+    private static void WriteHubFields(Utf8JsonWriter writer, StoredFinding row)
+    {
+        writer.WriteNumber("first_seen", row.FirstSeenMs);
+        writer.WriteNumber("last_seen", row.LastSeenMs);
+        writer.WriteString("max_confidence", row.MaxConfidence);
+        // Derived, never stored: active within the grace window,
+        // likely_resolved when the endpoint still heartbeats from a
+        // reachable source without the finding, not_observed otherwise.
+        writer.WriteString("status", row.Status);
+        if (row.Lineage is not { } lineage)
+            return;
+
+        writer.WriteStartObject("lineage");
+        writer.WriteNumber("original_first_seen", lineage.OriginalFirstSeenMs);
+        writer.WriteNumber("predecessors", lineage.Predecessors);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// Every source that reported this finding, oldest field first and ordered
+    /// by id so two identical pages compare equal.
+    /// </summary>
+    private static void WriteSources(Utf8JsonWriter writer, StoredFinding row, DateTimeOffset now)
+    {
+        writer.WriteStartArray("sources");
+        foreach (var source in row.Sources.OrderBy(item => item.SourceId, StringComparer.Ordinal))
+        {
+            var ageSeconds = Math.Max(0, (now.ToUnixTimeMilliseconds() - source.LastSeenMs) / 1000);
+            writer.WriteStartObject();
+            writer.WriteString("name", source.SourceName);
+            writer.WriteString("environment", source.Environment);
+            writer.WriteString("producer_version", source.ProducerVersion);
+            writer.WriteNumber("age_seconds", ageSeconds);
+            writer.WriteString("status", source.UnreachableSinceMs is null ? "ok" : "unreachable_since");
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+    }
 
     private static void WriteOriginalProperties(Utf8JsonWriter writer, JsonElement envelope)
     {

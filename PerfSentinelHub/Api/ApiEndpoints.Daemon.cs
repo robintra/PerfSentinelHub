@@ -15,6 +15,11 @@ public static partial class ApiEndpoints
     /// Hub has no signal for, and the gauges are the whole point of the screen,
     /// so an hour-old copy would be worse than none.
     /// </summary>
+    // Every parameter is either the route's own or a collaborator the router
+    // injects. Bundling them into a parameter object would hide the handler's
+    // dependencies behind a type that exists only to be counted, the same call
+    // HubDatabase.CompleteRunAsync makes for its flat column list.
+#pragma warning disable S107
     private static async Task GetDaemonViewAsync(
         string sourceId,
         HttpContext context,
@@ -24,6 +29,7 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         var source = options.Value.Sources.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, sourceId, StringComparison.Ordinal));
@@ -46,7 +52,7 @@ public static partial class ApiEndpoints
         // so it goes around the gate the export buffering justifies.
         if (context.Request.Query["refresh"] == "status")
         {
-            var status = await TryReadAsync<DaemonStatus>(
+            var status = await TryReadAsync(
                 async () => await client.FetchStatusAsync(source, cancellationToken),
                 cancellationToken);
             await DaemonViewWriter.WriteLightAsync(
@@ -96,13 +102,13 @@ public static partial class ApiEndpoints
     {
         // Three independent reads: the latency is the slowest of them rather
         // than their sum, and any one of them can fail without the others.
-        var statusTask = TryReadAsync<DaemonStatus>(
+        var statusTask = TryReadAsync(
             async () => await client.FetchStatusAsync(source, cancellationToken),
             cancellationToken);
-        var configTask = TryReadAsync<byte[]>(
+        var configTask = TryReadAsync(
             async () => await client.FetchConfigAsync(source, cancellationToken),
             cancellationToken);
-        var reportTask = TryReadAsync<byte[]>(
+        var reportTask = TryReadAsync(
             // Three times the ordinary budget: an export is heavier than a
             // status read, which is why FetchReportSnapshotAsync takes its
             // own timeout in the first place.
@@ -216,24 +222,43 @@ public static partial class ApiEndpoints
     /// </summary>
     private static (IReadOnlyList<ResultWarning> Warnings, int Dropped) ReadHints(JsonElement root)
     {
+        // The legacy string array is read only when the modern one yielded
+        // nothing: a daemon carrying both would otherwise report each hint
+        // twice. Nothing dropped can hide here, since a hint is only dropped
+        // once a hundred were kept.
+        var hints = ReadHintObjects(root);
+        return hints.Warnings.Count > 0 ? hints : ReadLegacyHints(root);
+    }
+
+    /// <summary>The modern shape: `warning_details`, one object per hint.</summary>
+    private static (List<ResultWarning> Warnings, int Dropped) ReadHintObjects(JsonElement root)
+    {
         var warnings = new List<ResultWarning>();
         var dropped = 0;
-        if (root.TryGetProperty("warning_details", out var details) &&
-            details.ValueKind == JsonValueKind.Array)
+        if (!root.TryGetProperty("warning_details", out var details) ||
+            details.ValueKind != JsonValueKind.Array)
+            return (warnings, dropped);
+
+        foreach (var entry in details.EnumerateArray())
         {
-            foreach (var entry in details.EnumerateArray())
-            {
-                if (entry.ValueKind != JsonValueKind.Object)
-                    continue;
-                if (JsonRead.ReadString(entry, "kind") is not { } kind || JsonRead.ReadString(entry, "message") is not { } message)
-                    continue;
-                if (warnings.Count == MaxHints) { dropped++; continue; }
-                warnings.Add(new ResultWarning(kind, TruncateHint(message)));
-            }
+            if (entry.ValueKind != JsonValueKind.Object)
+                continue;
+            if (JsonRead.ReadString(entry, "kind") is not { } kind ||
+                JsonRead.ReadString(entry, "message") is not { } message)
+                continue;
+            if (warnings.Count == MaxHints) { dropped++; continue; }
+            warnings.Add(new ResultWarning(kind, TruncateHint(message)));
         }
 
-        if (warnings.Count > 0 || dropped > 0 ||
-            !root.TryGetProperty("warnings", out var legacy) ||
+        return (warnings, dropped);
+    }
+
+    /// <summary>The older shape: `warnings`, one bare string per hint.</summary>
+    private static (List<ResultWarning> Warnings, int Dropped) ReadLegacyHints(JsonElement root)
+    {
+        var warnings = new List<ResultWarning>();
+        var dropped = 0;
+        if (!root.TryGetProperty("warnings", out var legacy) ||
             legacy.ValueKind != JsonValueKind.Array)
             return (warnings, dropped);
 

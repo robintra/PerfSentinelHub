@@ -730,7 +730,8 @@
     const body = el("div", { class: "terminal-body" }, [
       spell ? shellTabs(code, spell) : null,
       code,
-      el("div", { class: "terminal-actions" }, [button, status])
+      el("div", { class: "terminal-actions" },
+        spec.download ? [button, downloadButton(code, spec.download), status] : [button, status])
     ]);
     (spec.notes || []).forEach(function (note) {
       if (!note) return;
@@ -770,6 +771,40 @@
       ]),
       body
     ]);
+  }
+
+  /**
+   * Hands the block's text over as a file, for a panel whose content is meant
+   * to become one. Copying leaves the reader to create the file themselves,
+   * which is a step the Hub can take for them.
+   *
+   * The blob is built at click time from the node, like the copy button, so a
+   * fragment that changed under the reader is not the one that lands on disk.
+   */
+  function downloadButton(code, filename) {
+    const button = el("button", {
+      type: "button",
+      class: "pill-button",
+      "aria-label": "Download " + filename
+    }, [downloadGlyph(), el("span", { text: "Download" })]);
+    button.addEventListener("click", function () {
+      const url = URL.createObjectURL(new Blob([code.textContent], { type: "application/toml" }));
+      const link = el("a", { href: url, download: filename });
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Not revoked in the same tick: a browser that has not started reading
+      // the blob yet would find it gone and cancel the download.
+      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+    });
+    return button;
+  }
+
+  function downloadGlyph() {
+    return svg([
+      ["path", { d: "M12 4v10M8 11l4 4 4-4" }],
+      ["path", { d: "M5 19h14" }]
+    ], 14);
   }
 
   /**
@@ -2148,10 +2183,14 @@
         sub: "Only the thresholds you changed.",
         text: PSL.detectionToml(state.form.detection),
         copyLabel: "Copy the .perf-sentinel.toml fragment",
+        download: ".perf-sentinel.toml",
         notes: [
           "Every threshold this file leaves out keeps the engine's own default, and the Hub only "
             + "records a value that actually departs from one. A run launched from the button "
-            + "above carries the same numbers, so the two are comparable with each other."
+            + "above carries the same numbers, so the two are comparable with each other.",
+          "Download puts it in your browser's download folder under a name that starts with a "
+            + "dot, so a file manager hides it by default. Move it next to where you run the "
+            + "command, which is the directory the `-c` above names it from."
         ]
       }));
     }

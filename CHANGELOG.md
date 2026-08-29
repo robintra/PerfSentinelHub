@@ -36,7 +36,11 @@ All notable changes to PerfSentinelHub are recorded here.
   on a glance and the counts say which one to open.
 - Setting names the daemon writes in backticks render as code rather than as prose, the way the
   dashboard does. The terminal monitor strips those backticks because a terminal cannot draw them,
-  and a browser can.
+  and a browser can. Inline code now carries the dashboard's own chip treatment, a background and
+  a border rather than a font change alone, which is what makes it read as code at all.
+- The daemon panel no longer inherits the sources table's monospace face. A table of values is
+  right to be monospaced and a panel of prose is not, and the two had been the same thing since
+  the panel is a cell of that table. Names and values stay mono by asking for it.
 - The fleet health screen unfolds a daemon's row onto that view, and the launcher prints the run
   it would submit as an engine command line for an operator who would rather use a terminal. The
   command is built from the object the form posts rather than from the form, so the two cannot

@@ -727,7 +727,17 @@ button { font: inherit; }
 .notice-block-body { margin: 0 0 4px; font-size: 12.5px; line-height: 1.55; color: inherit; opacity: .92; max-width: 78ch; }
 .notice-block .checkbox { margin-top: 10px; color: inherit; font-weight: 500; }
 .notice-block .checkbox input { width: 16px; height: 16px; }
-.code-inline { font-family: var(--font-mono); font-size: 12px; }
+/* Same treatment the dashboard gives .ps-code-inline, on --surface-3 rather
+   than --surface-2 so it still reads on a card that is itself --surface-2. */
+.code-inline {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: var(--text);
+}
 
 .cost { padding: 18px; }
 .cost-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 14px; }
@@ -1054,12 +1064,15 @@ body[data-screen="report"] .shell-footer { display: none; }
   color: var(--ok-fg);
 }
 .terminal-status { font-size: 11.5px; color: var(--text-3); }
+/* 120ch and not the 78ch the narrower panels use: measured, it wraps to the
+   same number of lines as no limit at all in both the launcher column and the
+   daemon panel, while keeping a line from running to 170 characters. */
 .terminal-note {
   margin: 11px 0 0;
   font-size: 11.5px;
   line-height: 1.6;
   color: var(--text-3);
-  max-width: 78ch;
+  max-width: 120ch;
 }
 
 /* ------------------------------------------ sources: the daemon detail row */
@@ -1098,11 +1111,20 @@ body[data-screen="report"] .shell-footer { display: none; }
 
 /* Never tinted by tr[data-unreachable]: an unreachable daemon's panel is an
    error banner already, and a red field behind it would say it twice. */
-.daemon-detail > td { padding: 6px 18px 24px; background: var(--surface); }
+/* The table sets a monospace face for its cells, which is right for a row of
+   values and wrong for a panel of prose. Reset it here: everything inside that
+   should stay mono asks for it by itself. */
+.daemon-detail > td {
+  padding: 6px 18px 24px;
+  background: var(--surface);
+  font-family: var(--font-ui);
+}
 /* No prose max-width here. This is a data panel, and the dashboard caps its
    own at 1240px rather than at a line length. */
 .daemon-panel { display: flex; flex-direction: column; gap: 16px; max-width: 1240px; }
-.daemon-lead { margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-3); max-width: 78ch; }
+/* No cap: the column it sits in already holds it to 94 characters, and capping
+   it further only narrowed the text without saving a line. */
+.daemon-lead { margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-3); }
 .daemon-loading { margin: 0 0 10px; font-size: 12px; color: var(--text-3); }
 
 .daemon-verdict-row { margin-bottom: 12px; }
@@ -1217,7 +1239,7 @@ body[data-screen="report"] .shell-footer { display: none; }
   font-size: 11.5px;
   line-height: 1.6;
   color: var(--text-3);
-  max-width: 86ch;
+  max-width: 120ch;
 }
 .settings-preamble-skew { color: var(--warn-fg); }
 .setting-v[data-changed="true"] .chip-declared { border-color: var(--warn-bd); color: var(--warn-fg); }

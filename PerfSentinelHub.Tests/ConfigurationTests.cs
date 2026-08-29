@@ -222,7 +222,7 @@ public sealed class ConfigurationTests
         Assert.Throws<OptionsValidationException>(factory.CreateClient);
     }
 
-    private static HubOptions ValidOptions() => new()
+    internal static HubOptions ValidOptions() => new()
     {
         DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db"),
         Sources = [ValidSource()]

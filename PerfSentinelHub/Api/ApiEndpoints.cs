@@ -18,6 +18,7 @@ public static partial class ApiEndpoints
         app.MapGet("/api/status", async (
             HttpRequest request,
             EngineProbe engine,
+            UpdateChecker updates,
             HubDatabase database,
             IOptions<HubOptions> hubOptions,
             CancellationToken cancellationToken) =>
@@ -28,6 +29,8 @@ public static partial class ApiEndpoints
                 version,
                 KnownIdentity(request, analysis),
                 engine.Version,
+                updates.LatestEngineVersion,
+                updates.LatestHubVersion,
                 await database.CountPendingRunsAsync(cancellationToken),
                 analysis.Workers,
                 new StatusLimits(

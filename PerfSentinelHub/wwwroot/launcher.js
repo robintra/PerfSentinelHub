@@ -583,6 +583,13 @@
   }
 
   const ENGINE_REPOSITORY = "https://github.com/robintra/perf-sentinel";
+  const HUB_REPOSITORY = "https://github.com/robintra/PerfSentinelHub";
+  /* Every chart version with the engine version it ships, which a release tag
+     cannot give: a chart-only fix bumps the chart and not the appVersion. */
+  const CHART_PAGE = "https://artifacthub.io/packages/helm/perf-sentinel/perf-sentinel";
+  /* Not a link. safeHttpsHref would refuse the scheme, and it is a coordinate
+     to paste into helm rather than a page to open. */
+  const CHART_COORDINATE = "oci://ghcr.io/robintra/charts/perf-sentinel";
 
   /**
    * Where to get the engine a printed command needs. Pinned to the version
@@ -597,6 +604,36 @@
     return /^[0-9][0-9A-Za-z.+-]{0,63}$/.test(String(version || ""))
       ? ENGINE_REPOSITORY + "/releases/tag/v" + version
       : ENGINE_REPOSITORY + "/releases";
+  }
+
+  /**
+   * Where to get a newer Hub. Always the release list: a tag URL would have to
+   * be built from a version, and the newest one is what the reader wants.
+   *
+   * @returns {string}
+   */
+  function hubReleaseUrl() {
+    return HUB_REPOSITORY + "/releases";
+  }
+
+  /**
+   * Whether a newer release exists, given what is running and what the Hub last
+   * read from GitHub.
+   *
+   * Null covers every case where there is nothing to say, and they are not the
+   * same case: the check is off or has not run (latest null), the product is
+   * not configured at all (current null), or the two match. A caller that
+   * treated null as "up to date" would say so about a Hub that never asked.
+   *
+   * @param {string | null} current
+   * @param {string | null} latest
+   * @returns {{latest: string, gap: number} | null}
+   */
+  function updateState(current, latest) {
+    if (!current || !latest) return null;
+    // Behind only. A build ahead of the newest release is a pre-release or a
+    // local build, and telling its operator to downgrade would be wrong.
+    return vcmp(current, latest) < 0 ? { latest: latest, gap: minorGap(current, latest) } : null;
   }
 
   /**
@@ -666,6 +703,7 @@
     shq, psq, SHELLS, shellById, defaultShell, exportLine,
     analysisCommand, monitorCommand, detectionToml, quotedForShell,
     lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
+    hubReleaseUrl, updateState, CHART_PAGE: CHART_PAGE, CHART_COORDINATE: CHART_COORDINATE,
     gaugeTone, gaugeMove
   };
 })(globalThis);

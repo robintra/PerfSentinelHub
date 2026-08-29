@@ -292,6 +292,7 @@
     document.getElementById("version-engine").textContent =
       status && status.engine_version ? status.engine_version : "none";
     if (status) PSL.setVersions(status.version, status.engine_version);
+    renderUpdates();
 
     // The identity comes from the reverse proxy. With no proxy in front there
     // is nothing to show, and an empty chip is better than a fake name.
@@ -301,6 +302,41 @@
 
     renderFleetSkew();
     renderSourcesBadge();
+  }
+
+  /**
+   * What the Hub last heard from GitHub, and only when it is news. Absent says
+   * nothing either way: the check may be off, may not have run, or may not have
+   * reached anything, and none of those mean the versions here are current.
+   */
+  function renderUpdates() {
+    const chip = document.getElementById("version-chip");
+    const existing = chip.querySelector(".shell-version-update");
+    if (existing) existing.remove();
+    if (!state.status) return;
+
+    const behind = [
+      ["hub", PSL.updateState(state.status.version, state.status.latest_hub_version), PSL.hubReleaseUrl()],
+      ["engine", PSL.updateState(state.status.engine_version, state.status.latest_engine_version), null]
+    ].filter(function (row) { return row[1]; });
+    if (behind.length === 0) return;
+
+    const segment = el("span", {
+      class: "shell-version-update",
+      title: "The newest release published on GitHub, read by this Hub on its update-check "
+        + "interval. It says a newer version exists, not that this one is wrong."
+    }, [svg([["path", { d: "M12 19V5M5 12l7-7 7 7" }]], 12)]);
+    behind.forEach(function (row, index) {
+      if (index > 0) segment.appendChild(el("span", { text: "\u00b7" }));
+      segment.appendChild(el("a", {
+        href: row[2] || PSL.releaseUrl(row[1].latest),
+        target: "_blank",
+        rel: "noopener noreferrer",
+        text: row[0] + " " + row[1].latest
+      }));
+    });
+    chip.appendChild(el("span", { class: "shell-version-rule", "aria-hidden": "true" }));
+    chip.appendChild(segment);
   }
 
   /**
@@ -2755,9 +2791,42 @@
             : "Envelopes are additive, so nothing breaks. Findings from a detector this Hub does not "
               + "know about arrive unnamed. The Hub compares two version strings and cannot know "
               + "whether this minor changed detection at all."
-        })
+        }),
+        behind ? upgradeLine(source, engine) : null
       ])
     ]);
+  }
+
+  /**
+   * Where the newer version comes from, which is not the same place for every
+   * source. A daemon is upgraded through its chart, so pointing its operator at
+   * a binary would be pointing at the wrong artefact.
+   */
+  function upgradeLine(source, engine) {
+    const line = el("p", { class: "notice-block-body" }, [
+      el("span", { text: "Get " + engine + ": " }),
+      el("a", {
+        class: "notice-block-link",
+        href: PSL.releaseUrl(engine),
+        target: "_blank",
+        rel: "noopener noreferrer",
+        text: "release notes and binaries"
+      })
+    ]);
+    if (source.kind !== "daemon") return line;
+    line.appendChild(el("span", { text: ", or the chart this daemon is deployed from, " }));
+    line.appendChild(el("a", {
+      class: "notice-block-link",
+      href: PSL.CHART_PAGE,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      text: "every chart version and the engine it ships"
+    }));
+    line.appendChild(el("span", { text: ". The chart itself is " }));
+    // A coordinate for helm, not a link: the scheme is not one a browser opens.
+    line.appendChild(el("code", { class: "code-inline", text: PSL.CHART_COORDINATE }));
+    line.appendChild(el("span", { text: "." }));
+    return line;
   }
 
   function unreachableNotice(source) {

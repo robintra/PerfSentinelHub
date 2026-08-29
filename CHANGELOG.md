@@ -26,6 +26,13 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The Hub says when a newer release exists. It asks the GitHub releases API once a day what the
+  newest published engine and Hub versions are, and the version chip names whichever of the two is
+  behind, with a link to its release notes. A source running behind the Hub's own engine now says
+  where to get the newer one, and for a daemon that is the chart it is deployed from rather than a
+  binary. This is the Hub's only outbound request that does not go to a configured source, so it
+  has its own configuration section, its own endpoints, and `Hub:UpdateCheck:Enabled` turns it off.
+  Off, or when the request fails, nothing is shown rather than a claim of being current.
 - Native controls follow the theme: `color-scheme` is declared per theme, so the number steppers
   stop rendering in the browser's light scheme on a dark page.
 - The re-read interval opens below its control instead of over it. A native select's menu is

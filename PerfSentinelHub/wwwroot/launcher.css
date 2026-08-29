@@ -124,6 +124,11 @@ button { font: inherit; }
 .shell-version-rule { width: 1px; height: 14px; background: var(--border-2); }
 .shell-version-skew { display: inline-flex; align-items: center; gap: 5px; color: var(--warn-fg); }
 .shell-version-skew svg { width: 12px; height: 12px; }
+/* News rather than a warning: a newer release existing is not a fault in what
+   is running here, so it takes the brand tone and not the amber one. */
+.shell-version-update { display: inline-flex; align-items: center; gap: 5px; color: var(--brand-text); }
+.shell-version-update svg { width: 12px; height: 12px; }
+.shell-version-update a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
 .shell-identity {
   display: inline-flex;
@@ -718,6 +723,9 @@ button { font: inherit; }
 }
 .notice-block[data-tone="warn"] { background: var(--warn-bg); border-color: var(--warn-bd); color: var(--warn-fg); }
 .notice-block[data-tone="info"] { background: var(--info-bg); border-color: var(--info-bd); color: var(--info-fg); }
+/* The block already carries a tone, and a link inside it keeps that tone rather
+   than dropping to brand green on an amber ground. */
+.notice-block-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .notice-block > svg { flex: 0 0 auto; margin-top: 2px; }
 .notice-block-text { min-width: 0; }
 .notice-block-title { margin: 0 0 5px; font-size: 13px; font-weight: 600; color: inherit; }

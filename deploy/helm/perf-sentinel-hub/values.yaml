@@ -19,6 +19,13 @@ hub:
     maxTracesCap: 2000
     timeout: "00:05:00"
     reportRetention: "1.00:00:00"
+  updateCheck:
+    # Asks the GitHub releases API, once a day, what the newest published
+    # version of the engine and of the Hub is, so the version chip can say
+    # that what runs here is no longer the newest. This is the only outbound
+    # request the Hub makes that does not go to a configured source. Set to
+    # false in a cluster with no egress.
+    enabled: true
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours and authHeaderName.
 sources: []

@@ -117,6 +117,10 @@ and `sources`.
 | `Hub:Analysis:MaxTracesCap` | `2000` | 1–10000, the engine's own limit on `--max-traces` |
 | `Hub:Analysis:Timeout` | `00:05:00` | Positive, at most one hour |
 | `Hub:Analysis:ReportRetention` | `1.00:00:00` (24 hours) | Positive duration |
+| `Hub:UpdateCheck:Enabled` | `true` | Whether the Hub asks GitHub for the newest published release of each product |
+| `Hub:UpdateCheck:Interval` | `1.00:00:00` (1 day) | At least 15 minutes |
+| `Hub:UpdateCheck:EngineEndpoint` | GitHub releases API for `robintra/perf-sentinel` | Absolute HTTPS, no credentials, query, or fragment |
+| `Hub:UpdateCheck:HubEndpoint` | GitHub releases API for `robintra/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment |
 | `Hub:Sources` | none | At least one source |
 | `Sources[].Id` | none | Non-empty and unique |
 | `Sources[].Name` | none | Non-empty |
@@ -126,6 +130,17 @@ and `sources`.
 | `Sources[].BaseUrl` | none | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
 | `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
 | `Sources[].ImportApiKey` | none | Optional push credential; at least 32 characters, supplied through a Secret |
+
+### Where the Hub connects
+
+Every outbound request goes to a configured `Sources[].BaseUrl`, with one exception: the update
+check, which asks the GitHub releases API what the newest published version of the engine and of
+the Hub is, once a day. It exists so the version chip can say that what you are running is no
+longer the newest, and it carries no identifier of your deployment, only an unauthenticated GET.
+
+Set `Hub:UpdateCheck:Enabled` to `false` for a deployment with no egress. Off, the Hub reports no
+newer version for anything and the chip shows nothing rather than claiming you are current, which
+is the same thing it shows when the request fails.
 
 ### An https source with a private CA
 

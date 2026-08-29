@@ -18,6 +18,7 @@ public sealed record HubOptions
     public int DefaultReadLimit { get; set; } = 1000;
     public int MaxReadLimit { get; set; } = 10_000;
     public AnalysisOptions Analysis { get; set; } = new();
+    public UpdateCheckOptions UpdateCheck { get; set; } = new();
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
 }
 
@@ -45,6 +46,24 @@ public sealed record AnalysisOptions
     public int MaxTracesEmbedded { get; set; } = 50;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
     public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
+}
+
+/// <summary>
+/// Whether the Hub asks GitHub what the newest published release of each
+/// product is. This is the only outbound destination the Hub has that is not a
+/// configured source, so it is stated here rather than implied, and one key
+/// turns it off for a deployment with no egress.
+/// </summary>
+public sealed class UpdateCheckOptions
+{
+    public bool Enabled { get; set; } = true;
+    // A release lands a few times a month at most. Anything shorter spends
+    // requests to learn nothing, and the rate limit is 60 an hour per address.
+    public TimeSpan Interval { get; set; } = TimeSpan.FromDays(1);
+    public Uri EngineEndpoint { get; set; } =
+        new("https://api.github.com/repos/robintra/perf-sentinel/releases/latest");
+    public Uri HubEndpoint { get; set; } =
+        new("https://api.github.com/repos/robintra/PerfSentinelHub/releases/latest");
 }
 
 public static class SourceKinds
@@ -131,6 +150,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         if (options.Sources.Count == 0)
             errors.Add("Hub:Sources must contain at least one source.");
         ValidateAnalysisSettings(options.Analysis, errors);
+        ValidateUpdateCheckSettings(options.UpdateCheck, errors);
     }
 
     private static void ValidateAnalysisSettings(AnalysisOptions analysis, List<string> errors)
@@ -154,6 +174,29 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         if (analysis.ReportRetention <= TimeSpan.Zero)
             errors.Add("Hub:Analysis:ReportRetention must be positive.");
     }
+
+    private static void ValidateUpdateCheckSettings(UpdateCheckOptions update, List<string> errors)
+    {
+        if (!update.Enabled) return;
+        if (update.Interval < TimeSpan.FromMinutes(15))
+            errors.Add("Hub:UpdateCheck:Interval must be at least 15 minutes.");
+        // Held to a tighter shape than a source: https only, and no query, so
+        // whoever reads the configuration sees the whole destination.
+        if (IsInvalidUpdateEndpoint(update.EngineEndpoint))
+            errors.Add("Hub:UpdateCheck:EngineEndpoint must be an absolute HTTPS URL "
+                + "without credentials, query, or fragment.");
+        if (IsInvalidUpdateEndpoint(update.HubEndpoint))
+            errors.Add("Hub:UpdateCheck:HubEndpoint must be an absolute HTTPS URL "
+                + "without credentials, query, or fragment.");
+    }
+
+    private static bool IsInvalidUpdateEndpoint(Uri? endpoint) =>
+        endpoint is null ||
+        !endpoint.IsAbsoluteUri ||
+        endpoint.Scheme != Uri.UriSchemeHttps ||
+        !string.IsNullOrEmpty(endpoint.UserInfo) ||
+        !string.IsNullOrEmpty(endpoint.Query) ||
+        !string.IsNullOrEmpty(endpoint.Fragment);
 
     private static void ValidateSource(SourceOptions source, HashSet<string> ids, List<string> errors)
     {

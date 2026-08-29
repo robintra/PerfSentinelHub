@@ -306,3 +306,22 @@ test("setting an environment variable is written the way each shell writes it", 
   // An unknown shell is the POSIX one, as everywhere else.
   assert.match(PSL.exportLine("nonsense", "V", "x"), /^export V=/);
 });
+
+test("updateState only speaks when both versions are known and one is older", () => {
+  // Nothing to say, and the three silences are different situations.
+  assert.equal(PSL.updateState(null, "0.17.0"), null, "no version running");
+  assert.equal(PSL.updateState("0.16.0", null), null, "check off or not run yet");
+  assert.equal(PSL.updateState("0.17.0", "0.17.0"), null, "current");
+  // A build ahead of the newest release is a pre-release, not a downgrade.
+  assert.equal(PSL.updateState("0.18.0", "0.17.0"), null, "ahead");
+
+  assert.deepEqual(PSL.updateState("0.16.0", "0.17.0"), { latest: "0.17.0", gap: 1 });
+  assert.deepEqual(PSL.updateState("0.14.2", "0.17.0"), { latest: "0.17.0", gap: 3 });
+  // The Hub's own version has a fourth segment that never carries meaning.
+  assert.equal(PSL.updateState("0.1.0.0", "0.1.0"), null, "four segments, same release");
+  assert.deepEqual(PSL.updateState("0.1.0.0", "0.2.0"), { latest: "0.2.0", gap: 1 });
+});
+
+test("hubReleaseUrl lands on the list, which exists before any release does", () => {
+  assert.equal(PSL.hubReleaseUrl(), "https://github.com/robintra/PerfSentinelHub/releases");
+});

@@ -63,6 +63,13 @@ builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandle
     AllowAutoRedirect = false,
     UseCookies = false
 });
+// Its own client, not the one the sources share: this destination is not a
+// source, and keeping them apart is what lets the handler above stay described
+// as "how the Hub talks to a daemon".
+builder.Services.AddHttpClient(UpdateChecker.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
+    new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All, UseCookies = false });
+builder.Services.AddSingleton<UpdateChecker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateChecker>());
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddHostedService<RetentionWorker>();

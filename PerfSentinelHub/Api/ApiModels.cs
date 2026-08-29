@@ -7,6 +7,11 @@ public sealed record StatusResponse(
     // which is the whole truth the Hub has: it never verifies the claim.
     string? Identity,
     string? EngineVersion,
+    // The newest published release of each product, or null when the check is
+    // off, has not run yet, could not reach GitHub, or found no release at all.
+    // The Hub states them and lets the page decide what they mean.
+    string? LatestEngineVersion,
+    string? LatestHubVersion,
     int QueueDepth,
     int Workers,
     StatusLimits Limits,

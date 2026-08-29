@@ -1079,7 +1079,8 @@ body[data-screen="report"] .shell-footer { display: none; }
 }
 /* The same caret as the advanced panel's summary, so the product has one
    disclosure shape rather than two. */
-.row-toggle::before {
+.row-toggle::before,
+.settings-more::before {
   content: "";
   width: 7px;
   height: 7px;
@@ -1089,59 +1090,132 @@ body[data-screen="report"] .shell-footer { display: none; }
   transform: rotate(-45deg);
   transition: transform .15s ease;
 }
-.row-toggle[aria-expanded="true"]::before { transform: rotate(45deg); }
+.row-toggle[aria-expanded="true"]::before,
+.settings-more[aria-expanded="true"]::before { transform: rotate(45deg); }
 .row-toggle:hover { color: var(--brand-text); }
 .row-toggle:hover::before { border-color: var(--brand-text); }
 
 /* Never tinted by tr[data-unreachable]: an unreachable daemon's panel is an
    error banner already, and a red field behind it would say it twice. */
-.daemon-detail > td { padding: 4px 18px 22px; background: var(--surface); }
-.daemon-panel { display: flex; flex-direction: column; gap: 18px; max-width: 88ch; }
-.daemon-lead { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.daemon-detail > td { padding: 6px 18px 24px; background: var(--surface); }
+/* No prose max-width here. This is a data panel, and the dashboard caps its
+   own at 1240px rather than at a line length. */
+.daemon-panel { display: flex; flex-direction: column; gap: 16px; max-width: 1240px; }
+.daemon-lead { margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-3); max-width: 78ch; }
 .daemon-loading { margin: 0 0 10px; font-size: 12px; color: var(--text-3); }
-.daemon-state .counts { margin-bottom: 12px; }
-/* .counts paints its own grid from currentColor, which only resolves to a tone
-   inside .outcome. Here it borrows the plain border instead. */
-.daemon-state .counts, .daemon-hints .counts {
-  border-color: var(--border);
-  background: var(--border);
+
+.daemon-verdict-row { margin-bottom: 12px; }
+.daemon-verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
 }
-.daemon-hints .outcome-warning:last-child { margin-bottom: 0; }
+.daemon-verdict[data-tone="ok"] { background: var(--ok-bg); color: var(--ok-fg); }
+.daemon-verdict[data-tone="warn"] { background: var(--warn-bg); color: var(--warn-fg); }
+.daemon-verdict[data-tone="muted"] { background: var(--surface-3); color: var(--text-3); }
+
+/* The dashboard's Overview split. Gauges are wide, hints are a column of
+   sentences, and putting them side by side is what keeps the fold to a screen. */
+.daemon-top { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
+.daemon-top .counts { margin-bottom: 0; border-color: var(--border); background: var(--border); }
+.daemon-top .outcome-warning:last-child { margin-bottom: 0; }
 .outcome-warning-kind[data-tone="crit"] { background: var(--crit-bg); color: var(--crit-fg); }
 .outcome-warning-kind[data-tone="info"] { background: var(--info-bg); color: var(--info-fg); }
 .outcome-warning-kind[data-tone="muted"] { background: var(--surface-3); color: var(--text-3); }
+@media (max-width: 1180px) {
+  .daemon-top { grid-template-columns: 1fr; gap: 18px; }
+}
 
-.settings-rows { display: flex; flex-direction: column; gap: 0; margin: 0; }
+/* ------------------------------------------------ the settings, one click in */
+
+.settings-block { border-top: 1px solid var(--border); padding-top: 14px; }
+.settings-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand-text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.settings-more:hover::before { border-color: var(--brand-text); }
+/* Reflows to the width instead of running down one column: 44 settings in a
+   single stack is the reason this panel was three screens tall. */
+.settings-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 12px;
+  align-items: start;
+  margin-top: 14px;
+}
+.settings-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  padding: 13px 15px 14px;
+}
+.settings-rows { margin: 0; }
 .setting {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 16px;
-  padding: 9px 0;
+  gap: 1px 14px;
+  padding: 8px 0;
   border-top: 1px solid var(--border);
 }
+.settings-card .sink-head + .settings-rows .setting { border-top: 0; }
 .setting-k {
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11.5px;
   color: var(--text);
   overflow-wrap: anywhere;
 }
 .setting-v {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--text-2);
   text-align: right;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
+/* Same colour the daemon's own monitor uses for a value that departs from the
+   engine default, so the two surfaces read the same way. */
+.setting-v[data-changed="true"] { color: var(--warn-fg); }
+.setting-default {
+  grid-column: 2;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  /* --text-2 and not the --text-3 the glosses use: this is a value to read
+     against the one above it, and --text-3 lands at 3.97 on this surface. */
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .setting-v .chip-declared { font-family: var(--font-ui); }
 .setting-note {
   grid-column: 1 / -1;
-  margin: 2px 0 0;
-  font-size: 11.5px;
-  line-height: 1.55;
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
   color: var(--text-3);
-  max-width: 74ch;
 }
+.daemon-source-note { margin: 0; font-size: 12px; color: var(--text-3); }
+.settings-preamble {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  max-width: 86ch;
+}
+.settings-preamble-skew { color: var(--warn-fg); }
+.setting-v[data-changed="true"] .chip-declared { border-color: var(--warn-bd); color: var(--warn-fg); }

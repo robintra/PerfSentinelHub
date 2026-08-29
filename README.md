@@ -168,7 +168,11 @@ while its daemon pushes successfully.
   `scoring_config` and `energy_model` come from the daemon's export instead, where `/api/config`
   does not carry them. `warnings` is the daemon's own tuning advisor verbatim: the Hub relays
   those sentences and writes none of its own. The only thing it derives is `state`, from whether
-  a gauge crossed 90 % of its cap, the same line the daemon's own monitor draws.
+  a gauge crossed 90 % of its cap, the same line the daemon's own monitor draws. It also carries
+  `daemon_defaults`, `detection_defaults` and `defaults_engine_version`, so a reader can mark what
+  a daemon actually changed. Those defaults are the ones of the binary this Hub embeds, exactly as
+  the engine's own `query monitor` compares against the binary running it, so the version is named
+  rather than assumed and a daemon on another minor is flagged instead of judged.
 
 Responses preserve each daemon finding as an opaque, additive JSON document and add durable
 `first_seen`, `last_seen`, `max_confidence`, `status`, optional `lineage`, and source freshness

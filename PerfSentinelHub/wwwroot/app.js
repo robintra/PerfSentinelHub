@@ -39,6 +39,7 @@
     // across a render so a rebuilt table comes back the way it was left.
     daemonOpen: {},
     daemonViews: {},
+    daemonSettingsOpen: {},
     form: {
       sourceId: null,
       mode: "service",
@@ -679,15 +680,20 @@
   };
 
   /**
-   * The sentence for one setting, or none. Detection thresholds fall through to
-   * the launcher's own knob copy: it is the same setting seen from the other
-   * side, and writing it twice would let the two drift.
+   * The export serialises four thresholds under different names than the file
+   * keys the launcher's knobs carry. The same settings seen from the other
+   * side, so they take the same sentences rather than a second copy of them.
    */
+  const DETECT_ALIAS = {
+    n_plus_one_threshold: "n_plus_one_min_occurrences",
+    window_ms: "window_duration_ms",
+    slow_threshold_ms: "slow_query_threshold_ms",
+    slow_min_occurrences: "slow_query_min_occurrences"
+  };
+
+  /** The sentence for one setting, or none. */
   function settingCopy(name) {
-    // The engine serialises this one under a different name than the file key
-    // the knob carries. Same setting, same sentence.
-    if (name === "n_plus_one_threshold") return DETECTION_COPY.n_plus_one_min_occurrences;
-    return DAEMON_COPY[name] || DETECTION_COPY[name] || null;
+    return DAEMON_COPY[name] || DETECTION_COPY[DETECT_ALIAS[name] || name] || null;
   }
 
   /**
@@ -750,41 +756,35 @@
     if (view === "loading" || view === undefined) {
       return el("div", { class: "daemon-panel" }, [
         el("p", { class: "daemon-loading", role: "status", text: "Reading " + source.name + "." }),
-        el("div", { class: "skeleton", style: "height:180px" })
+        el("div", { class: "skeleton", style: "height:150px" })
       ]);
     }
     if (view.error_code) return daemonError(view.error_code);
 
-    const panel = el("div", { class: "daemon-panel" }, [
+    return el("div", { class: "daemon-panel" }, [
       el("p", {
-        class: "daemon-lead",
-        text: "Everything below is this daemon reporting on itself over its query API. The Hub "
-          + "relays it and verifies none of it. It covers the [daemon] and [detection] sections "
-          + "of that process's configuration, and the scoring half of [green]. The gate "
-          + "thresholds under [thresholds] are not published as a section, so a value you set "
-          + "there is real and simply not visible from this screen."
+        class: "daemon-source-note",
+        text: "Reported by this daemon over its query API. The Hub relays it and verifies none of it."
       }),
-      daemonStateBlock(view),
-      daemonHintsBlock(view)
+      daemonTopRow(view),
+      terminalBlock({
+        head: "// the same view in your terminal",
+        sub: "Live, and refreshed on an interval.",
+        text: PSL.monitorCommand(source),
+        copyLabel: "Copy the monitor command for " + source.name,
+        notes: [
+          "The same settings, re-read every 5 seconds, alongside the energy and carbon breakdown "
+            + "this screen only summarises. Add --refresh followed by a number of seconds to "
+            + "change the interval.",
+          source.auth_header_name
+            ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
+              + "query monitor takes no such flag, so this command works only from somewhere that "
+              + "can reach the daemon directly."
+            : null
+        ]
+      }),
+      settingsDisclosure(source, view)
     ]);
-    daemonSettingsBlocks(view).forEach(function (node) { panel.appendChild(node); });
-    panel.appendChild(terminalBlock({
-      head: "// the same view in your terminal",
-      sub: "Live, and refreshed on an interval.",
-      text: PSL.monitorCommand(source),
-      copyLabel: "Copy the monitor command for " + source.name,
-      notes: [
-        "The same settings, re-read every 5 seconds, alongside the energy and carbon breakdown "
-          + "this screen only summarises. Add --refresh followed by a number of seconds to "
-          + "change the interval.",
-        source.auth_header_name
-          ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
-            + "query monitor takes no such flag, so this command works only from somewhere that "
-            + "can reach the daemon directly."
-          : null
-      ]
-    }));
-    return panel;
   }
 
   function daemonError(code) {
@@ -809,36 +809,76 @@
     ]);
   }
 
+  const DAEMON_VERDICT = {
+    ok: ["nominal", "ok"],
+    near_capacity: ["near capacity", "warn"],
+    advised: ["advised", "warn"],
+    unknown: ["not measurable", "muted"]
+  };
+
   /**
-   * Figures against their caps, and no bar. The only bar in the product belongs
-   * to a running job, and drawing one here would be a judgement: a bar at 88 %
-   * says "watch out" where the daemon has said nothing. The pair states the
-   * fact, and the daemon says below whether it is one.
+   * What the fold opens on: the verdict, the gauges, and the daemon's own
+   * hints beside them rather than under them. The settings are the long part
+   * and stay behind one more click.
    */
-  function daemonStateBlock(view) {
-    const cells = [
-      [gaugeText(view.traces), "active traces"],
-      [gaugeText(view.analysis_queue), "analysis queue"],
-      [gaugeText(view.findings), "findings stored"],
-      [view.uptime_seconds == null ? "unknown" : PSL.dur(view.uptime_seconds * 1000), "uptime"]
-    ];
-    return el("div", { class: "daemon-state" }, [
+  function daemonTopRow(view) {
+    const verdict = DAEMON_VERDICT[view.state] || DAEMON_VERDICT.unknown;
+    const main = el("div", { class: "daemon-top-main" }, [
       el("div", { class: "sink-head" }, [
         titledOverline("// right now", "The Hub asks the daemon when you open this row, and not "
           + "again. These are the figures at that instant, not a live feed."),
         el("span", {
           class: "sink-sub",
-          text: "Read " + PSL.dur(Date.now() - view.observed_at_ms) + " ago. Each figure is shown "
-            + "against the cap it runs into, and neither is coloured."
+          text: "Read " + PSL.dur(Date.now() - view.observed_at_ms) + " ago."
         })
       ]),
-      countStrip(cells),
+      countStrip([
+        [gaugeText(view.traces), "active traces"],
+        [gaugeText(view.analysis_queue), "analysis queue"],
+        [gaugeText(view.findings), "findings stored"],
+        [view.uptime_seconds == null ? "unknown" : PSL.dur(view.uptime_seconds * 1000), "uptime"]
+      ]),
       el("p", {
         class: "daemon-lead",
-        text: "A figure near its cap is not a problem by itself, and this screen does not decide "
-          + "that it is. The daemon does, from counters the Hub cannot see, and it says so below "
-          + "when it applies."
+        text: "Each figure is shown against the cap it runs into. Being near one is not a problem "
+          + "by itself, and this screen does not decide that it is: the daemon does, from counters "
+          + "the Hub cannot see."
       })
+    ]);
+
+    const side = el("div", { class: "daemon-top-side" }, [
+      el("div", { class: "sink-head" }, [
+        titledOverline("// what the daemon recommends", "These come from counters inside the "
+          + "daemon that no report and no dashboard carries. The Hub relays the sentences and "
+          + "writes none of its own."),
+        el("span", { class: "sink-sub", text: "Written by the daemon, not by the Hub." })
+      ])
+    ]);
+    if (view.warnings.length === 0) {
+      side.appendChild(el("p", {
+        class: "daemon-lead",
+        text: "Nothing. The daemon emits a hint when its own counters show a setting is undersized "
+          + "for the load it is taking. Silence here means those counters were clean at the "
+          + "instant it was read, not that the settings are right."
+      }));
+    } else {
+      view.warnings.forEach(function (hint) {
+        side.appendChild(el("div", { class: "outcome-warning" }, [
+          el("span", {
+            class: "outcome-warning-kind",
+            "data-tone": DAEMON_HINT_TONE[hint.kind] || "muted",
+            text: hint.kind
+          }),
+          el("span", { class: "outcome-warning-message", text: hint.message })
+        ]));
+      });
+    }
+
+    return el("div", {}, [
+      el("div", { class: "daemon-verdict-row" }, [
+        el("span", { class: "daemon-verdict", "data-tone": verdict[1], text: verdict[0] })
+      ]),
+      el("div", { class: "daemon-top" }, [main, side])
     ]);
   }
 
@@ -848,108 +888,144 @@
     return group(gauge.value) + " / " + group(gauge.capacity);
   }
 
-  function daemonHintsBlock(view) {
-    const block = el("div", { class: "daemon-hints" }, [
-      el("div", { class: "sink-head" }, [
-        titledOverline("// what the daemon recommends", "These come from counters inside the "
-          + "daemon that no report and no dashboard carries. The Hub relays the sentences and "
-          + "writes none of its own."),
-        el("span", {
-          class: "sink-sub",
-          text: "Written by the daemon from its own metrics. The Hub adds none of its own."
-        })
-      ])
-    ]);
-    if (view.warnings.length === 0) {
-      block.appendChild(el("p", {
-        class: "daemon-lead",
-        text: "Nothing. The daemon emits a hint when its own counters show a setting is undersized "
-          + "for the load it is taking. Silence here means those counters were clean at the "
-          + "instant it was read, not that the settings are right."
-      }));
-      return block;
-    }
-    view.warnings.forEach(function (hint) {
-      block.appendChild(el("div", { class: "outcome-warning" }, [
-        el("span", {
-          class: "outcome-warning-kind",
-          "data-tone": DAEMON_HINT_TONE[hint.kind] || "muted",
-          text: hint.kind
-        }),
-        el("span", { class: "outcome-warning-message", text: hint.message })
-      ]));
+  /**
+   * The settings, behind one click. They are the long part of the view and the
+   * least urgent: an operator opens this row to see whether the daemon is
+   * coping, and reads the settings once it is not.
+   */
+  function settingsDisclosure(source, view) {
+    const open = state.daemonSettingsOpen[source.id] === true;
+    const count = view.config ? Object.keys(view.config).length : 0;
+    const cards = el("div", { class: "settings-cards" });
+    cards.hidden = !open;
+    settingsCards(view).forEach(function (node) { cards.appendChild(node); });
+
+    const button = el("button", {
+      type: "button",
+      class: "settings-more",
+      "aria-expanded": open ? "true" : "false"
+    }, [el("span", {
+      text: count > 0
+        ? "The " + count + " applied settings, and what this daemon changed"
+        : "What this daemon detects with"
+    })]);
+    button.addEventListener("click", function () {
+      const next = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", next ? "true" : "false");
+      state.daemonSettingsOpen[source.id] = next;
+      cards.hidden = !next;
     });
-    return block;
+    return el("div", { class: "settings-block" }, [button, cards]);
   }
 
-  function daemonSettingsBlocks(view) {
-    const blocks = [];
+  function settingsCards(view) {
+    const cards = [];
+    if (view.config) cards.push(settingsPreamble(view));
     if (!view.config) {
-      blocks.push(el("p", {
+      cards.push(el("p", {
         class: "daemon-lead",
         text: view.config_unavailable_reason === "api_disabled"
-          ? "This daemon does not serve its configuration: api_enabled is off in its own "
-            + "[daemon] section. Everything above came from the export instead."
-          : "This daemon did not answer for its configuration, so none is shown rather than a "
-            + "copy from some earlier moment."
+          ? "This daemon does not serve its configuration: api_enabled is off in its own [daemon] "
+            + "section. Everything above came from the export instead."
+          : "This daemon did not answer for its configuration, so none is shown rather than a copy "
+            + "from some earlier moment."
       }));
     } else {
-      blocks.push(el("p", {
-        class: "daemon-lead",
-        text: "The daemon's own monitor marks in yellow every setting that differs from the "
-          + "engine's default. The Hub cannot: it never sees a default, only the value this "
-          + "daemon is running. Nothing below is highlighted, and nothing below is wrong for not "
-          + "being."
-      }));
       DAEMON_GROUPS.forEach(function (spec) {
         const present = spec[2].filter(function (name) { return view.config[name] !== undefined; });
-        if (present.length > 0) blocks.push(settingsGroup(spec[0], spec[1], present, view.config));
+        if (present.length > 0) {
+          cards.push(settingsCard(spec[0], spec[1], present, view.config, view.daemon_defaults));
+        }
       });
     }
     if (view.detection_config) {
-      blocks.push(settingsGroup(
+      cards.push(settingsCard(
         "// detection thresholds",
         "What counts as a problem. The same knobs the launcher lets a run override on a backend.",
         Object.keys(view.detection_config),
-        view.detection_config));
+        view.detection_config,
+        view.detection_defaults));
     }
     if (view.scoring_config || view.energy_model) {
       const scoring = Object.assign({}, view.scoring_config || {});
       if (view.energy_model) scoring.energy_model = view.energy_model;
-      blocks.push(settingsGroup(
+      cards.push(settingsCard(
         "// carbon scoring",
         "Where the energy figures come from, not what they are.",
         Object.keys(scoring),
-        scoring));
+        scoring,
+        null));
     }
-    return blocks;
+    return cards;
   }
 
-  function settingsGroup(head, sub, names, config) {
-    return el("div", { class: "settings-group" }, [
+  /**
+   * What the marking means, and what it is worth. The defaults belong to the
+   * binary this Hub embeds, which is the same approximation the daemon's own
+   * monitor makes against the binary running it, so the version is named
+   * rather than assumed away.
+   */
+  function settingsPreamble(view) {
+    const note = el("p", { class: "settings-preamble" }, [
+      el("span", { text: "A value this daemon changed is marked, with the engine's default beside "
+        + "it. Compared against perf-sentinel " }),
+      el("span", { class: "code-inline", text: view.defaults_engine_version }),
+      el("span", { text: ", the binary this Hub embeds. It covers the [daemon] and [detection] "
+        + "sections and the scoring half of [green]. The gate thresholds under [thresholds] are "
+        + "not published as a section, so a value set there is real and simply not visible here." })
+    ]);
+    if (view.version && view.version !== view.defaults_engine_version) {
+      note.appendChild(el("span", {
+        class: "settings-preamble-skew",
+        text: " This daemon runs " + view.version + ", so a default could have moved between the "
+          + "two and a value marked as changed may only be a different default."
+      }));
+    }
+    return note;
+  }
+
+  function settingsCard(head, sub, names, config, defaults) {
+    const card = el("section", { class: "settings-card" }, [
       el("div", { class: "sink-head" }, [
         el("span", { class: "overline", text: head }),
         el("span", { class: "sink-sub", text: sub })
-      ]),
-      el("dl", { class: "settings-rows" }, names.map(function (name) {
-        const row = el("div", { class: "setting" }, [
-          el("dt", { class: "setting-k", text: name }),
-          settingValue(name, config[name])
-        ]);
-        const copy = settingCopy(name);
-        if (copy) row.appendChild(el("dd", { class: "setting-note", text: copy }));
-        return row;
-      }))
+      ])
     ]);
+    names.forEach(function (name) {
+      card.appendChild(settingRow(name, config[name], defaults));
+    });
+    return card;
   }
 
-  function settingValue(name, value) {
+  function settingRow(name, value, defaults) {
+    const fallback = defaults ? defaults[name] : undefined;
+    const changed = fallback !== undefined && JSON.stringify(value) !== JSON.stringify(fallback);
+    const row = el("div", { class: "setting" }, [
+      el("dt", { class: "setting-k", text: name }),
+      settingValue(name, value, changed)
+    ]);
+    if (changed) {
+      row.appendChild(el("dd", {
+        class: "setting-default",
+        text: "default " + daemonValue(name, fallback)
+      }));
+    }
+    const copy = settingCopy(name);
+    if (copy) row.appendChild(el("dd", { class: "setting-note", text: copy }));
+    return el("dl", { class: "settings-rows" }, [row]);
+  }
+
+  function settingValue(name, value, changed) {
     if (name === "environment") {
-      return el("dd", { class: "setting-v" }, [
+      return el("dd", { class: "setting-v", "data-changed": changed ? "true" : null }, [
         el("span", { class: "chip chip-declared", text: String(value) })
       ]);
     }
-    return el("dd", { class: "setting-v", text: daemonValue(name, value) });
+    return el("dd", {
+      class: "setting-v",
+      "data-changed": changed ? "true" : null,
+      text: daemonValue(name, value)
+    });
   }
 
   function daemonValue(name, value) {
@@ -984,6 +1060,7 @@
     if (value > 0 && pct < 0.1) return String(value);
     return (Math.round(pct * 10) / 10) + " %";
   }
+
 
   // ---------------------------------------------------- screen: new analysis
 

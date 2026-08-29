@@ -41,6 +41,10 @@
     daemonViews: {},
     daemonSettingsOpen: {},
     daemonGroupOpen: {},
+    // Poll interval per source in ms, 0 for off, and the one-second ticker
+    // that drives both the countdown and the fetch.
+    daemonRefreshMs: {},
+    daemonTickers: {},
     form: {
       sourceId: null,
       mode: "service",
@@ -235,6 +239,8 @@
   function render() {
     // A tip whose anchor is about to be replaced would never see its mouseleave.
     closeTip();
+    // Same for the daemon tickers: they write into nodes this render replaces.
+    stopAllTickers();
     state.screen = currentScreen();
     Array.prototype.forEach.call(document.querySelectorAll(".shell-tab"), function (tab) {
       if (tab.getAttribute("data-screen") === state.screen) tab.setAttribute("aria-current", "page");
@@ -550,7 +556,7 @@
     const cell = el("td", {
       id: "daemon-detail-" + index,
       colspan: String(SOURCE_COLUMNS.length)
-    }, [daemonPanel(source)]);
+    }, [daemonPanel(source, index)]);
     const detail = el("tr", { class: "daemon-detail" }, [cell]);
     detail.hidden = state.daemonOpen[source.id] !== true;
     return [row, detail];
@@ -760,10 +766,12 @@
     const cell = document.getElementById("daemon-detail-" + index);
     if (!cell) return;
     cell.parentNode.hidden = !open;
-    if (!open || state.daemonViews[source.id] !== undefined) return;
+    // A folded row is not being read, so it stops costing the daemon anything.
+    if (!open) { stopTicker(source.id); return; }
+    if (state.daemonViews[source.id] !== undefined) { startTicker(source, index); return; }
 
     state.daemonViews[source.id] = "loading";
-    cell.replaceChildren(daemonPanel(source));
+    cell.replaceChildren(daemonPanel(source, index));
     getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
       .then(function (view) { state.daemonViews[source.id] = view; })
       .catch(function () { state.daemonViews[source.id] = { error_code: "internal" }; })
@@ -771,11 +779,12 @@
         // The table may have been rebuilt while this was in flight, so the
         // cell is found again rather than kept in a closure.
         const target = document.getElementById("daemon-detail-" + index);
-        if (target) target.replaceChildren(daemonPanel(source));
+        if (target) target.replaceChildren(daemonPanel(source, index));
+        startTicker(source, index);
       });
   }
 
-  function daemonPanel(source) {
+  function daemonPanel(source, index) {
     const view = state.daemonViews[source.id];
     if (view === "loading" || view === undefined) {
       return el("div", { class: "daemon-panel" }, [
@@ -790,17 +799,16 @@
         class: "daemon-source-note",
         text: "Reported by this daemon over its query API. The Hub relays it and verifies none of it."
       }),
-      daemonTopRow(view),
+      el("div", { id: "daemon-top-" + index }, [daemonTopRow(source, view, index)]),
       terminalBlock({
         head: "// the same view in your terminal",
-        sub: "Live, which this screen is not.",
+        sub: "The same figures, plus the tabs this screen leaves out.",
         text: PSL.monitorCommand(source),
         copyLabel: "Copy the monitor command for " + source.name,
         notes: [
-          "This screen read the daemon once, when the row was opened, and does not poll it. "
-            + "`query monitor` re-reads it every 5 seconds instead, and carries the energy and "
-            + "carbon breakdown this screen only summarises. Add `--refresh` followed by a number "
-            + "of seconds to change that interval.",
+          "`query monitor` re-reads the same figures on its own interval, the one `--refresh` "
+            + "sets, and carries the energy and carbon breakdown this screen only summarises. "
+            + "This row re-reads too, on the interval beside the gauges above.",
           source.auth_header_name
             ? "The Hub reaches this daemon with an auth header it holds and does not disclose. "
               + "`query monitor` takes no such flag, so this command works only from somewhere "
@@ -846,16 +854,14 @@
    * hints beside them rather than under them. The settings are the long part
    * and stay behind one more click.
    */
-  function daemonTopRow(view) {
+  function daemonTopRow(source, view, index) {
     const verdict = DAEMON_VERDICT[view.state] || DAEMON_VERDICT.unknown;
     const main = el("div", { class: "daemon-top-main" }, [
       el("div", { class: "sink-head" }, [
-        titledOverline("// right now", "The Hub asks the daemon when you open this row, and not "
-          + "again. These are the figures at that instant, not a live feed."),
-        el("span", {
-          class: "sink-sub",
-          text: "Read " + PSL.dur(Date.now() - view.observed_at_ms) + " ago."
-        })
+        titledOverline("// right now", "Read from the daemon on the interval beside it. Each "
+          + "read is one request to this Hub and three from it to the daemon, so the interval is "
+          + "a cost as much as a freshness setting."),
+        refreshControl(source, view, index)
       ]),
       countStrip([
         [gaugeText(view.traces), "active traces"],
@@ -905,6 +911,121 @@
       ]),
       el("div", { class: "daemon-top" }, [main, side])
     ]);
+  }
+
+  /**
+   * How often this row re-reads the daemon, and how long until it does.
+   *
+   * The same knob `query monitor --refresh` carries, with an off position the
+   * command does not have: a terminal session is opened to watch, a table row
+   * is often opened just to read a setting once.
+   */
+  const REFRESH_CHOICES = [[0, "off"], [5000, "5 s"], [10000, "10 s"], [30000, "30 s"], [60000, "60 s"]];
+  const DEFAULT_REFRESH_MS = 5000;
+
+  function refreshMs(sourceId) {
+    const chosen = state.daemonRefreshMs[sourceId];
+    return chosen === undefined ? DEFAULT_REFRESH_MS : chosen;
+  }
+
+  function refreshControl(source, view, index) {
+    const ms = refreshMs(source.id);
+    const select = el("select", { class: "refresh-select", "aria-label": "Re-read interval" });
+    REFRESH_CHOICES.forEach(function (choice) {
+      const option = el("option", { value: String(choice[0]), text: choice[1] });
+      if (choice[0] === ms) option.selected = true;
+      select.appendChild(option);
+    });
+    select.addEventListener("change", function () {
+      state.daemonRefreshMs[source.id] = Number(select.value);
+      startTicker(source, index);
+    });
+
+    // The bar is decoration, the sentence is the information: under reduced
+    // motion the bar stops moving and the countdown still counts.
+    const bar = el("div", { class: "refresh-bar", "aria-hidden": "true" }, [el("i")]);
+    return el("div", { class: "refresh" }, [
+      el("span", { class: "sink-sub refresh-read", id: "refresh-read-" + index }),
+      el("span", { class: "refresh-next", id: "refresh-next-" + index, role: "status" }),
+      bar,
+      el("span", { class: "refresh-label", text: "every" }),
+      select
+    ]);
+  }
+
+  /**
+   * One second, one job: it writes the countdown and fires the read when the
+   * time is up. Deriving the deadline from the last read rather than counting
+   * down a variable means a slow tab cannot make the interval drift.
+   */
+  function startTicker(source, index) {
+    stopTicker(source.id);
+    tickRefresh(source, index);
+    if (!refreshMs(source.id)) return;
+    state.daemonTickers[source.id] = setInterval(function () {
+      tickRefresh(source, index);
+    }, 1000);
+  }
+
+  function stopTicker(sourceId) {
+    clearInterval(state.daemonTickers[sourceId]);
+    delete state.daemonTickers[sourceId];
+  }
+
+  function stopAllTickers() {
+    Object.keys(state.daemonTickers).forEach(stopTicker);
+  }
+
+  function tickRefresh(source, index) {
+    const read = document.getElementById("refresh-read-" + index);
+    const next = document.getElementById("refresh-next-" + index);
+    if (!read || !next) { stopTicker(source.id); return; }
+
+    const view = state.daemonViews[source.id];
+    const readAt = view && view.observed_at_ms ? view.observed_at_ms : Date.now();
+    read.textContent = "Read " + PSL.dur(Date.now() - readAt) + " ago.";
+
+    const ms = refreshMs(source.id);
+    const bar = next.parentNode.querySelector(".refresh-bar > i");
+    if (!ms) {
+      next.textContent = "Not re-reading.";
+      if (bar) bar.style.width = "0%";
+      return;
+    }
+    const left = Math.max(0, readAt + ms - Date.now());
+    next.textContent = "Next in " + Math.ceil(left / 1000) + " s.";
+    if (bar) bar.style.width = (100 - (left / ms) * 100).toFixed(1) + "%";
+    if (left <= 0) refreshDaemon(source, index);
+  }
+
+  /**
+   * Re-reads and replaces the state block only. A daemon's settings do not
+   * change without a restart, so rebuilding those every few seconds would
+   * throw away the reader's open groups and their focus for nothing.
+   */
+  function refreshDaemon(source, index) {
+    if (state.daemonViews[source.id] === "refreshing") return;
+    const previous = state.daemonViews[source.id];
+    state.daemonViews[source.id] = "refreshing";
+    getJson("/api/sources/" + encodeURIComponent(source.id) + "/daemon")
+      .then(function (view) { state.daemonViews[source.id] = view; })
+      .catch(function () {
+        // Keep the last good reading rather than blanking the panel, and let
+        // its age say how stale it now is.
+        state.daemonViews[source.id] = previous;
+      })
+      .finally(function () {
+        const host = document.getElementById("daemon-top-" + index);
+        const view = state.daemonViews[source.id];
+        if (!host || !view || typeof view === "string") return;
+        if (view.error_code) {
+          const cell = document.getElementById("daemon-detail-" + index);
+          if (cell) cell.replaceChildren(daemonPanel(source, index));
+          return;
+        }
+        host.replaceChildren(daemonTopRow(source, view, index));
+        tickRefresh(source, index);
+      });
   }
 
   function gaugeText(gauge) {

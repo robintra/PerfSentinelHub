@@ -280,9 +280,14 @@ so a run that changed one carries `-c .perf-sentinel.toml` and the file is print
 command. An authenticated source prints `--auth-header-env` rather than its token, which the Hub
 holds and never discloses.
 
-On the fleet health screen, a daemon's row unfolds into the settings it is running with, the
-gauges it reports against their caps, and the hints it writes about its own tuning, none of which
-`/metrics` carries. It ends with the `perf-sentinel query monitor` command for the same view live.
+On the fleet health screen, a daemon's row unfolds into the gauges it reports against their caps
+and the hints it writes about its own tuning, neither of which `/metrics` carries. The row re-reads
+on an interval the reader picks, the same knob `query monitor --refresh` carries plus an off
+position, and a read replaces only the gauges and the hints: settings do not change without a
+restart, so rebuilding them would throw away open groups for nothing. Folding the row stops the
+reads. The settings themselves are one click further in, grouped and folded, each group showing how
+many of its values depart from the engine's own defaults. It ends with the
+`perf-sentinel query monitor` command for the same view in a terminal.
 
 The theme is tri-state (system, light, dark). Only the resolved light or dark ever reaches the DOM,
 so stylesheets see two values and never three. The position is stored under `perf-sentinel:theme`

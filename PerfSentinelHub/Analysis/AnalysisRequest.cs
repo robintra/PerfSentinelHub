@@ -12,19 +12,22 @@ namespace PerfSentinelHub.Analysis;
 /// </summary>
 public sealed record AnalysisRequest
 {
-    public string? Service { get; init; }
-    public string? TraceId { get; init; }
-    public string? Lookback { get; init; }
-    public long? FromMs { get; init; }
-    public long? ToMs { get; init; }
-    public int? MaxTraces { get; init; }
+    // What the operator asked for, read only by the checks and the argument
+    // builder below. Nothing outside needs a field of the request: callers take
+    // the whole thing and ask it for a command line.
+    private string? Service { get; init; }
+    private string? TraceId { get; init; }
+    private string? Lookback { get; init; }
+    private long? FromMs { get; init; }
+    private long? ToMs { get; init; }
+    private int? MaxTraces { get; init; }
 
     /// <summary>
     /// Thresholds the operator moved for this run. Never set on a daemon: a
     /// daemon detects with its own configuration and the Hub only reads what it
     /// already found, so a threshold sent here would change nothing.
     /// </summary>
-    public DetectionOverrides Detection { get; init; } = new();
+    public DetectionOverrides Detection { get; private init; } = new();
 
     private const int MaxServiceLength = 256;
     private const int MaxTraceIdLength = 64;

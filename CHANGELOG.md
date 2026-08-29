@@ -26,6 +26,9 @@ All notable changes to PerfSentinelHub are recorded here.
   and 3.50 against `--surface-3`, under the 4.5 WCAG AA asks of text this size. Measured on the
   rendered pages with translucent layers composited, every screen now passes in dark. The same
   value is corrected in the engine's dashboard template, which is where these tokens come from.
+- The launcher is checked against the real engine: a new `tests/launcher-e2e.test.js` writes the
+  generated config, runs the printed command, and asserts every threshold reaches the engine under
+  the name it calls it back. It skips itself where there is no engine build.
 - The generated config is named `perf-sentinel.toml`, without the leading dot, and the printed
   command names it with `-c`. A downloaded file may not keep a leading dot, so the dotted name
   the command used to ask for was one the reader could not count on having. Its caption now says

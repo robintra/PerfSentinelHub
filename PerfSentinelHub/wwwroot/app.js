@@ -1319,7 +1319,11 @@
   /**
    * Swaps a rebuilt block in, unless the reader is inside it: rebuilding would
    * close the interval select under their pointer. The next tick catches up.
-   * Returns whether the swap happened.
+   *
+   * @param {string} id the block to replace
+   * @param {() => Node} build called only when the swap is going ahead, since
+   *   building a row has side effects the discarded copy would swallow
+   * @returns {boolean} whether the swap happened
    */
   function replaceIfIdle(id, build) {
     const host = document.getElementById(id);

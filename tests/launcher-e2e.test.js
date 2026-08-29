@@ -25,6 +25,8 @@ const PSL = globalThis.PSL;
 const engineRepo = process.env.PERF_SENTINEL_REPO
   || path.join(os.homedir(), "RustroverProjects", "perf-sentinel");
 const engine = path.join(engineRepo, "target", "release", "perf-sentinel");
+// DetectionOverrides.Knobs holds eight, and three tests below count on it.
+const KNOB_COUNT = 8;
 // Six near-identical queries in one trace, which is one N+1 at the default
 // threshold of five and nothing at all above six.
 const fixture = path.join(engineRepo, "tests", "fixtures", "n_plus_one_sql.json");
@@ -125,7 +127,8 @@ test("every threshold the Hub can write reaches the engine under its own name", 
     // hold for a file the engine never read.
     assert.notEqual(untouched[engineName], value, key + " was written at its own default");
   });
-  assert.equal(Object.keys(written).length, 8, "DetectionOverrides.Knobs holds eight");
+  assert.equal(Object.keys(written).length, KNOB_COUNT,
+    "DetectionOverrides.Knobs holds " + KNOB_COUNT);
 });
 
 // ------------------------------------------------- the tables the JS copies
@@ -143,7 +146,7 @@ const analysisDir = path.join(__dirname, "..", "PerfSentinelHub", "Analysis");
 const overridesSource = path.join(analysisDir, "DetectionOverrides.cs");
 const defaultsSource = path.join(analysisDir, "DaemonDefaults.cs");
 const appSource = path.join(__dirname, "..", "PerfSentinelHub", "wwwroot", "app.js");
-const KNOB_COUNT = 8;
+
 const ALIAS_COUNT = 4;
 
 /** The body of one table, from its declaration to the first closer after it. */

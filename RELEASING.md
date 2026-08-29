@@ -22,9 +22,40 @@ Cosign bundles and GitHub attestations must use all of these values exactly:
 Any identity, repository, workflow, ref, source commit, subject, or digest mismatch blocks the
 release.
 
+## Lab validation gate
+
+No version is tagged without a recent PASS from the simulation lab. The lab runs the Hub image
+against a real daemon through `hub-ingestion`, `hub-derived-status`, `hub-lineage-mutation`,
+`hub-retention-purge`, `hub-source-reachability` and `hub-plugin-contract`, which is coverage no
+unit or integration test in this repository reaches: they exercise ingestion, polling, the derived
+status, the lineage columns and the plugin's envelope contract against a daemon that really
+produced the findings.
+
+The gate is operator-driven by design. CI cannot reproduce a lab run, which needs a Kubernetes
+cluster, a workload fleet and an image built from the commit under test.
+
+1. In the perf-sentinel-simulation-lab checkout, seed the Hub image from this repository with
+   `make seed-hub-local`, then run `make verify-all-scenarios`.
+2. Produce the ledger line with `scripts/record-validation.sh vX.Y.Z PASS` and append it to
+   `release-gate/lab-validations.txt` here. Note the Hub commit the image was built from in a
+   comment above it: the version in column one is the one about to be tagged, so the commit is
+   what identifies the content that was actually validated.
+3. Assert the gate before tagging:
+
+   ```bash
+   release-gate/check-lab-validation.sh --version vX.Y.Z
+   ```
+
+   It exits non-zero when there is no PASS for that version, when the newest one is older than
+   thirty days, or when the ledger is unreadable.
+
+The script is a copy of perf-sentinel's, which is the original and carries the full test suite.
+Keep the two in step: a fix to the date handling or the ledger schema belongs in both.
+
 ## Publish a release
 
 1. Confirm that `main` is clean, synchronized, protected, and public. Run `make release-check`.
+   Assert the lab validation gate above for the version you are about to tag.
 2. Create the signed tag with `scripts/release.sh v0.MINOR.PATCH`. The local script uploads no
    artifact.
 3. Wait for every build, duplicate-build comparison, native smoke test, scan, signature,

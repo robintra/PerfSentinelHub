@@ -39,5 +39,5 @@ paths = [
   '''tests/browser/demo/fixtures/.*\.json''',
 ]
 regexes = [
-  '''(?:n_plus_one_sql|n_plus_one_http|n_plus_one_messaging|redundant_sql|redundant_http|slow_sql|slow_http|excessive_fanout|chatty_service|pool_saturation|serialized_calls):[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9a-f]{32}''',
+  '''(?:n_plus_one_sql|n_plus_one_http|n_plus_one_messaging|redundant_sql|redundant_http|slow_sql|slow_http|slow_messaging|excessive_fanout|chatty_service|pool_saturation|serialized_calls):[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9a-f]{32}''',
 ]

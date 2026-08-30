@@ -1,0 +1,133 @@
+# Le lanceur
+
+Le Hub sert une interface de navigateur sur `/`, depuis la même origine que les rapports
+qu'elle ouvre. HTML, CSS et JavaScript simples. Sans framework, sans étape de build et
+sans requête réseau : les deux polices sont en base64 dans `wwwroot/fonts.css` et chaque
+icône est un SVG en ligne.
+
+Quatre écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la
+santé de la flotte.
+
+## Le formulaire suit la source
+
+Le formulaire s'adapte au `kind` de la source sélectionnée plutôt que d'offrir un
+sélecteur indépendant entre live et historique. Un tel sélecteur laisserait un opérateur
+composer des états impossibles, comme une fenêtre de trois heures contre un daemon qui en
+garde dix minutes.
+
+## Les jauges
+
+Une jauge est teintée dès qu'elle approche d'un plafond qu'elle a publié. Rouge à partir
+de 90 %, la ligne du conseiller du moteur lui-même et celle qui fait passer le verdict
+d'une ligne à "près du plafond". Ambre à partir de 75 %, le palier propre au Hub, un cran
+avant.
+
+Chaque lecture montre ce qui a bougé depuis la précédente, montant depuis le chiffre
+auquel cela se rapporte puis s'effaçant : rouge pour une hausse, vert pour une baisse.
+Chacun de ces chiffres compte vers un plafond, donc la hausse est la direction qui coûte
+quelque chose. L'uptime n'est ni teinté ni suivi, n'ayant pas de plafond et une seule
+direction possible.
+
+## Ce que le navigateur retient
+
+Les replis qu'un lecteur a ouverts, dans le `localStorage` de ce navigateur, sous une
+seule clé et comme replis ouverts seulement. Une ligne, son bloc terminal, ses réglages et
+les groupes qu'ils contiennent reviennent tels qu'ils ont été laissés, et une ligne
+laissée ouverte relit son daemon à la visite suivante sans qu'on la clique.
+
+Rien d'autre que ces noms n'est stocké. Un navigateur qui refuse le stockage démarre
+simplement tout replié.
+
+Le thème est à trois positions : système, clair, sombre. Seul le clair ou le sombre résolu
+atteint le DOM, de sorte que les feuilles de style voient deux valeurs et jamais trois. La
+position est stockée sous `perf-sentinel:theme` dans `localStorage` et dans
+`sessionStorage`, le second parce que le dashboard rendu lit cette clé exacte depuis cette
+origine. C'est ce passage de relais qui impose que le lanceur et les rapports partagent
+une origine.
+
+## Les commandes imprimées
+
+Chaque commande imprimée porte un onglet par shell, parce que la différence n'est pas
+cosmétique. Un shell POSIX continue une ligne par une barre oblique inverse et échappe une
+apostrophe en fermant puis rouvrant. PowerShell continue par un accent grave et double
+l'apostrophe, et son ensemble de mots nus est plus étroit puisque la virgule y est
+l'opérateur de tableau.
+
+L'onglet qu'ouvre une première visite suit la plateforme, Windows recevant PowerShell. Le
+choix propre du lecteur est retenu ensuite et s'applique d'un coup à toutes les commandes
+de la page.
+
+Aucune des deux commandes ne porte de valeur d'exemple. Le point d'accès est le `BaseUrl`
+configuré de la source, et la commande du monitor porte l'intervalle de relecture choisi
+sur cette ligne, de sorte qu'une ligne copiée est exécutable telle quelle et ne contredit
+pas l'écran d'où elle vient. La seule chose qu'un opérateur tape encore est le nom de
+service, qui lui appartient et qui est montré vide plutôt que deviné.
+
+Les deux commandes disent où obtenir le moteur, puisque ni l'une ni l'autre ne passe par
+le Hub. La note lie la release de la version exacte que ce Hub fait tourner, celle pour
+laquelle les flags sont orthographiés. Sans version sondée, le lien retombe sur la liste
+des releases plutôt que d'inventer un tag.
+
+### Le run en ligne de commande
+
+Le lanceur imprime le run sous forme de ligne de commande du moteur, pour qu'un opérateur
+puisse l'emporter dans un terminal. Elle est bâtie depuis l'objet même que le formulaire
+poste, jamais depuis le formulaire, de sorte que la commande imprimée et le run soumis ne
+peuvent pas diverger.
+
+C'est une commande et non les deux que le Hub lance : la sortie JSON et l'étape de rendu
+existent pour que le Hub puisse bâtir un dashboard, et un terminal n'a besoin ni de l'une
+ni de l'autre.
+
+Les valeurs sont protégées pour un shell POSIX par des apostrophes simples, la seule forme
+qui tienne pour un nom de service portant un `$` ou une apostrophe. Une source
+authentifiée imprime `--auth-header-env` plutôt que son jeton, que le Hub détient et ne
+divulgue jamais.
+
+Les surcharges de détection n'ont pas de flag en ligne de commande, donc un run qui en a
+changé une porte `-c perf-sentinel.toml`, et le fichier est imprimé à côté de la commande,
+prêt à copier ou à télécharger. Le nom est sans point parce que le moteur ne découvre que
+le `.perf-sentinel.toml` pointé, qu'un téléchargement peut ne pas préserver, donc la
+commande nomme le fichier au lieu de s'en remettre à cette découverte.
+
+## Les rapports live
+
+Un rapport rendu depuis une source daemon devient live quand le `BaseUrl` de ce daemon est
+une origine nue. Le rendu passe `--daemon-url`, et les contrôles de rafraîchissement et
+d'acquittement du dashboard parlent alors à ce daemon depuis le navigateur du lecteur.
+
+Deux conditions se trouvent hors du Hub : le `[daemon.cors] allowed_origins` du daemon
+doit porter l'origine depuis laquelle ce Hub sert ses rapports, et le lecteur doit pouvoir
+joindre le daemon directement.
+
+Un daemon derrière un ingress à préfixe de chemin reçoit un rapport statique, parce que le
+flag du moteur prend une origine et rien d'autre. Il en va de même de toute source daemon
+quand le binaire configuré ne prend pas `--daemon-url` du tout : le moteur le déclare à
+l'intérieur de sa feature `daemon`, donc un binaire bâti sans elle refuse l'argument au
+lieu de l'ignorer, et un run qui le passerait ne rendrait rien. Le Hub interroge le
+binaire une fois au démarrage, par `report --help`, et rend en statique quand la réponse
+est non ou illisible.
+
+Les liens de rapport se partagent à portée réseau du Hub et meurent avec la fenêtre de
+rétention.
+
+## La ligne de santé de la flotte
+
+La ligne d'un daemon se déplie sur les jauges qu'il rapporte face à leurs plafonds et les
+conseils qu'il écrit sur son propre tuning, dont `/metrics` ne porte ni les uns ni les
+autres.
+
+La ligne relit à un intervalle que le lecteur choisit, le même réglage que porte
+`query monitor --refresh` plus une position éteinte. Une lecture ne remplace que les
+jauges et les conseils : les réglages ne changent pas sans redémarrage, donc les
+reconstruire jetterait des groupes ouverts pour rien. Replier la ligne arrête les
+lectures.
+
+Les réglages eux-mêmes sont un clic plus loin, groupés et repliés, chaque groupe montrant
+combien de ses valeurs s'écartent des défauts du moteur. La ligne se termine par la
+commande `perf-sentinel query monitor` pour la même vue dans un terminal.
+
+## Sûreté
+
+Rien de ce qui vient du serveur n'est jamais écrit avec `innerHTML`. Chaque chaîne
+affichée est un nœud de texte.

@@ -3,6 +3,26 @@
 PerfSentinel Hub publishes stable `v0.MINOR.PATCH` releases only. Publication promotes the exact
 artifacts verified by the build workflow; it does not check out source, rebuild, or repackage them.
 
+## What a release contains
+
+`0.x.y` denotes pre-1.0 maturity, so compatibility may change between minor versions.
+"Stable" means no prerelease suffix and no beta channel.
+
+Each release is closed to four NativeAOT runtime targets and their matching symbol
+archives:
+
+- `linux-x64`
+- `linux-arm64`
+- `osx-arm64`
+- `win-x64`
+
+There is no macOS AMD64 or Windows ARM64 artifact.
+
+The same closed release also contains one multi-architecture Linux OCI image archive, one
+digest-bound Helm chart, an SPDX document and a Cosign bundle for every subject, plus
+GitHub provenance. `release-manifest.json` and `SHA256SUMS` bind the exact filenames,
+source commit, and digests.
+
 ## Trust anchors
 
 The signed Git tag must match the single Ed25519 identity in

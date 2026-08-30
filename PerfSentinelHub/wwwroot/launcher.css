@@ -382,6 +382,13 @@ button { font: inherit; }
 .source-panel { padding: 16px; }
 .source-list { display: flex; flex-direction: column; gap: 8px; }
 .source-group { display: flex; align-items: center; gap: 10px; margin: 4px 2px 0; }
+/* A band across the fleet table, not a data row: no hover, no border above, and
+   its label sits on the same overline scale as every other section marker. */
+.table-group td { padding: 14px 12px 6px; background: transparent; border: 0; }
+.table-group:first-child td { padding-top: 2px; }
+/* The audience of the unfolded zone, said once at the top instead of inside a
+   sentence a reader skims past. */
+.daemon-audience { margin: 0 0 6px; }
 .source-group:first-child { margin-top: 0; }
 .source-group-rule { flex: 1; height: 1px; background: var(--border); }
 .source-row {

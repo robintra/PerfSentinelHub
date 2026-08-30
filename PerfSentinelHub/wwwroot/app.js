@@ -979,10 +979,27 @@
         "data-align": SOURCE_COLUMNS_RIGHT.indexOf(name) >= 0 ? "right" : null
       });
     }));
-    const body = sources.flatMap(sourceRow);
+    const daemons = sources.filter(function (x) { return x.kind === "daemon"; });
+    const backends = sources.filter(function (x) { return x.kind !== "daemon"; });
+    // Same rule as the launcher's source list: labelled only when both kinds are
+    // configured, because one kind needs no split. Indices stay global so a row's
+    // fold ids keep matching the source they belong to.
+    const at = function (source) { return sources.indexOf(source); };
+    const body = (!daemons.length || !backends.length)
+      ? sources.flatMap(sourceRow)
+      : [tableGroupRow("daemons")]
+          .concat(daemons.flatMap(function (x) { return sourceRow(x, at(x)); }),
+                  [tableGroupRow("trace backends")],
+                  backends.flatMap(function (x) { return sourceRow(x, at(x)); }));
     return el("table", { class: "table" }, [
       el("thead", {}, [head]),
       el("tbody", {}, body)
+    ]);
+  }
+
+  function tableGroupRow(text) {
+    return el("tr", { class: "table-group" }, [
+      el("td", { colspan: String(SOURCE_COLUMNS.length) }, [el("span", { class: "overline", text: text })])
     ]);
   }
 
@@ -1290,12 +1307,12 @@
     if (view.error_code) return daemonError(source, index, view.error_code);
 
     return el("div", { class: "daemon-panel" }, [
+      el("p", { class: "overline daemon-audience", text: "// for the devops who run this daemon" }),
       el("p", {
         class: "daemon-source-note",
         text: "Reported by this daemon over its query API. The Hub relays it and verifies none of "
-          + "it. Written for whoever operates the daemon: everything here is read-only, and every "
-          + "setting below is changed where the daemon is deployed, in its Helm values or its "
-          + "own configuration file, never from this Hub."
+          + "it. Everything here is read-only, and every setting below is changed where the daemon "
+          + "is deployed, in its Helm values or its own configuration file, never from this Hub."
       }),
       el("div", { id: "daemon-top-" + index }, [daemonTopRow(source, view, index)]),
       terminalBlock({

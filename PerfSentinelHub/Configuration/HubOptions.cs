@@ -49,6 +49,10 @@ public sealed record AnalysisOptions
     public int MaxTracesEmbedded { get; set; } = 50;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
     public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
+    // How long a finished run's row survives. Far longer than ReportRetention on
+    // purpose: the report is deleted after a day, the row outlives it so an
+    // expired run can still be read and relaunched with its own parameters.
+    public TimeSpan RunRetention { get; set; } = TimeSpan.FromDays(30);
 }
 
 /// <summary>
@@ -176,6 +180,9 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
         if (analysis.ReportRetention <= TimeSpan.Zero)
             errors.Add("Hub:Analysis:ReportRetention must be positive.");
+        if (analysis.RunRetention <= analysis.ReportRetention)
+            errors.Add("Hub:Analysis:RunRetention must be longer than Hub:Analysis:ReportRetention, "
+                + "since an expired run keeps its parameters after its report is deleted.");
     }
 
     private static void ValidateUpdateCheckSettings(UpdateCheckOptions update, List<string> errors)

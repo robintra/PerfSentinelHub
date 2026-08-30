@@ -51,7 +51,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             await using (var migration = connection.CreateCommand())
             {
                 migration.Transaction = transaction;
-                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3;
+                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -62,7 +62,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 version.Transaction = transaction;
                 version.CommandText = """
                     INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
-                    VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms);
+                    VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
+                           (4, $applied_at_ms);
                     """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -225,6 +226,20 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             await state.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        if (!fromPoll)
+        {
+            await using var imported = connection.CreateCommand();
+            imported.Transaction = transaction;
+            imported.CommandText = """
+                INSERT INTO source_imports(source_id, last_import_ms)
+                VALUES ($source_id, $observed_at)
+                ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
+                """;
+            imported.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
+            imported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+            await imported.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -284,17 +299,18 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
     }
 
-    public async Task PurgeAsync(long cutoffMs, CancellationToken cancellationToken)
+    public async Task PurgeAsync(long cutoffMs, long runCutoffMs, CancellationToken cancellationToken)
     {
         // Chunked: holding the write gate for one whole multi-GB delete would 503 every daemon
         // import for the duration of the purge.
-        while (await PurgeChunkAsync(cutoffMs, cancellationToken) > 0)
+        while (await PurgeChunkAsync(cutoffMs, runCutoffMs, cancellationToken) > 0)
         {
             // Every chunk is deleted by the call in the condition itself.
         }
     }
 
-    private async Task<int> PurgeChunkAsync(long cutoffMs, CancellationToken cancellationToken)
+    private async Task<int> PurgeChunkAsync(
+        long cutoffMs, long runCutoffMs, CancellationToken cancellationToken)
     {
         await _writeGate.WaitAsync(cancellationToken);
         try
@@ -314,8 +330,15 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
               SELECT rowid FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff LIMIT $chunk);
             DELETE FROM source_state WHERE rowid IN (
               SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
+            DELETE FROM analysis_runs WHERE rowid IN (
+              SELECT rowid FROM analysis_runs
+              WHERE status NOT IN ('pending', 'running')
+                AND COALESCE(finished_at_ms, created_at_ms) < $run_cutoff LIMIT $chunk);
+            DELETE FROM source_imports WHERE rowid IN (
+              SELECT rowid FROM source_imports WHERE last_import_ms < $cutoff LIMIT $chunk);
             """;
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
+            command.Parameters.AddWithValue("$run_cutoff", runCutoffMs);
             command.Parameters.AddWithValue("$chunk", PurgeChunkSize);
             var deleted = await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -336,6 +359,26 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         string traceId,
         CancellationToken cancellationToken) =>
         QueryAsync(new FindingQuery(null, null, null, _maxReadLimit), traceId, cancellationToken);
+
+    /// <summary>
+    /// When each source last pushed, keyed by source id. A source missing from
+    /// the result has never pushed, which is not the same as a source that has
+    /// stopped: the daemon exporter sends nothing at all while it has no
+    /// findings, so an old timestamp here means "no new finding since", not
+    /// "the push path is broken".
+    /// </summary>
+    public async Task<Dictionary<string, long>> QuerySourceImportsAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT source_id, last_import_ms FROM source_imports;";
+        var imports = new Dictionary<string, long>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            imports[reader.GetString(0)] = reader.GetInt64(1);
+        return imports;
+    }
 
     /// <summary>
     /// Collection state for every source that has one, keyed by source id.

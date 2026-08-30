@@ -348,7 +348,8 @@ public sealed class FindingIngestionTests : IDisposable
         await database.UpsertBatchAsync(source, new ParsedBatch([third], 0), 3000, cancellationToken);
 
         // Purge v1 and v2 (last_seen 1000 and 2000), keep v3.
-        await database.PurgeAsync(2500, cancellationToken);
+        // A run cutoff of 0 purges no runs: this case is about findings.
+        await database.PurgeAsync(2500, 0, cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
             new Api.FindingQuery(null, null, null, 100), cancellationToken);

@@ -137,7 +137,12 @@ export default async function globalSetup(): Promise<void> {
         ...source(1, "billing-stg", "Billing staging", "staging", "daemon", CALM_PORT),
         ...source(2, "tempo-eu", "Tempo EU", "production", "tempo", 41402,
                   { RetentionHours: "168" }),
-        ...source(3, "search-prod", "Search production", "production", "daemon", DEAD_PORT)
+        ...source(3, "search-prod", "Search production", "production", "daemon", DEAD_PORT),
+        // Victoria Traces speaks the Jaeger query API, which is the kind the
+        // engine reads it with. Two backends rather than one so the group the
+        // list draws holds more than a single row.
+        ...source(4, "victoria-eu", "Victoria Traces EU", "staging", "jaeger_query", 41404,
+                  { RetentionHours: "72" })
       }
     });
   children.push(hub);

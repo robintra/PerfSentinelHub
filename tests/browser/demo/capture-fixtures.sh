@@ -68,7 +68,14 @@ base = json.loads((work / "status.json").read_text())
 busy = base | {"uptime_seconds": 864_000, "active_traces": 912, "max_active_traces": 1000,
                "analysis_queue_depth": 41, "analysis_queue_capacity": 1024,
                "stored_findings": len(stored), "max_retained_findings": 10_000}
-calm = base | {"uptime_seconds": 259_200, "active_traces": 128, "max_active_traces": 1000,
+# One minor behind the Hub's own engine, on purpose: a fleet where every daemon
+# matches never shows the skew badge, and that badge is the reason the launcher
+# prints a producer version at all. Derived rather than written, so it stays one
+# minor behind whatever the next capture reports.
+major, minor, *_ = (base["version"].split(".") + ["0", "0"])[:3]
+behind = f"{major}.{max(int(minor) - 1, 0)}.0"
+calm = base | {"version": behind,
+               "uptime_seconds": 259_200, "active_traces": 128, "max_active_traces": 1000,
                "analysis_queue_depth": 2, "analysis_queue_capacity": 1024,
                "stored_findings": 4, "max_retained_findings": 10_000}
 (out / "daemon-status-busy.json").write_text(json.dumps(busy, indent=2) + "\n")

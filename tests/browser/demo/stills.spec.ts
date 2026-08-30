@@ -32,7 +32,10 @@ async function settled(page: Page, marker: string | RegExp): Promise<void> {
   // A sticky footer lands wherever the viewport sat, so a full-page capture
   // bakes it into the middle of the page with content below it.
   await page.addStyleTag({ content: ".shell-footer { position: static; }" });
-  await page.waitForTimeout(400);
+  await expect
+    .poll(() => page.locator(".shell-footer")
+      .evaluate((node) => getComputedStyle(node).position))
+    .toBe("static");
 }
 
 test("run an analysis", async ({ page }, info) => {
@@ -41,7 +44,9 @@ test("run an analysis", async ({ page }, info) => {
   // The trace-backend form is the full one: service, window, trace cap. A
   // daemon takes no parameters at all, so it would show an empty form.
   await page.locator("button.source-row", { hasText: "Tempo EU" }).click();
-  await page.waitForTimeout(700);
+  // The service field exists only for a trace backend, so its arrival is the
+  // signal that the form has swapped.
+  await expect(page.locator('input[placeholder="order-service"]')).toBeVisible();
   await page.screenshot({ path: nameFor("launcher-new", info.project.name), fullPage: true });
 });
 
@@ -56,7 +61,9 @@ test("fleet health", async ({ page }, info) => {
   await settled(page, "Fleet health");
   // A folded row shows none of the gauges, which are the point of the screen.
   await page.locator("button.row-toggle", { hasText: "Checkout production" }).click();
-  await page.waitForTimeout(2000);
+  // The gauges are what the daemon read produces, and they are the point of the
+  // screen, so waiting for the first one waits for the whole panel.
+  await expect(page.locator(".daemon-panel .count").first()).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: nameFor("launcher-sources", info.project.name), fullPage: true });
 });
 

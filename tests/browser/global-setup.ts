@@ -83,10 +83,13 @@ export default async function globalSetup(): Promise<void> {
   mkdirSync(join(WORK, "reports"), { recursive: true });
 
   const children: ChildProcess[] = [];
+  // Detached like the Hub: an interrupted run must not leave these holding their
+  // ports, or the next run's Hub binds against stale daemons and the capture
+  // reads the previous run's data.
   const daemon = (port: number, variant: string) =>
     children.push(spawn(process.execPath, [join(__dirname, "demo", "fake-daemon.js"),
                                            String(port), variant],
-                        { stdio: "ignore" }));
+                        { stdio: "ignore", detached: true }));
   daemon(BUSY_PORT, "busy");
   daemon(CALM_PORT, "calm");
   await waitFor(`http://127.0.0.1:${BUSY_PORT}/api/status`, 15);

@@ -8,9 +8,19 @@ import { tmpdir } from "node:os";
 // -dark suffix the engine's docs already use.
 
 const OUT = join(__dirname, "..", "..", "..", "docs", "img", "hub");
-const state = JSON.parse(
-  readFileSync(join(tmpdir(), "perf-sentinel-hub-demo", "state.json"), "utf8")) as
-  { succeeded: string };
+// Written by global-setup once the Hub is up and the runs have settled. Read at
+// module scope, so a setup that died earlier would otherwise fail every test
+// here with a bare ENOENT naming a temp path and nothing else.
+const STATE_FILE = join(tmpdir(), "perf-sentinel-hub-demo", "state.json");
+let state: { succeeded: string };
+try {
+  state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as { succeeded: string };
+} catch (error) {
+  throw new Error(
+    `No demo state at ${STATE_FILE}. global-setup did not finish: it stands up the fake ` +
+    `daemons, the Hub and the analysis runs these stills need. Its own error is above. ` +
+    `(${String(error)})`);
+}
 
 const nameFor = (screen: string, project: string) =>
   join(OUT, project.endsWith("-dark") ? `${screen}-dark.png` : `${screen}.png`);

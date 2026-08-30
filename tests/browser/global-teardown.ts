@@ -13,6 +13,10 @@ export default async function globalTeardown(): Promise<void> {
       try { process.kill(-state.hubGroup, "SIGTERM"); } catch { /* already gone */ }
     }
     for (const pid of state.pids) {
+      // Every child is detached, so each one leads its own group. Signalling the
+      // group reaches anything it spawned; the bare pid is the fallback for a
+      // process that already reaped its group.
+      try { process.kill(-pid, "SIGTERM"); } catch { /* not a group leader */ }
       try { process.kill(pid, "SIGTERM"); } catch { /* already gone */ }
     }
   } catch {

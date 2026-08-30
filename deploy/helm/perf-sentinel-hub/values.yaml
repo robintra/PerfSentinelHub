@@ -29,6 +29,11 @@ hub:
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours and authHeaderName.
 sources: []
+# Annotations on the Service. Left empty because a scrape is opted into, not
+# assumed: set prometheus.io/scrape, /port and /path here, or point a
+# ServiceMonitor at the Service instead.
+service:
+  annotations: {}
 persistence:
   size: 1Gi
   storageClassName: ""

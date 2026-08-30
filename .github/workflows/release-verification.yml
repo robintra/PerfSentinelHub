@@ -232,6 +232,7 @@ jobs:
         shell: bash
         env:
           Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Analysis__ReportDirectory: ${{ runner.temp }}/reports
           Hub__Sources__0__Id: verify
           Hub__Sources__0__Name: Verify
           Hub__Sources__0__Environment: release
@@ -258,6 +259,7 @@ jobs:
         shell: pwsh
         env:
           Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Analysis__ReportDirectory: ${{ runner.temp }}/reports
           Hub__Sources__0__Id: verify
           Hub__Sources__0__Name: Verify
           Hub__Sources__0__Environment: release
@@ -332,9 +334,14 @@ jobs:
           chart=ghcr.io/robintra/charts/perf-sentinel-hub
           chart_digest="$(oras resolve "$chart:$VERSION")"
           printf '%s' "$chart_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          mkdir chart
           helm pull "oci://$chart@$chart_digest" --destination chart
-          cmp "public-release/perf-sentinel-hub-$VERSION.tgz" "chart/perf-sentinel-hub-$VERSION.tgz"
-          helm template verify "chart/perf-sentinel-hub-$VERSION.tgz" --set 'sources[0].id=verify' --set 'sources[0].name=Verify' --set 'sources[0].environment=release' --set 'sources[0].baseUrl=http://127.0.0.1:9' > rendered.yaml
+          # helm names a chart pulled by digest after that digest, not after the
+          # version, so the pulled file is found rather than assumed.
+          pulled="$(find chart -maxdepth 1 -name '*.tgz')"
+          test -f "$pulled"
+          cmp "public-release/perf-sentinel-hub-$VERSION.tgz" "$pulled"
+          helm template verify "$pulled" --set 'sources[0].id=verify' --set 'sources[0].name=Verify' --set 'sources[0].environment=release' --set 'sources[0].baseUrl=http://127.0.0.1:9' > rendered.yaml
           test "$(grep -Fc "ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST" rendered.yaml)" -eq 1
 
   report:

@@ -17,8 +17,9 @@ from pathlib import Path, PurePosixPath
 INDEX_FILE = "index.json"
 SHA256 = re.compile(r"^sha256:([0-9a-f]{64})$")
 PLATFORM = re.compile(r"^(linux)/(amd64|arm64)$")
+OCI_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
 INDEX_MEDIA_TYPES = {
-    "application/vnd.oci.image.index.v1+json",
+    OCI_INDEX_MEDIA_TYPE,
     "application/vnd.docker.distribution.manifest.list.v2+json",
 }
 ALL_PLATFORMS = frozenset((('linux', 'amd64'), ('linux', 'arm64')))
@@ -243,7 +244,7 @@ def compose_layout(
     index = json.dumps(
         {
             "schemaVersion": 2,
-            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "mediaType": OCI_INDEX_MEDIA_TYPE,
             "manifests": descriptors,
         },
         sort_keys=True,
@@ -260,10 +261,10 @@ def compose_layout(
         INDEX_FILE: json.dumps(
             {
                 "schemaVersion": 2,
-                "mediaType": "application/vnd.oci.image.index.v1+json",
+                "mediaType": OCI_INDEX_MEDIA_TYPE,
                 "manifests": [
                     {
-                        "mediaType": "application/vnd.oci.image.index.v1+json",
+                        "mediaType": OCI_INDEX_MEDIA_TYPE,
                         "digest": f"sha256:{index_digest}",
                         "size": len(index),
                     }

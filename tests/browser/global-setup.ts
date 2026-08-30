@@ -25,9 +25,12 @@ const BASE = `http://127.0.0.1:${HUB_PORT}`;
 // global.json pins the SDK with rollForward: disable, and it is usually not
 // the dotnet on PATH.
 const PINNED_SDK = "/usr/local/share/dotnet";
+// The pinned SDK is reached by naming its binary outright rather than by putting
+// its directory in front of PATH. Prepending would decide which `dotnet` runs by
+// search order, and any writable directory later on that PATH could shadow it.
+const DOTNET = existsSync(join(PINNED_SDK, "dotnet")) ? join(PINNED_SDK, "dotnet") : "dotnet";
 const dotnetEnv = () => ({
   ...process.env,
-  PATH: existsSync(PINNED_SDK) ? `${PINNED_SDK}:${process.env.PATH}` : process.env.PATH,
   ...(existsSync(PINNED_SDK) ? { DOTNET_ROOT: PINNED_SDK } : {})
 });
 
@@ -95,7 +98,7 @@ export default async function globalSetup(): Promise<void> {
   await waitFor(`http://127.0.0.1:${BUSY_PORT}/api/status`, 15);
   await waitFor(`http://127.0.0.1:${CALM_PORT}/api/status`, 15);
 
-  const build = spawnSync("dotnet",
+  const build = spawnSync(DOTNET,
     ["build", join(ROOT, "PerfSentinelHub", "PerfSentinelHub.csproj"), "-c", "Release", "--nologo"],
     { env: dotnetEnv(), stdio: "inherit" });
   if (build.status !== 0) throw new Error("the Hub did not build");
@@ -121,7 +124,7 @@ export default async function globalSetup(): Promise<void> {
   // and no page. Detached, because dotnet run puts the Hub in a grandchild that
   // survives a signal to its parent, and a Hub left holding the port makes the
   // next run read the previous run's data. Teardown signals the whole group.
-  const hub = spawn("dotnet",
+  const hub = spawn(DOTNET,
     ["run", "--project", join(ROOT, "PerfSentinelHub", "PerfSentinelHub.csproj"),
      "-c", "Release", "--no-build", "--no-launch-profile"],
     {

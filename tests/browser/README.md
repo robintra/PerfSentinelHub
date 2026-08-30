@@ -51,8 +51,10 @@ for a sibling `perf-sentinel` checkout with a release build, or takes
 `HUB_ENGINE_BINARY`.
 
 **The pinned SDK.** `global.json` pins 10.0.400 with `rollForward: disable`,
-which is usually not the `dotnet` on `PATH`. The setup puts
-`/usr/local/share/dotnet` in front when it is there.
+which is usually not the `dotnet` on `PATH`. The setup runs
+`/usr/local/share/dotnet/dotnet` by name when it is there, rather than putting
+that directory in front of `PATH`: search order is a poor way to decide which
+toolchain builds the thing you are about to photograph.
 
 `ffmpeg` is needed for the GIFs only. `build-gif.sh` exits non-zero when it
 finds no recording, so a no-op cannot pass for a success and ship the previous

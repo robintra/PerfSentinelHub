@@ -116,6 +116,24 @@
     return parts.join(" ");
   }
 
+  /**
+   * Splits a fleet into the two kinds the launcher groups by, keeping each
+   * source's position in the original array so a caller can still address a row
+   * by its global index. `split` is false for a single-kind fleet, where a group
+   * label would name the only thing on screen.
+   * @param {{kind?: string}[]} sources
+   * @returns {{daemons: {source: any, index: number}[],
+   *            backends: {source: any, index: number}[], split: boolean}}
+   */
+  function splitByKind(sources) {
+    const daemons = [];
+    const backends = [];
+    (sources || []).forEach(function (source, index) {
+      (source && source.kind === "daemon" ? daemons : backends).push({ source: source, index: index });
+    });
+    return { daemons, backends, split: daemons.length > 0 && backends.length > 0 };
+  }
+
   /** A countdown, watched: down to the second. */
   function durPrecise(ms) { return durDown(ms, "s"); }
 
@@ -747,7 +765,7 @@
     get ENGINE() { return ENGINE; },
     get HUB() { return HUB; },
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
-    dur, durPrecise, durMinutes, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
+    dur, durPrecise, durMinutes, durParts, splitByKind, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, psq, SHELLS, shellById, defaultShell, exportLine,
     analysisCommand, monitorCommand, detectionToml, quotedForShell,

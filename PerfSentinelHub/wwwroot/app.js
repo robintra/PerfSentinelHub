@@ -429,7 +429,17 @@
         // the original on the node. Rewriting it now would wipe the error
         // before anyone read it.
         if (entry.node.dataset && entry.node.dataset.restore !== undefined) return;
-        entry.node.textContent = entry.compute();
+        // Per entry: one compute that throws must not freeze every countdown
+        // behind it in the list for the rest of the screen's life.
+        try {
+          const text = entry.compute();
+          entry.node.textContent = text;
+          // Some cells carry the same string as a tooltip. Left alone it would
+          // still read the value this screen was built with.
+          if (entry.node.title) entry.node.title = text;
+        } catch (error) {
+          void error;
+        }
       });
     }, 1000);
   }
@@ -979,18 +989,17 @@
         "data-align": SOURCE_COLUMNS_RIGHT.indexOf(name) >= 0 ? "right" : null
       });
     }));
-    const daemons = sources.filter(function (x) { return x.kind === "daemon"; });
-    const backends = sources.filter(function (x) { return x.kind !== "daemon"; });
-    // Same rule as the launcher's source list: labelled only when both kinds are
-    // configured, because one kind needs no split. Indices stay global so a row's
-    // fold ids keep matching the source they belong to.
-    const at = function (source) { return sources.indexOf(source); };
-    const body = (!daemons.length || !backends.length)
-      ? sources.flatMap(sourceRow)
-      : [tableGroupRow("daemons")]
-          .concat(daemons.flatMap(function (x) { return sourceRow(x, at(x)); }),
-                  [tableGroupRow("trace backends")],
-                  backends.flatMap(function (x) { return sourceRow(x, at(x)); }));
+    // PSL.splitByKind keeps each source's original position, which the fold ids
+    // are built from, so a grouped row still addresses the source it belongs to.
+    const kinds = PSL.splitByKind(sources);
+    const rows = function (group) {
+      return group.flatMap(function (entry) { return sourceRow(entry.source, entry.index); });
+    };
+    const body = kinds.split
+      ? [tableGroupRow("daemons")].concat(rows(kinds.daemons),
+                                          [tableGroupRow("trace backends")],
+                                          rows(kinds.backends))
+      : sources.flatMap(sourceRow);
     return el("table", { class: "table" }, [
       el("thead", {}, [head]),
       el("tbody", {}, body)
@@ -2296,15 +2305,15 @@
 
   // Two kinds that behave differently enough to be worth separating: a daemon is
   // polled and pushes on its own, a trace backend is only read when a run asks.
-  // Labelled only when both are configured, since one kind needs no split.
+  // The fleet table groups on the same rule, from the same helper.
   function sourceRows() {
-    const daemons = state.sources.filter(function (s) { return s.kind === "daemon"; });
-    const backends = state.sources.filter(function (s) { return s.kind !== "daemon"; });
-    if (!daemons.length || !backends.length) return state.sources.map(sourceRadio);
+    const kinds = PSL.splitByKind(state.sources);
+    if (!kinds.split) return state.sources.map(sourceRadio);
+    const radios = function (group) {
+      return group.map(function (entry) { return sourceRadio(entry.source); });
+    };
     return [sourceGroupLabel("daemons")].concat(
-      daemons.map(sourceRadio),
-      [sourceGroupLabel("trace backends")],
-      backends.map(sourceRadio));
+      radios(kinds.daemons), [sourceGroupLabel("trace backends")], radios(kinds.backends));
   }
 
   // aria-hidden: each row already names its own kind, so the label would only
@@ -3441,7 +3450,7 @@
       el("p", { class: "overline", text: "// " + spec.title }),
       el("p", { class: "outcome-body", text: spec.body })
     ]);
-    if (spec.counts) panel.appendChild(countStrip(spec.counts, "result"));
+    if (spec.counts) panel.appendChild(countStrip(spec.counts, { toned: true, filled: 1 }));
     const trimmed = trimNotice(run);
     if (trimmed) panel.appendChild(trimmed);
     (spec.warnings || []).forEach(function (warning) {
@@ -3469,7 +3478,7 @@
             result.quality_gate_passed ? "ok" : "crit"],
           [String(result.findings), result.kept_findings == null ? "findings" : "found",
             result.critical > 0 ? "crit" : result.warning > 0 ? "warn"
-              : result.info > 0 ? "info" : "ok", null, true],
+              : result.info > 0 ? "info" : "ok"],
           [String(result.critical), "critical", "crit"],
           [String(result.warning), "warning", "warn"],
           [String(result.info), "info", "info"],
@@ -3491,7 +3500,7 @@
           + "rendering fault.",
         counts: [
           [result.quality_gate_passed ? "PASS" : "FAIL", "quality gate", "muted"],
-          [String(result.findings), "findings", "warn", null, true],
+          [String(result.findings), "findings", "warn"],
           [String(result.traces_analyzed), "traces read", "warn"]
         ],
         warnings: result.warnings,
@@ -3553,23 +3562,28 @@
   }
 
   /**
-   * `variant: "result"` carries the tone onto the cell itself, the way the
-   * rendered dashboard draws the same figures: the headline cell filled with the
-   * dominant severity, the severities beside it in their own pastel. The daemon
-   * gauges pass no variant and keep a neutral strip, because their tone means
+   * A cell is [figure, label, tone, move]. `move` stays a number throughout, so
+   * the fill is named by index in the options rather than by a fifth slot that
+   * would sit where a facts tuple keeps something else entirely.
+   *
+   * `options.toned` carries the tone onto the cell, the way the rendered
+   * dashboard draws the same figures: `options.filled` names the one cell shown
+   * as a solid block of its tone, the rest take their own pastel. The daemon
+   * gauges pass no options and keep a neutral strip, because their tone means
    * "near a cap", which is not a severity.
    */
-  function countStrip(counts, variant) {
-    const toned = variant === "result";
-    return el("div", { class: "counts" }, counts.map(function (cell) {
-      const tone = cell[2] && cell[2] !== "text" ? cell[2] : null;
+  function countStrip(counts, options) {
+    const opts = options || {};
+    return el("div", { class: "counts" }, counts.map(function (cell, index) {
+      const tone = opts.toned && cell[2] && cell[2] !== "text" ? cell[2] : null;
+      const filled = index === opts.filled;
       const figure = el("span", { class: "count-n", "data-tone": cell[2] },
         [document.createTextNode(cell[0])]);
       if (typeof cell[3] === "number") figure.appendChild(moveBadge(cell[3]));
       return el("div", {
         class: "count",
-        "data-grad": toned && !cell[4] ? tone : null,
-        "data-kpi": toned && cell[4] ? tone : null
+        "data-grad": tone && !filled ? tone : null,
+        "data-kpi": tone && filled ? tone : null
       }, [figure, el("span", { class: "count-l", text: cell[1] })]);
     }));
   }

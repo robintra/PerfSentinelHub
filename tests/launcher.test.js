@@ -367,3 +367,25 @@ test("durMinutes keeps the units dur() drops from an uptime", () => {
   assert.equal(PSL.durMinutes(59_000), "0 m");
   assert.equal(PSL.durMinutes(null), "n/a");
 });
+
+test("splitByKind labels a fleet only when it holds both kinds", () => {
+  const mixed = PSL.splitByKind([
+    { kind: "daemon" }, { kind: "tempo" }, { kind: "daemon" }, { kind: "jaeger_query" }
+  ]);
+  assert.equal(mixed.split, true);
+  // The original positions survive: the fold ids on the fleet table are built
+  // from them, so a grouped row must still address its own source.
+  assert.deepEqual(mixed.daemons.map((e) => e.index), [0, 2]);
+  assert.deepEqual(mixed.backends.map((e) => e.index), [1, 3]);
+
+  // One kind needs no label: it would name the only thing on screen.
+  assert.equal(PSL.splitByKind([{ kind: "daemon" }, { kind: "daemon" }]).split, false);
+  assert.equal(PSL.splitByKind([{ kind: "tempo" }]).split, false);
+  assert.equal(PSL.splitByKind([]).split, false);
+  assert.equal(PSL.splitByKind(null).split, false);
+
+  // An unknown kind is a backend, matching the engine: only a daemon is polled.
+  const odd = PSL.splitByKind([{ kind: "daemon" }, { kind: "something-new" }]);
+  assert.equal(odd.split, true);
+  assert.deepEqual(odd.backends.map((e) => e.index), [1]);
+});

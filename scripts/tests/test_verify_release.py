@@ -345,7 +345,8 @@ class VerifyReleaseTests(unittest.TestCase):
 
     @staticmethod
     def rename_subject(root, old, new):
-        for path in list(root.iterdir()):
+        # Snapshot the directory first, renaming entries while iterating it can skip files.
+        for path in sorted(root.iterdir()):
             if old in path.name:
                 path.rename(root / path.name.replace(old, new))
 

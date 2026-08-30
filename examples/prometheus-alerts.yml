@@ -1,73 +1,27 @@
 # Alerting rules for PerfSentinelHub.
 #
-# Thresholds are a starting point, not a recommendation. Pick them against the
-# Hub:PollInterval you actually run: the default is one hour, so a source that
-# has been unreachable for fifteen minutes has missed at most one poll.
+# One rule, deliberately. The Hub is an internal tool in no production request
+# path, and push is the primary path: daemons POST their findings and retain
+# and retry coalesced batches, so nothing the Hub reports about its own poll
+# safety net is worth waking anyone. Every other condition is a panel on
+# examples/grafana-dashboard.json or a row on the launcher's fleet screen.
+# docs/OPERATIONS.md lists what was considered and rejected, and why.
 
 groups:
   - name: perf-sentinel-hub
     rules:
       - alert: HubDown
         expr: up{job="perf-sentinel-hub"} == 0
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: The Hub is not answering its scrape
-          description: >-
-            Nothing is collecting the fleet while this holds. Findings already
-            stored stay readable through the launcher, but first_seen history
-            stops advancing and no analysis run is claimed.
-
-      - alert: HubSourceUnreachable
-        expr: perf_sentinel_hub_source_unreachable_seconds > 900
-        for: 5m
+        for: 30m
         labels:
           severity: warning
         annotations:
-          summary: The Hub cannot reach {{ $labels.source }}
+          summary: The Hub has not answered a scrape in 30 minutes
           description: >-
-            Unreachable for {{ $value | humanizeDuration }}. This is the Hub's
-            route to that daemon, which is a different path through a different
-            set of firewalls than the push the daemon makes to the Hub, so the
-            daemon may still be pushing successfully.
-
-      - alert: HubSourceStale
-        expr: perf_sentinel_hub_source_last_success_seconds > 86400
-        for: 15m
-        labels:
-          severity: warning
-        annotations:
-          summary: The Hub last polled {{ $labels.source }} a day ago
-          description: >-
-            Catches a source that answers rarely rather than not at all, which
-            HubSourceUnreachable resets on every success. It cannot catch a
-            daemon never polled successfully: that one publishes no
-            last_success series at all, and Prometheus has no list of the
-            sources that ought to exist to compare against. Read the fleet
-            screen for those.
-
-      - alert: HubAnalysisQueueBacklog
-        expr: perf_sentinel_hub_analysis_queue_depth > 20
-        for: 15m
-        labels:
-          severity: warning
-        annotations:
-          summary: Analysis runs are queueing faster than they are claimed
-          description: >-
-            {{ $value }} runs accepted and not started. Raise
-            Hub:Analysis:Workers, or accept the wait. A run stuck mid-flight
-            sits in the running status instead, which this does not see.
-
-      - alert: HubRunsInterrupted
-        expr: perf_sentinel_hub_analysis_runs{status="interrupted"} > 0
-        for: 10m
-        labels:
-          severity: info
-        annotations:
-          summary: '{{ $value }} analysis runs were interrupted by a restart'
-          description: >-
-            Nothing is replayed on its own, since a silent retry would fire a
-            second heavy query at a backend nobody asked to query twice. These
-            wait for a human, and retention eventually removes them, so the
-            value falls without anyone acting.
+            The one Hub condition no dashboard can show: a dead Hub publishes
+            no series, so every panel goes blank exactly like a broken scrape
+            config. The launcher is gone with it, served by the same process.
+            Delete this rule if your Alertmanager already routes a generic
+            TargetDown on up == 0, rather than alerting twice on one event.
+            Ticket it, do not page it: the daemons keep buffering, so the loss
+            horizon is their retry buffers filling, which is hours.

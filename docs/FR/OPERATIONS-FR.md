@@ -37,17 +37,24 @@ deux seuls paquets sont SQLite.
 
 Trois partis pris dans cette forme.
 
-Seul un daemon reçoit une série de source. Un backend de traces n'est jamais
-interrogé, donc le dire joignable affirmerait une chose que le Hub n'a pas
-observée.
+Seul un daemon reçoit une série de source, et seulement un que le Hub a
+réellement observé. Un backend de traces n'est jamais interrogé, et un daemon
+sans ligne `source_state` n'a jamais été joint du tout, donc publier une valeur
+pour l'un ou l'autre affirmerait une chose que le Hub n'a pas vue. Cette ligne
+est aussi ce que la rétention supprime pour une source qu'elle a cessé
+d'interroger, donc une source oubliée depuis longtemps devient silencieuse
+plutôt que de passer au vert.
 
 Un daemon jamais interrogé avec succès ne reçoit aucune série `last_success`.
 Zéro se lirait comme "a réussi à l'instant", l'inverse de jamais.
 
-`analysis_runs` est une gauge, pas un compteur `_total`. La rétention supprime
-des lignes, donc la série descend autant qu'elle monte, et chaque statut est
-émis même à zéro : une gauge qui disparaît se lit comme un échec de collecte
-plutôt que comme "rien n'est dans cet état".
+`analysis_runs` est une gauge, pas un compteur `_total`, parce qu'un run passe
+d'un statut à l'autre et qu'une série descend autant qu'elle monte. Elle n'est
+pas bornée pour autant : rien ne supprime de `analysis_runs`, donc le total
+empilé ne fait que croître, et `analysis_runs{status="interrupted"}` en
+particulier est un cumul depuis la création de la base plutôt qu'un arriéré
+actuel. Chaque statut est émis même à zéro, une gauge qui disparaît se lisant
+comme un échec de collecte plutôt que comme "rien n'est dans cet état".
 
 La cardinalité est bornée par la configuration. `source` prend les identifiants
 de `Hub:Sources`, fixés au démarrage et restreints à 1 à 64 caractères ASCII
@@ -73,7 +80,7 @@ Trois fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissé
 | Fichier                                                           | Est                                                         |
 |-------------------------------------------------------------------|-------------------------------------------------------------|
 | [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Huit panneaux sur les six familles, importable tel quel     |
-| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Cinq règles, contrôlées par `promtool check rules`          |
+| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Une règle, contrôlée par `promtool check rules`             |
 | [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)   | Un job de collecte pour un déploiement qui nomme ses cibles |
 
 Le moteur livre son propre tableau de bord pour ses propres métriques, et les
@@ -81,10 +88,32 @@ deux ne se recouvrent pas : aucun panneau d'ici ne lit une série de daemon, et
 aucun panneau de là-bas ne lit une série du Hub. Importer les deux pour
 surveiller une flotte et le Hub qui la collecte.
 
-Une règle ne peut pas s'écrire. Un daemon jamais interrogé avec succès ne publie
-aucune série `last_success`, et Prometheus ne détient aucune liste des sources
-qui devraient exister pour la comparer, donc rien n'alerte sur une source qui
-n'a jamais répondu. C'est l'écran de flotte qui le montre.
+### Pourquoi une seule alerte
+
+Le Hub n'est sur le chemin de requête d'aucune production, et le push est le
+chemin primaire : un daemon poste ses findings, les retient et les rejoue par
+lots coalescés. Donc presque rien de ce que le Hub peut rapporter ne mérite de
+réveiller quelqu'un, et une alerte qui se déclenche sur une condition qu'un
+lecteur aurait vue sur un panneau n'est que du bruit. Quatre règles ont été
+écrites puis retirées :
+
+| Retirée                     | Pourquoi, et où la condition se voit à la place                                                                                                                                    |
+|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Une source est injoignable  | Elle surveille le filet de poll, pas le chemin de push, donc elle passe au rouge sur une flotte dont tous les daemons livrent. L'écran de flotte et deux panneaux la dessinent déjà |
+| Une source est périmée      | Même angle mort, et quand le jour est écoulé le panneau de dernière réussite dessine la montée depuis un jour                                                                       |
+| La file d'analyse s'accumule | Du travail soumis par des humains : une profondeur de 20, ce sont 20 personnes qui ont cliqué. `GET /api/status` le montre à celui-là même qui a soumis, et rien ne se perd à attendre |
+| Des runs ont été interrompus | Se déclenche sur l'événement le plus banal qui soit, un redémarrage qui a attrapé un run en file, et ne se tait jamais puisque rien ne supprime ces lignes                          |
+
+Ce qui survit est la seule condition qu'aucun tableau de bord ne peut montrer,
+puisqu'un Hub mort ne publie aucune série et que tous les panneaux se vident
+exactement comme sur une collecte mal configurée.
+
+Deux manques méritent d'être nommés plutôt que maquillés. Rien ne compte un
+import, donc toute la flotte pourrait cesser de pousser pendant que chaque
+panneau reste vert, et seul le poll finirait par s'en apercevoir. Et Prometheus
+ne détient aucune liste des sources qui devraient exister, donc un daemon que le
+Hub n'a jamais joint est silencieux plutôt qu'alarmant, ce qui relève de l'écran
+de flotte.
 
 ## Sauvegarde
 

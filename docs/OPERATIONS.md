@@ -35,16 +35,23 @@ not justify a dependency in a service whose only two packages are SQLite.
 
 Three things the shape is deliberate about.
 
-Only a daemon gets a source series. A trace backend is never polled, so calling
-it reachable would assert something the Hub has not observed.
+Only a daemon gets a source series, and only one the Hub has actually observed.
+A trace backend is never polled, and a daemon with no `source_state` row has
+never been reached at all, so publishing a value for either would assert
+something the Hub has not seen. That row is also what retention drops for a
+source it stopped attempting, so a long forgotten source goes silent rather
+than turning green.
 
 A daemon never polled successfully gets no `last_success` series at all. Zero
 would read as "succeeded just now", which is the opposite of never.
 
-`analysis_runs` is a gauge, not a `_total` counter. Retention deletes rows, so
-the series falls as well as rises, and every status is emitted even at zero
-because a gauge that vanishes reads as a scrape failure rather than as "nothing
-is in that state".
+`analysis_runs` is a gauge, not a `_total` counter, because a run moves between
+statuses and a series falls as well as rises. It is not bounded, though: nothing
+deletes from `analysis_runs`, so the stacked total only grows and
+`analysis_runs{status="interrupted"}` in particular is a running total since the
+database was created rather than a current backlog. Every status is emitted even
+at zero, a gauge that vanishes reading as a scrape failure rather than as
+"nothing is in that state".
 
 Cardinality is bounded by configuration. `source` takes the ids in
 `Hub:Sources`, fixed at startup and restricted to 1 to 64 ASCII letters, digits,
@@ -70,17 +77,37 @@ Three files under [`examples/`](../examples), each validated rather than sketche
 | File                                                           | Is                                                          |
 |----------------------------------------------------------------|-------------------------------------------------------------|
 | [`grafana-dashboard.json`](../examples/grafana-dashboard.json) | Eight panels over the six families, importable as it stands |
-| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)   | Five rules, checked with `promtool check rules`             |
+| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)   | One rule, checked with `promtool check rules`               |
 | [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)   | A scrape job for a deployment that names its targets        |
 
 The engine ships its own dashboard for its own metrics, and the two do not
 overlap: no panel here reads a daemon series, and no panel there reads a Hub
 one. Import both to watch a fleet and the Hub collecting it.
 
-One rule cannot be written. A daemon never polled successfully publishes no
-`last_success` series at all, and Prometheus holds no list of the sources that
-ought to exist to compare against, so nothing alerts on a source that has never
-answered. The fleet screen is where that shows.
+### Why there is only one alert
+
+The Hub sits in no production request path, and push is the primary path: a
+daemon POSTs its findings and retains and retries coalesced batches. So almost
+nothing the Hub can report is worth waking anyone, and an alert that fires on a
+condition a reader could have seen on a panel is noise. Four rules were written
+and cut:
+
+| Cut                       | Why, and where the condition shows instead                                                                                                                                     |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| A source is unreachable   | It watches the poll safety net, not the push path, so it goes red on a fleet whose daemons are all delivering. The fleet screen and two dashboard panels already draw it        |
+| A source has gone stale   | Same blindness, and by the time a day has passed the last-success panel has been drawing the climb for a day                                                                    |
+| The analysis queue backs up | Human-submitted work: a depth of 20 is 20 people clicking run. `GET /api/status` shows it to the very person who queued them, and nothing is lost while they wait               |
+| Runs were interrupted     | Fires on the most routine event there is, a restart that caught a queued run, and never clears since nothing deletes those rows                                                 |
+
+What survives is the one condition no dashboard can show, because a dead Hub
+publishes no series and every panel goes blank exactly like a broken scrape
+config.
+
+Two gaps are worth naming rather than papering over. Nothing counts an import,
+so the whole fleet could stop pushing while every panel stays green, and the
+poll is the only thing that would eventually notice. And Prometheus holds no
+list of the sources that ought to exist, so a daemon the Hub has never reached
+is silent rather than alarming, which is a case for the fleet screen.
 
 ## Backup
 

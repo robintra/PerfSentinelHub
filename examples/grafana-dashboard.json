@@ -90,7 +90,7 @@
     },
     {
       "title": "Unreachable daemons",
-      "description": "Daemons whose last poll failed. Only a daemon is counted: a trace backend is never polled, so it publishes no reachability series and its absence here is not a fault. A push arriving from a daemon does not clear this, reachability being the Hub's route to the daemon rather than the reverse.",
+      "description": "Daemons whose last poll failed. Only a daemon is counted: a trace backend is never polled, and a daemon the Hub has never once reached publishes no series at all rather than a misleading value, so neither shows here. A push arriving from a daemon does not clear this, reachability being the Hub's route to the daemon rather than the reverse.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -195,7 +195,7 @@
     },
     {
       "title": "Interrupted runs",
-      "description": "Runs the Hub marked interrupted because the process stopped while they were running. Nothing is replayed on its own, so these wait for a human. Retention eventually removes them, which is why this falls without anyone acting.",
+      "description": "Runs the Hub marked interrupted because the process stopped while they were running or still queued. Nothing is replayed on its own, so these wait for a human. Nothing deletes them either, so this only ever rises: read it as a running total since the database was created, not as a current backlog.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -246,7 +246,7 @@
     },
     {
       "title": "Time each daemon has been unreachable",
-      "description": "Zero while a daemon answers. The Hub retries with bounded exponential backoff, so a short spike is a retry rather than an outage. A line that keeps rising is the alert case.",
+      "description": "Zero while a daemon answers, absent for one the Hub has never observed. The Hub retries with bounded exponential backoff (1s doubling to a 300s ceiling), so a short spike is a retry rather than an outage. A line that keeps rising is the one worth reading.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -315,7 +315,7 @@
     },
     {
       "title": "Analysis runs by status",
-      "description": "A gauge, not a counter. Retention deletes rows, so every series falls as well as rises and increase() over it is meaningless. Each status is published even at zero, so a series that disappears is a scrape failure rather than an empty state.",
+      "description": "A gauge, not a counter. A run moves between statuses, so a series falls as well as rises, but no purge deletes a row: the stacked total only grows. increase() over any of these is meaningless. Each status is published even at zero, so a series that disappears is a scrape failure rather than an empty state.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -353,7 +353,7 @@
     },
     {
       "title": "Fleet reachability",
-      "description": "One row per configured daemon. Reachable is the Hub's own route to that daemon, which is a different path through a different set of firewalls than the push the daemon makes to the Hub, so a daemon can push successfully while showing as unreachable here.",
+      "description": "One row per daemon the Hub has actually observed. Reachable is the Hub's own route to that daemon, a different path through different firewalls than the push the daemon makes to the Hub, so a daemon can push successfully while showing as unreachable here. A daemon with no row has never been reached at all, which is why the count above and this table can disagree.",
       "type": "table",
       "gridPos": {
         "h": 8,

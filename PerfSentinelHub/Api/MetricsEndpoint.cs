@@ -69,24 +69,35 @@ public static class MetricsEndpoint
             .Select(source => (source.Id, State: states.GetValueOrDefault(source.Id)))
             .ToList();
 
+        // A daemon with no source_state row has never been attempted, or was
+        // attempted so long ago that retention dropped the row. Either way the
+        // Hub has observed nothing, so all three families below stay silent for
+        // it rather than publishing a value that reads as a healthy answer.
         Family(text, "perf_sentinel_hub_source_reachable",
-            "1 when the Hub's last poll of this daemon succeeded, 0 while it is unreachable.");
+            "1 when the Hub's last poll of this daemon succeeded, 0 while it is unreachable. "
+            + "Absent for a daemon the Hub has never observed.");
         foreach (var (id, state) in daemons)
         {
-            Line(text, "perf_sentinel_hub_source_reachable", Label(id),
-                state?.UnreachableSinceMs is null ? 1 : 0);
+            if (state is not null)
+            {
+                Line(text, "perf_sentinel_hub_source_reachable", Label(id),
+                    state.UnreachableSinceMs is null ? 1 : 0);
+            }
         }
 
         Family(text, "perf_sentinel_hub_source_unreachable_seconds",
-            "How long this daemon has been unreachable, 0 while it answers.");
+            "How long this daemon has been unreachable, 0 while it answers. "
+            + "Absent for a daemon the Hub has never observed.");
         foreach (var (id, state) in daemons)
         {
-            Line(text, "perf_sentinel_hub_source_unreachable_seconds", Label(id),
-                state?.UnreachableSinceMs is { } since ? Seconds(now - since) : 0);
+            if (state is not null)
+            {
+                Line(text, "perf_sentinel_hub_source_unreachable_seconds", Label(id),
+                    state.UnreachableSinceMs is { } since ? Seconds(now - since) : 0);
+            }
         }
 
-        // A source never observed gets no series rather than a zero: zero would
-        // read as "succeeded just now", which is the opposite of the truth.
+        // Zero here would read as "succeeded just now", the opposite of never.
         Family(text, "perf_sentinel_hub_source_last_success_seconds",
             "Age of the last successful poll. Absent for a daemon never polled successfully.");
         foreach (var (id, state) in daemons)
@@ -102,10 +113,11 @@ public static class MetricsEndpoint
             "Analysis runs accepted and not yet claimed by a worker.");
         Line(text, "perf_sentinel_hub_analysis_queue_depth", null, queued);
 
-        // A gauge, not a counter: retention deletes rows, so these fall as well
-        // as rise and naming them _total would promise a monotonic series.
+        // A gauge, not a counter: a run moves between statuses, so a per-status
+        // series falls as well as rises and _total would promise otherwise.
         Family(text, "perf_sentinel_hub_analysis_runs",
-            "Analysis runs currently stored, by status. Retention removes them, so this is not a total.");
+            "Analysis runs stored, by status. A run moves between statuses, so a series falls as "
+            + "well as rises, but no purge deletes a row and the total only grows.");
         foreach (var status in AnalysisStatuses.All)
         {
             Line(text, "perf_sentinel_hub_analysis_runs", $"status=\"{status}\"",
@@ -116,9 +128,9 @@ public static class MetricsEndpoint
     }
 
     /// <summary>
-    /// Declares a family. Every one the Hub publishes is a gauge, including
-    /// analysis_runs: retention deletes rows, so the series falls as well as
-    /// rises and a counter would be a lie.
+    /// Declares a family. Every one the Hub publishes is a gauge, analysis_runs
+    /// included: a run moves between statuses, so a per-status series falls as
+    /// well as rises and a counter would be a lie.
     /// </summary>
     private static void Family(StringBuilder text, string name, string help)
     {

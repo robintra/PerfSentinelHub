@@ -80,11 +80,28 @@ public sealed class MetricsEndpointTests : IDisposable
     [Fact]
     public async Task Only_a_daemon_gets_a_reachability_series()
     {
-        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = _factory.Services.GetRequiredService<HubDatabase>();
+        await database.MarkSourceAttemptAsync(
+            "checkout", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cancellationToken);
+
+        var body = await ScrapeAsync(cancellationToken);
         Assert.Contains("perf_sentinel_hub_source_reachable{source=\"checkout\"} 1", body, StringComparison.Ordinal);
         // A trace backend is never polled, so calling it reachable would assert
         // something the Hub has not observed.
         Assert.DoesNotContain("source=\"tempo-eu\"", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_daemon_the_Hub_has_never_observed_gets_no_reachability_series()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        // Publishing 1 for a missing source_state row would read as "the last
+        // poll succeeded" for a daemon the Hub has never once reached, and
+        // retention drops the row of a source it stopped attempting, so a long
+        // forgotten source would turn green rather than silent.
+        Assert.DoesNotContain("perf_sentinel_hub_source_reachable{", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("perf_sentinel_hub_source_unreachable_seconds{", body, StringComparison.Ordinal);
     }
 
     [Fact]

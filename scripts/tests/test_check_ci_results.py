@@ -434,7 +434,7 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertNotIn("github-token: ${{ github.token }}", publisher)
         self.assertNotRegex(publisher, r"(?m)^      checks: write$")
 
-        activation = (ROOT / "docs" / "ci-gate.md").read_text(encoding="utf-8")
+        activation = (ROOT / "docs" / "CI-GATE.md").read_text(encoding="utf-8")
         self.assertIn("expected source", activation)
         self.assertIn("dedicated GitHub App", activation)
         self.assertIn("CI_GATE_APP_ID", activation)

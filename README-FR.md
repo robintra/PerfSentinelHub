@@ -17,7 +17,7 @@ C'est un service NativeAOT adossé à SQLite : le push depuis le daemon est le c
 poll horaire est un filet de sécurité, et le Hub conserve par défaut pendant 180 jours des
 enveloppes de findings compatibles en lecture.
 
-[docs/FR/architecture-FR.md](docs/FR/architecture-FR.md) dessine les cinq relations que
+[docs/FR/ARCHITECTURE-FR.md](docs/FR/ARCHITECTURE-FR.md) dessine les cinq relations que
 ce fichier énonce en prose : la topologie complète, les deux sens dans lesquels un
 daemon et le Hub se parlent, ce que fait une analyse lancée, les trois horloges de
 rétention, et les états que traverse un run.

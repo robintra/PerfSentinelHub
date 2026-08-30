@@ -128,6 +128,6 @@ Both files of a pair must exist. A diagram shipped with only the light variant i
 white slab for every reader in dark mode, which is exactly the drift the naming
 convention exists to make visible.
 
-[`diagrams/hub-integration-spec.md`](diagrams/hub-integration-spec.md) is a different
+[`diagrams/HUB-INTEGRATION-SPEC.md`](diagrams/HUB-INTEGRATION-SPEC.md) is a different
 kind of document: a drawing brief for the hand-made board version of the first diagram,
 with the palette, the geometry and the meaning each dash carries.

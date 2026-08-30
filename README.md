@@ -15,7 +15,7 @@ PerfSentinelHub gives IDE plugins one durable endpoint for findings collected fr
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 
-[docs/architecture.md](docs/architecture.md) draws the five relationships this file
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) draws the five relationships this file
 states in prose: the whole topology, the two directions a daemon and the Hub talk in,
 what a launched analysis does, the three retention clocks, and the states a run passes
 through.

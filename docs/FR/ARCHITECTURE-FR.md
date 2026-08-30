@@ -131,6 +131,6 @@ Les deux fichiers d'une paire doivent exister. Un schéma livré avec la seule v
 claire est une dalle blanche pour tout lecteur en thème sombre, ce qui est exactement la
 dérive que la convention de nommage existe pour rendre visible.
 
-[`../diagrams/hub-integration-spec.md`](../diagrams/hub-integration-spec.md) est un
+[`../diagrams/HUB-INTEGRATION-SPEC.md`](../diagrams/HUB-INTEGRATION-SPEC.md) est un
 document d'une autre nature : un cahier de dessin pour la version faite à la main du
 premier schéma, avec la palette, la géométrie et le sens que porte chaque tireté.

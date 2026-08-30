@@ -80,6 +80,54 @@ async function settle(id: string, seconds: number): Promise<string> {
   throw new Error(`run ${id} never reached a terminal state`);
 }
 
+// The same fixed epoch demo/capture-fixtures.sh pins, so a recapture of
+// unchanged data rewrites nothing.
+const EPOCH_MS = 1_756_512_000_000;
+// Above this a number is a moment, below it a duration. window_duration_ms and
+// its neighbours are durations and must survive untouched.
+const IS_TIMESTAMP = 1_000_000_000_000;
+
+function rebase(value: unknown, capturedAt: number): unknown {
+  if (Array.isArray(value)) return value.map((v) => rebase(v, capturedAt));
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = k.endsWith("_ms") && typeof v === "number" && v > IS_TIMESTAMP
+        ? EPOCH_MS - (capturedAt - v)
+        : rebase(v, capturedAt);
+    }
+    return out;
+  }
+  return value;
+}
+
+// Records what the Hub answers on the five routes the launcher reads, so the
+// site can serve a populated launcher with no Hub behind it. Captured here
+// rather than in a script of its own because this is the only place a populated
+// Hub exists, and capturing beside the screenshots keeps the two in step.
+async function captureEmbedFixtures(runs: string[]): Promise<void> {
+  const capturedAt = Date.now();
+  const routes: Record<string, unknown> = {};
+  const read = async (path: string) => {
+    const response = await fetch(BASE + path);
+    if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+    routes[path] = rebase(await response.json(), capturedAt);
+  };
+
+  await read("/api/status");
+  await read("/api/sources");
+  await read("/api/analyses?limit=500");
+  for (const id of runs) await read(`/api/analyses/${id}`);
+  // Only a daemon has a view. A trace backend answers 400, which is correct and
+  // is not something the embed needs to replay.
+  for (const id of ["checkout-prod", "billing-stg", "search-prod"]) {
+    await read(`/api/sources/${id}/daemon`);
+  }
+
+  writeFileSync(join(__dirname, "demo", "fixtures", "hub-embed.json"),
+                JSON.stringify({ epoch_ms: EPOCH_MS, routes }, null, 2) + "\n");
+}
+
 export default async function globalSetup(): Promise<void> {
   const engine = engineBinary();
   rmSync(WORK, { recursive: true, force: true });
@@ -163,6 +211,8 @@ export default async function globalSetup(): Promise<void> {
   const refused = await submit("tempo-eu",
     { service: "checkout", lookback: "999h", max_traces: 100 });
   for (const id of [succeeded, alsoSucceeded, unreachable, refused]) await settle(id, 120);
+
+  await captureEmbedFixtures([succeeded, alsoSucceeded, unreachable, refused]);
 
   writeFileSync(join(WORK, "state.json"), JSON.stringify({
     baseUrl: BASE,

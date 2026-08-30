@@ -128,6 +128,23 @@ Both files of a pair must exist. A diagram shipped with only the light variant i
 white slab for every reader in dark mode, which is exactly the drift the naming
 convention exists to make visible.
 
-[`diagrams/HUB-INTEGRATION-SPEC.md`](diagrams/HUB-INTEGRATION-SPEC.md) is a different
-kind of document: a drawing brief for the hand-made board version of the first diagram,
-with the palette, the geometry and the meaning each dash carries.
+## Every arrow, against the code
+
+The first diagram claims a topology. This is where that claim is checked: each arrow on
+it corresponds to a real call. Named by symbol rather than by line, because a line number
+is wrong the first time anyone edits above it.
+
+| Arrow                                     | Where it lives                                                                                     |
+|-------------------------------------------|----------------------------------------------------------------------------------------------------|
+| Browser to Hub, the launcher reads        | `Api/ApiEndpoints.Analysis.cs`, the four routes it maps                                            |
+| Plugin or CI to Hub                       | `Api/ApiEndpoints.cs`, `GetFindingsAsync`                                                          |
+| Daemon to Hub, push                       | `Api/ApiEndpoints.cs`, `ImportFindingsAsync`, storing via `TryUpsertBatchAsync`                    |
+| Hub to daemon, poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` and `FetchFindingsAsync`                          |
+| Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                           |
+| Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                   |
+| Reachability set, and cleared             | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync` and `MarkSourceFailureAsync`, nowhere else  |
+| Hub to SQLite                             | `Storage/Schema.cs`                                                                                |
+| Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                        |
+| Engine writes the report                  | `Analysis/AnalysisRunner.cs`                                                                       |
+| Report served into the iframe             | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                   |
+| Hub to api.github.com                     | `Collection/UpdateChecker.cs`, `ReadAsync`, the only outbound call that is not a configured source |

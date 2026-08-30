@@ -131,6 +131,23 @@ Les deux fichiers d'une paire doivent exister. Un schéma livré avec la seule v
 claire est une dalle blanche pour tout lecteur en thème sombre, ce qui est exactement la
 dérive que la convention de nommage existe pour rendre visible.
 
-[`../diagrams/HUB-INTEGRATION-SPEC.md`](../diagrams/HUB-INTEGRATION-SPEC.md) est un
-document d'une autre nature : un cahier de dessin pour la version faite à la main du
-premier schéma, avec la palette, la géométrie et le sens que porte chaque tireté.
+## Chaque flèche, confrontée au code
+
+Le premier schéma affirme une topologie. C'est ici qu'elle se vérifie : chaque flèche
+correspond à un appel réel. Désigné par symbole plutôt que par ligne, un numéro de ligne
+étant faux dès la première édition au-dessus de lui.
+
+| Flèche                                            | Où elle vit                                                                                             |
+|---------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| Navigateur vers le Hub, le lanceur lit            | `Api/ApiEndpoints.Analysis.cs`, les quatre routes qu'il déclare                                         |
+| Greffon ou CI vers le Hub                         | `Api/ApiEndpoints.cs`, `GetFindingsAsync`                                                               |
+| Daemon vers le Hub, le push                       | `Api/ApiEndpoints.cs`, `ImportFindingsAsync`, qui range par `TryUpsertBatchAsync`                       |
+| Hub vers le daemon, le poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` et `FetchFindingsAsync`                                |
+| Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                |
+| Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                        |
+| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync` et `MarkSourceFailureAsync`, nulle part ailleurs |
+| Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                     |
+| Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                         |
+| Le moteur écrit le rapport                        | `Analysis/AnalysisRunner.cs`                                                                            |
+| Le rapport servi dans l'iframe                    | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                        |
+| Hub vers api.github.com                           | `Collection/UpdateChecker.cs`, `ReadAsync`, seul appel sortant qui ne soit pas une source configurée    |

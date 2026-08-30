@@ -47,6 +47,59 @@ carries the same caveat as `Environment`: it keeps a stale claim until someone e
 `BaseUrl` keeps a path prefix, so `https://gw/perf-sentinel/` polls
 `https://gw/perf-sentinel/api/status`.
 
+## What a source is, and what is measured
+
+The list is configuration, never discovery. Nothing is auto-detected, the launcher cannot
+add a source, and the Hub refuses to start with none.
+
+That splits every row on the fleet screen in two. `Id`, `Name`, `Environment`, `Kind`,
+`BaseUrl` and `RetentionHours` are declared: taken from this file as written and never
+checked against anything. `reachable`, `last_success`, `unreachable_since`,
+`producer_version` and `last_error` are observed, written by the poll. A dashed outline in
+the launcher marks the declared half, which is why a misconfigured deployment can label
+production as staging and nothing will contradict it.
+
+Only a daemon is polled. Its `api/status` supplies `producer_version`, and its
+`api/findings` is the safety net behind the push.
+
+Where it goes: `Hub:Sources` in `appsettings.json`, the `Hub__Sources__N__*` environment
+variables, or `sources[]` in the Helm values. The three are the same setting, and `Kind`
+is what decides which half of the screen a row lands in.
+
+```yaml
+sources:
+  - id: checkout-prod
+    name: Checkout production
+    environment: production
+    kind: daemon
+    baseUrl: http://perf-sentinel.observability:4318
+    importSecretName: hub-import-keys    # the push credential, never inline
+    importSecretKey: checkout-prod
+  - id: victoria-eu
+    name: Victoria Traces EU
+    environment: staging
+    kind: jaeger_query                   # Victoria Traces speaks the Jaeger query API
+    baseUrl: http://victoria-traces.observability:10428
+    retentionHours: 72
+```
+
+The same pair as environment variables, one index per source:
+
+```bash
+Hub__Sources__0__Id=checkout-prod
+Hub__Sources__0__Kind=daemon
+Hub__Sources__0__BaseUrl=http://perf-sentinel.observability:4318
+Hub__Sources__1__Id=victoria-eu
+Hub__Sources__1__Kind=jaeger_query
+Hub__Sources__1__BaseUrl=http://victoria-traces.observability:10428
+Hub__Sources__1__RetentionHours=72
+```
+
+A trace backend is never contacted at all until someone runs an analysis: no route in the
+Hub reads a Tempo. The Hub only launches the engine against it, with the subcommand its
+kind implies, `tempo` for `tempo` and `jaeger-query` otherwise. That is why such a source
+shows no producer version and no last success, and it is not a fault.
+
 ## Where the Hub connects
 
 Every outbound request goes to a configured `Sources[].BaseUrl`, with one exception. Once

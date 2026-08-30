@@ -22,6 +22,67 @@ SPEC.loader.exec_module(packager)
 
 
 class NativePackageTests(unittest.TestCase):
+    def test_metadata_fields_drops_what_windows_does_not_carry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / "probe.bin"
+            probe.write_bytes(b"x")
+            metadata = probe.stat()
+            with patch.object(packager, "POSIX_STAT", True):
+                self.assertEqual(
+                    {"type", "size", "mtime_ns", "dev", "ino", "ctime_ns"},
+                    set(packager.metadata_fields(metadata)),
+                )
+            # st_ino is not guaranteed identical between a stat by path and an
+            # fstat by handle on Windows, and st_ctime is the creation time
+            # there. Comparing either rejects a file nothing has touched.
+            with patch.object(packager, "POSIX_STAT", False):
+                self.assertEqual(
+                    {"type", "size", "mtime_ns"},
+                    set(packager.metadata_fields(metadata)),
+                )
+
+    def test_a_change_names_the_field_that_moved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            small, large = root / "a.bin", root / "b.bin"
+            small.write_bytes(b"x")
+            large.write_bytes(b"xx")
+            message = packager.describe_change("a.bin", small.stat(), large.stat())
+            # The Windows failure said only which file, never which field, which
+            # is what made it a guess rather than a diagnosis.
+            self.assertIn("a.bin", message)
+            self.assertIn("size: 1 -> 2", message)
+
+    def test_the_windows_field_set_still_catches_a_same_size_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publish = self.publish_tree(root)
+            mutable = publish / "mutable.bin"
+            mutable.write_bytes(b"AAAA")
+            output = root / "dist"
+            output.mkdir()
+
+            scan_staging = packager.scan_staging
+
+            def scan_then_mutate(staging):
+                entries = scan_staging(staging)
+                before = mutable.stat()
+                with mutable.open("r+b") as stream:
+                    stream.write(b"BBBB")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.utime(mutable, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+                return entries
+
+            # Dropping st_ino and st_ctime_ns must not blunt the check: type,
+            # size and st_mtime_ns still reject a rewrite of the same length.
+            with (
+                patch.object(packager, "POSIX_STAT", False),
+                patch.object(packager, "scan_staging", side_effect=scan_then_mutate),
+                self.assertRaisesRegex(ValueError, r"changed during packaging.*mtime_ns"),
+            ):
+                packager.package("osx-arm64", VERSION, int(COMMIT_TIME), publish, output)
+
     def test_rejects_same_inode_same_size_mutation_before_publication(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

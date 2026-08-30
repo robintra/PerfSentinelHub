@@ -112,15 +112,39 @@ def scan_staging(root: Path):
     return entries
 
 
-def metadata_signature(metadata):
-    return (
-        stat.S_IFMT(metadata.st_mode),
-        metadata.st_dev,
-        metadata.st_ino,
-        metadata.st_size,
-        metadata.st_mtime_ns,
-        metadata.st_ctime_ns,
+POSIX_STAT = os.name == "posix"
+
+
+def metadata_fields(metadata):
+    """The stat fields a change during packaging would move.
+
+    st_dev, st_ino and st_ctime_ns are compared on POSIX only. On Windows the
+    file index is not guaranteed identical between a stat by path and an fstat by
+    handle, and st_ctime is the creation time, whose meaning moved in Python 3.12.
+    Comparing them there rejects a file nothing has touched. Type, size and
+    st_mtime_ns still catch a truncation, a rewrite and a replacement.
+    """
+    fields = {
+        "type": stat.S_IFMT(metadata.st_mode),
+        "size": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+    }
+    if POSIX_STAT:
+        fields["dev"] = metadata.st_dev
+        fields["ino"] = metadata.st_ino
+        fields["ctime_ns"] = metadata.st_ctime_ns
+    return fields
+
+
+def describe_change(relative, before, after):
+    """Name the fields that moved, so a failure says what changed and not only where."""
+    first, second = metadata_fields(before), metadata_fields(after)
+    moved = ", ".join(
+        f"{name}: {first[name]} -> {second[name]}"
+        for name in first
+        if first[name] != second[name]
     )
+    return f"file changed during packaging: {relative} ({moved})"
 
 
 def snapshot_entries(entries, directory: Path):
@@ -131,8 +155,8 @@ def snapshot_entries(entries, directory: Path):
         descriptor = os.open(path, flags)
         try:
             before = os.fstat(descriptor)
-            if metadata_signature(before) != metadata_signature(expected):
-                raise ValueError(f"file changed during packaging: {relative}")
+            if metadata_fields(before) != metadata_fields(expected):
+                raise ValueError(describe_change(relative, expected, before))
             source = os.fdopen(descriptor, "rb")
             descriptor = -1
             digest = hashlib.sha256()
@@ -143,8 +167,12 @@ def snapshot_entries(entries, directory: Path):
                     digest.update(chunk)
                     copied += len(chunk)
                 after = os.fstat(source.fileno())
-            if copied != before.st_size or metadata_signature(after) != metadata_signature(before):
-                raise ValueError(f"file changed during packaging: {relative}")
+            if copied != before.st_size:
+                raise ValueError(
+                    f"file changed during packaging: {relative} "
+                    f"(read {copied} bytes of {before.st_size})")
+            if metadata_fields(after) != metadata_fields(before):
+                raise ValueError(describe_change(relative, before, after))
             snapshot.chmod(0o400)
             snapshots.append((snapshot, relative, expected, symbol, digest.digest()))
         finally:
@@ -170,7 +198,7 @@ class SnapshotReader:
         self.relative = relative
         self.expected_size = expected.st_size
         self.expected_digest = expected_digest
-        self.opened = metadata_signature(opened)
+        self.opened = metadata_fields(opened)
         self.digest = hashlib.sha256()
         self.size = 0
 
@@ -181,7 +209,7 @@ class SnapshotReader:
         return chunk
 
     def verify(self):
-        closed = metadata_signature(os.fstat(self.stream.fileno()))
+        closed = metadata_fields(os.fstat(self.stream.fileno()))
         if (
             closed != self.opened
             or self.size != self.expected_size

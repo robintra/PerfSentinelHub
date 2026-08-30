@@ -2,6 +2,15 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- `image.repository` defaults to `ghcr.io/robintra/perf-sentinel-hub` rather than the bare name
+  `perf-sentinel-hub`. The published chart already carries a stamped `image.digest` naming a
+  GitHub Container Registry image, so a bare repository left half the identity unresolved and an
+  install that did not override it ended in `ImagePullBackOff` against Docker Hub.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added

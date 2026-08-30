@@ -1,5 +1,5 @@
 image:
-  repository: perf-sentinel-hub
+  repository: ghcr.io/robintra/perf-sentinel-hub
   digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
   pullPolicy: IfNotPresent
 hub:

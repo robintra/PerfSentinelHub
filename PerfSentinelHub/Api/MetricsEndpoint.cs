@@ -24,7 +24,7 @@ public static class MetricsEndpoint
 
     public static void MapMetrics(this WebApplication app)
     {
-        var version = typeof(MetricsEndpoint).Assembly.GetName().Version?.ToString() ?? "unknown";
+        var version = HubVersion.Current;
         app.MapGet("/metrics", async (
             HubDatabase database,
             IOptions<HubOptions> options,

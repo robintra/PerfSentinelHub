@@ -13,7 +13,7 @@ public static partial class ApiEndpoints
 {
     public static void MapHubApi(this WebApplication app)
     {
-        var version = typeof(ApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown";
+        var version = HubVersion.Current;
 
         app.MapGet("/api/status", async (
             HttpRequest request,

@@ -1307,7 +1307,7 @@
     if (view.error_code) return daemonError(source, index, view.error_code);
 
     return el("div", { class: "daemon-panel" }, [
-      el("p", { class: "overline daemon-audience", text: "// for the devops who run this daemon" }),
+      el("p", { class: "overline daemon-audience", text: "// intended for devops" }),
       el("p", {
         class: "daemon-source-note",
         text: "Reported by this daemon over its query API. The Hub relays it and verifies none of "

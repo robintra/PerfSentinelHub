@@ -385,7 +385,6 @@ button { font: inherit; }
 /* A band across the fleet table, not a data row: no hover, no border above, and
    its label sits on the same overline scale as every other section marker. */
 .table-group td { padding: 14px 12px 6px; background: transparent; border: 0; }
-.table-group:first-child td { padding-top: 2px; }
 /* The audience of the unfolded zone, said once at the top instead of inside a
    sentence a reader skims past. It needs air above it: without the gap it reads
    as part of the row it hangs off rather than as the head of the zone. */

@@ -55,6 +55,7 @@ builder.Services.AddSingleton<EngineProbe>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<EngineProbe>());
 builder.Services.AddSingleton<ImportGate>();
 builder.Services.AddSingleton<ImportMetrics>();
+builder.Services.AddSingleton<ImportAdmission>();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<AnalysisRunner>();
 builder.Services.AddHostedService<AnalysisWorker>();

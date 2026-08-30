@@ -202,9 +202,8 @@ public sealed class WorkerAndRetentionTests : IDisposable
         var surviving = await IdsAsync(reopened, cancellationToken);
         // A run still queued or in flight is never purged, however old its row
         // looks: a worker is about to write to it, or already is.
-        Assert.Equal(
-            new[] { "ancient-pending", "ancient-running", "fresh-done" },
-            surviving);
+        string[] expected = ["ancient-pending", "ancient-running", "fresh-done"];
+        Assert.Equal(expected, surviving);
     }
 
     private static async Task<string[]> IdsAsync(

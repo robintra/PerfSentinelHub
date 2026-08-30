@@ -165,15 +165,15 @@ public static class MetricsEndpoint
     private static void Family(StringBuilder text, string name, string help) =>
         Family(text, name, "gauge", help);
 
-    /// <summary>Declares a counter, which only ever rises or resets to zero.</summary>
-    private static void Counter(StringBuilder text, string name, string help) =>
-        Family(text, name, "counter", help);
-
     private static void Family(StringBuilder text, string name, string type, string help)
     {
         text.Append("# HELP ").Append(name).Append(' ').Append(help).Append('\n');
         text.Append("# TYPE ").Append(name).Append(' ').Append(type).Append('\n');
     }
+
+    /// <summary>Declares a counter, which only ever rises or resets to zero.</summary>
+    private static void Counter(StringBuilder text, string name, string help) =>
+        Family(text, name, "counter", help);
 
     private static void Line(StringBuilder text, string name, string? labels, double value)
     {

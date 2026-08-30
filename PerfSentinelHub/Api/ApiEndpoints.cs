@@ -84,29 +84,28 @@ public static partial class ApiEndpoints
     private static async Task<IResult> ImportFindingsAsync(
         HttpRequest request,
         HubDatabase database,
-        ImportGate gate,
+        ImportAdmission admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
-        ImportMetrics metrics,
         CancellationToken cancellationToken)
     {
         if (!HasValidUtf8(request.QueryString.Value) ||
             request.Query.Count != 1 ||
             !request.Query.TryGetValue("source_id", out var sourceIds) ||
             sourceIds.Count != 1)
-            return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
+            return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
         var sourceId = sourceIds[0];
         if (string.IsNullOrEmpty(sourceId))
-            return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
+            return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
         var source = options.Value.Sources.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, sourceId, StringComparison.Ordinal));
         if (source is null || !IsAuthorized(request, source.ImportApiKey))
-            return Refuse(metrics, ImportRejection.Unauthorized, TypedResults.Unauthorized());
-        if (!gate.TryEnter())
+            return admission.Refuse(ImportRejection.Unauthorized, TypedResults.Unauthorized());
+        if (!admission.Gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
-            return Refuse(metrics, ImportRejection.GateFull,
+            return admission.Refuse(ImportRejection.GateFull,
                 TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
         }
 
@@ -114,7 +113,7 @@ public static partial class ApiEndpoints
         {
             var payload = await ReadBodyAsync(request, cancellationToken);
             if (payload is null)
-                return Refuse(metrics, ImportRejection.TooLarge,
+                return admission.Refuse(ImportRejection.TooLarge,
                     TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
 
             ParsedImport import;
@@ -124,16 +123,16 @@ public static partial class ApiEndpoints
             }
             catch (ImportBatchTooLargeException)
             {
-                return Refuse(metrics, ImportRejection.TooLarge,
+                return admission.Refuse(ImportRejection.TooLarge,
                     TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
             }
             catch (InvalidDataException)
             {
-                return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
             }
 
             if (import.Batch.Findings.Count == 0)
-                return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
             var stored = await database.TryUpsertBatchAsync(
                 new SourceSnapshot(source.Id, source.Name, source.Environment, import.ProducerVersion),
                 import.Batch,
@@ -142,7 +141,7 @@ public static partial class ApiEndpoints
             if (!stored)
             {
                 request.HttpContext.Response.Headers.RetryAfter = "1";
-                return Refuse(metrics, ImportRejection.WriteTimeout,
+                return admission.Refuse(ImportRejection.WriteTimeout,
                     TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
             }
 
@@ -155,7 +154,7 @@ public static partial class ApiEndpoints
         }
         finally
         {
-            gate.Exit();
+            admission.Gate.Exit();
         }
     }
 
@@ -266,13 +265,6 @@ public static partial class ApiEndpoints
         {
             return false;
         }
-    }
-
-    /// <summary>Counts a refused import and hands its result straight back.</summary>
-    private static T Refuse<T>(ImportMetrics metrics, ImportRejection reason, T result)
-    {
-        metrics.Rejected(reason);
-        return result;
     }
 
     private static bool IsAuthorized(HttpRequest request, string? apiKey)

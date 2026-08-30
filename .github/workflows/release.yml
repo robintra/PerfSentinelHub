@@ -989,5 +989,11 @@ jobs:
           test -f "$pulled"
           cmp "$root/perf-sentinel-hub-$VERSION.tgz" "$pulled"
           # This job runs without a checkout on purpose, so gh cannot infer the
-          # repository from a git remote and has to be told.
-          gh release create "v$VERSION" "$root"/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "PerfSentinel Hub $VERSION" --notes-from-tag
+          # repository from a git remote and has to be told. --notes-from-tag reads
+          # the annotation through local git and gh refuses it alongside --repo, so
+          # the notes come from the tag the previous step already fetched and
+          # verified. :subject and not the whole contents, which carries the
+          # signature block.
+          notes="$(git -C tag-check tag -l --format='%(contents:subject)' "v$VERSION")"
+          test -n "$notes"
+          gh release create "v$VERSION" "$root"/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "PerfSentinel Hub $VERSION" --notes "$notes"

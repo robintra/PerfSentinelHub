@@ -53,6 +53,27 @@ Fork pull requests run secret-free validation. Fork code never receives reposito
 
 Do not report vulnerabilities in a public issue or pull request. Follow `SECURITY.md` and use GitHub private vulnerability reporting. Remove credentials, private findings, and sensitive logs from ordinary bug reports.
 
+## Documentation assets
+
+Two chains, both run by hand. Neither is part of CI, and neither is required to
+merge.
+
+**Diagrams.** The `.mmd` sources under `docs/diagrams/mmd/` are authoritative.
+They carry no `%%{init}%%` theme block on purpose, because the theme is an
+export argument, which is what lets one source produce both the light and the
+dark SVG. Export from [mermaid.live](https://mermaid.live) into
+`docs/diagrams/svg/` as a pair, `<name>.svg` and `<name>_dark.svg`. Ship both:
+a diagram with only the light variant is a white slab for every reader in dark
+mode.
+
+`mermaid-cli` is not a drop-in substitute. Measured on these sources, `mmdc`
+writes different background values than the existing family, so it is useful
+for checking that a source parses and not for producing the files.
+
+**Screenshots.** `tests/browser` captures the launcher screens into
+`docs/img/hub/`. See its README: it needs a perf-sentinel binary, and `ffmpeg`
+for the GIFs.
+
 ## Documentation and licensing
 
 Update operator documentation when commands, configuration, trust boundaries, or supported artifacts change. Contributions are accepted under the repository's AGPL-3.0-only license; by submitting a contribution, you confirm that you have the right to provide it under that license.

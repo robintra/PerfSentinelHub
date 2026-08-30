@@ -3,6 +3,13 @@
 Les variables d'environnement suivent la forme .NET `Hub__...`. Helm expose les mêmes
 réglages sous `hub` et `sources`.
 
+[`examples/appsettings.reference.json`](../../examples/appsettings.reference.json) fixe
+chaque réglage à la valeur que le Hub utilise déjà, annotée. La copier entièrement ne
+change rien, c'est l'inventaire plutôt qu'un point de départ. Un test la maintient
+exhaustive, ce qui compte ici parce que .NET ignore en silence une clé de configuration
+qu'il ne reconnaît pas : un nom mal orthographié ne produit aucune erreur et se lit comme
+un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
+
 ## Réglages
 
 | Réglage                          | Défaut                                                | Validation                                                                                            |
@@ -20,6 +27,7 @@ réglages sous `hub` et `sources`.
 | `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                    | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur                                    |
 | `Hub:Analysis:Workers`           | `2`                                                   | 1 à 16                                                                                                |
 | `Hub:Analysis:MaxTracesCap`      | `2000`                                                | 1 à 10000, la limite propre du moteur sur `--max-traces`                                              |
+| `Hub:Analysis:MaxTracesEmbedded` | `50`                                                  | 0 à 10000. Arbres de spans embarqués dans le rapport. Le poser fait sortir le sink du ciblage de taille |
 | `Hub:Analysis:Timeout`           | `00:05:00`                                            | Positive, une heure au plus                                                                           |
 | `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 heures)                              | Durée positive                                                                                        |
 | `Hub:Analysis:RunRetention`      | `30.00:00:00` (30 jours)                              | Positive, plus longue que `ReportRetention`. Quand la ligne d'un run terminé est supprimée             |

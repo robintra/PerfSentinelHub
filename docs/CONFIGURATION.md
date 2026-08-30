@@ -3,6 +3,12 @@
 Environment variables use the .NET `Hub__...` form. Helm exposes the same settings under
 `hub` and `sources`.
 
+[`examples/appsettings.reference.json`](../examples/appsettings.reference.json) sets every
+setting to the value the Hub already uses, annotated. Copying it whole changes nothing, it
+is the inventory rather than a starting point. A test keeps it exhaustive, which matters
+here because .NET ignores an unrecognised configuration key in silence: a mistyped name
+produces no error and reads like a bug in the Hub rather than a typo in your file.
+
 ## Settings
 
 | Setting                          | Default                                            | Validation                                                                                      |
@@ -20,6 +26,7 @@ Environment variables use the .NET `Hub__...` form. Helm exposes the same settin
 | `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                 | Header a reverse proxy sets with the requester's identity                                       |
 | `Hub:Analysis:Workers`           | `2`                                                | 1 to 16                                                                                         |
 | `Hub:Analysis:MaxTracesCap`      | `2000`                                             | 1 to 10000, the engine's own limit on `--max-traces`                                            |
+| `Hub:Analysis:MaxTracesEmbedded` | `50`                                               | 0 to 10000. Span trees embedded in the report. Setting it opts the sink out of size targeting   |
 | `Hub:Analysis:Timeout`           | `00:05:00`                                         | Positive, at most one hour                                                                      |
 | `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 hours)                            | Positive duration                                                                               |
 | `Hub:Analysis:RunRetention`      | `30.00:00:00` (30 days)                            | Positive, longer than `ReportRetention`. When a finished run's row is deleted                   |

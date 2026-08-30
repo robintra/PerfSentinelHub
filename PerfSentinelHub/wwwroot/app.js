@@ -3458,7 +3458,9 @@
     const result = run.result || {};
     if (key === "succeeded") {
       return {
-        tone: "ok", title: "result",
+        // The run succeeding and the gate passing are two different verdicts.
+        // A green panel announcing a failed gate contradicts its own sentence.
+        tone: result.quality_gate_passed ? "ok" : "crit", title: "result",
         body: result.quality_gate_passed
           ? "The quality gate passed. The dashboard holds the full detail."
           : "The quality gate did not pass. The dashboard holds the full detail.",

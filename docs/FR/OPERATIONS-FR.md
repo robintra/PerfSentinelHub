@@ -66,6 +66,26 @@ service:
     prometheus.io/path: /metrics
 ```
 
+### Les consommer
+
+Trois fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissés.
+
+| Fichier                                                             | Est                                                                    |
+|----------------------------------------------------------------------|--------------------------------------------------------------------------|
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)   | Huit panneaux sur les six familles, importable tel quel                |
+| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)     | Cinq règles, contrôlées par `promtool check rules`                     |
+| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)     | Un job de collecte pour un déploiement qui nomme ses cibles            |
+
+Le moteur livre son propre tableau de bord pour ses propres métriques, et les
+deux ne se recouvrent pas : aucun panneau d'ici ne lit une série de daemon, et
+aucun panneau de là-bas ne lit une série du Hub. Importer les deux pour
+surveiller une flotte et le Hub qui la collecte.
+
+Une règle ne peut pas s'écrire. Un daemon jamais interrogé avec succès ne publie
+aucune série `last_success`, et Prometheus ne détient aucune liste des sources
+qui devraient exister pour la comparer, donc rien n'alerte sur une source qui
+n'a jamais répondu. C'est l'écran de flotte qui le montre.
+
 ## Sauvegarde
 
 L'historique `first_seen` est la seule chose que le Hub stocke qu'aucun amont ne peut

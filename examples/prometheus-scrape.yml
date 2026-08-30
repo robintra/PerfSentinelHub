@@ -1,0 +1,35 @@
+# Scraping PerfSentinelHub.
+#
+# On Kubernetes the chart already carries the annotations a Prometheus with
+# annotation discovery reads, so this file is for a deployment that names its
+# targets: docker compose, a VM, or a Prometheus without discovery. See
+# docs/OPERATIONS.md for the annotation form.
+#
+# /metrics carries no authentication, exactly like /api/status. Keep it behind
+# whatever fronts the rest of the Hub.
+
+global:
+  scrape_interval: 30s
+
+rule_files:
+  - prometheus-alerts.yml
+
+scrape_configs:
+  - job_name: perf-sentinel-hub
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - perf-sentinel-hub.observability:8080
+        labels:
+          # The Hub publishes one series per configured source, so an instance
+          # label per Hub is what separates two fleets sharing a Prometheus.
+          fleet: production
+
+  # The daemons the Hub collects from publish their own, unrelated metrics:
+  # findings, GreenOps figures, ingest rates. Nothing in this dashboard reads
+  # them, and nothing in the engine's dashboard reads the Hub's.
+  - job_name: perf-sentinel
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - perf-sentinel.observability:4318

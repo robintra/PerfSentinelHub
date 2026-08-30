@@ -63,6 +63,25 @@ service:
     prometheus.io/path: /metrics
 ```
 
+### Consuming it
+
+Three files under [`examples/`](../examples), each validated rather than sketched.
+
+| File                                                             | Is                                                                |
+|------------------------------------------------------------------|--------------------------------------------------------------------|
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)   | Eight panels over the six families, importable as it stands       |
+| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)     | Five rules, checked with `promtool check rules`                   |
+| [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)     | A scrape job for a deployment that names its targets              |
+
+The engine ships its own dashboard for its own metrics, and the two do not
+overlap: no panel here reads a daemon series, and no panel there reads a Hub
+one. Import both to watch a fleet and the Hub collecting it.
+
+One rule cannot be written. A daemon never polled successfully publishes no
+`last_success` series at all, and Prometheus holds no list of the sources that
+ought to exist to compare against, so nothing alerts on a source that has never
+answered. The fleet screen is where that shows.
+
 ## Backup
 
 `first_seen` history is the one thing the Hub stores that nothing upstream can

@@ -430,9 +430,22 @@ jobs:
       - id: image
         name: Export immutable image digest
         run: echo "digest=$(cat "$RUNNER_TEMP/image.digest")" >> "$GITHUB_OUTPUT"
+      - name: Expand the OCI archives for scanning
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Trivy reads an OCI *layout*, a directory holding index.json, and refuses
+          # the archive buildx writes: "stat <tar>/index.json: not a directory".
+          for source in "$RUNNER_TEMP/amd64-a.oci.tar" "$RUNNER_TEMP/arm64-a.oci.tar" "release/perf-sentinel-hub-$VERSION.oci.tar"; do
+            layout="${source%.tar}.layout"
+            mkdir -p "$layout"
+            tar xf "$source" -C "$layout"
+            test -f "$layout/index.json"
+          done
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          input: ${{ runner.temp }}/amd64-a.oci.tar
+          input: ${{ runner.temp }}/amd64-a.oci.layout
           format: table
           exit-code: 1
           ignore-unfixed: true
@@ -440,7 +453,7 @@ jobs:
           cache: false
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          input: ${{ runner.temp }}/arm64-a.oci.tar
+          input: ${{ runner.temp }}/arm64-a.oci.layout
           format: table
           exit-code: 1
           ignore-unfixed: true
@@ -449,7 +462,7 @@ jobs:
           skip-setup-trivy: true
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          input: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.tar
+          input: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.layout
           format: table
           exit-code: 1
           ignore-unfixed: true

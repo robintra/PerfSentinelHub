@@ -14,11 +14,35 @@
         <Copyright>Copyright (C) 2026 Robin Trassard</Copyright>
         <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
         <RepositoryUrl>https://github.com/robintra/PerfSentinelHub</RepositoryUrl>
+        <!-- The LoggerMessage generator emits its class blocks in a different order on
+             every run, which moves the PDB, which moves the deterministic content hash
+             whose MVID the native image embeds. No PDB, no drift. Gated on a RID so the
+             RID-less Release build the coverage and Sonar jobs run keeps its PDBs. -->
+        <DebugType Condition="'$(RuntimeIdentifier)' != ''">none</DebugType>
+        <!-- DebugType=none also turns off the objcopy pass that writes the .dbg and the
+             /DEBUG that writes the native PDB, which would ship an empty symbols archive.
+             Put it back, except on Apple where dsymutil runs anyway and -g moves the
+             Mach-O UUID between two otherwise identical builds. -->
+        <NativeDebugSymbols Condition="'$(RuntimeIdentifier)' != '' and !$(RuntimeIdentifier.StartsWith('osx'))">true</NativeDebugSymbols>
     </PropertyGroup>
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Data.Sqlite" />
       <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     </ItemGroup>
+
+    <!-- link.exe stamps the PE header and the PDB signature from the wall clock unless
+         told to derive them from the content. -->
+    <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+        <LinkerArg Include="/Brepro" />
+    </ItemGroup>
+
+    <!-- Every endpoint in this manifest carries a Last-Modified read from the mtime of
+         the .gz/.br the build regenerates each run, so the file can never be byte stable.
+         Nothing reads it: wwwroot is served by UseStaticFiles, which ETags from the file
+         on disk, not by MapStaticAssets. Every .gz and .br still ships. -->
+    <Target Name="DropStaticWebAssetEndpointsManifest" AfterTargets="CopyStaticWebAssetsEndpointsManifest">
+        <Delete Files="$(PublishDir)$(TargetName).staticwebassets.endpoints.json" />
+    </Target>
 
 </Project>

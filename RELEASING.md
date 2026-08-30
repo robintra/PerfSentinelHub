@@ -18,6 +18,13 @@ archives:
 
 There is no macOS AMD64 or Windows ARM64 artifact.
 
+A symbol archive carries native symbols, not managed line numbers. RID builds publish
+with `DebugType=none`, because the `LoggerMessage` source generator orders its output
+differently on every run, which moves the PDB, the deterministic content hash computed
+from it, and the MVID the native image embeds. Without that, two builds of one commit
+are never byte identical and the duplicate-build comparison can never pass. A crash
+address still resolves to a function, not to a file and a line.
+
 The same closed release also contains one multi-architecture Linux OCI image archive, one
 digest-bound Helm chart, an SPDX document and a Cosign bundle for every subject, plus
 GitHub provenance. `release-manifest.json` and `SHA256SUMS` bind the exact filenames,

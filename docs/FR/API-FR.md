@@ -33,6 +33,7 @@ push n'exerce pas.
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                                             |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                              |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                    |
+| `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                    |
 | `GET /health/live`                   | Si le process est debout                                                                                                                                                                                        |
 | `GET /health/ready`                  | Positif après l'initialisation de SQLite                                                                                                                                                                        |
 

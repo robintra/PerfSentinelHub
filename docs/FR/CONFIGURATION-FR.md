@@ -32,7 +32,7 @@ réglages sous `hub` et `sources`.
 
 | Réglage                          | Défaut   | Validation                                                                                                          |
 |----------------------------------|----------|---------------------------------------------------------------------------------------------------------------------|
-| `Sources[].Id`                   | aucun    | Non vide et unique                                                                                                  |
+| `Sources[].Id`                   | aucun    | Unique, 1 à 64 caractères ASCII alphanumériques, `.`, `_` ou `-`                                                                                                  |
 | `Sources[].Name`                 | aucun    | Non vide                                                                                                            |
 | `Sources[].Environment`          | aucun    | Non vide                                                                                                            |
 | `Sources[].Kind`                 | `daemon` | L'un de `daemon`, `tempo`, `jaeger_query`. Seul un daemon est pollé, et seul un daemon peut porter une clé d'import |

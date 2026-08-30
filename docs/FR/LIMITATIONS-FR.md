@@ -81,6 +81,8 @@ rien d'autre. Voir [LAUNCHER-FR.md](LAUNCHER-FR.md).
 Une seule réplique, et ce n'est pas un réglage. SQLite n'a qu'un écrivain et le
 volume est `ReadWriteOnce`, donc le chart pose `replicas: 1`.
 
-Le Hub n'expose aucun endpoint Prometheus. `/health/live`, `/health/ready` et
-`GET /api/status` constituent toute la surface opérationnelle. Le `/metrics`
-propre à un daemon n'est pas affecté, le Hub n'en ajoute simplement pas un.
+`GET /metrics` couvre la joignabilité, la file d'analyses et les comptes de
+runs, et rien d'autre. Aucune série ne porte les findings stockés, la durée
+d'une purge de rétention ni le débit d'import, donc une alerte sur ces points
+doit lire `/api/findings` ou les journaux. Voir
+[OPERATIONS-FR.md](OPERATIONS-FR.md#métriques).

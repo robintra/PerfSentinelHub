@@ -18,6 +18,51 @@ unreachable and retried with bounded exponential backoff, and a later success cl
 state. Poll bodies are limited to 16 MiB, requests have a timeout, imports are
 transactional, and logs identify only the source ID and a stable error code.
 
+## Metrics
+
+`GET /metrics` serves the Prometheus text format. It is written by hand rather
+than through a library: six metric families over data the Hub already holds do
+not justify a dependency in a service whose only two packages are SQLite.
+
+| Metric                                          | Type  | What it answers                                     |
+|-------------------------------------------------|-------|-----------------------------------------------------|
+| `perf_sentinel_hub_build_info{version}`         | gauge | Which version is running                            |
+| `perf_sentinel_hub_source_reachable{source}`    | gauge | Whether the last poll of a daemon succeeded         |
+| `perf_sentinel_hub_source_unreachable_seconds`  | gauge | How long it has been unreachable, 0 when it answers |
+| `perf_sentinel_hub_source_last_success_seconds` | gauge | Age of the last successful poll                     |
+| `perf_sentinel_hub_analysis_queue_depth`        | gauge | Runs accepted and not yet claimed by a worker       |
+| `perf_sentinel_hub_analysis_runs{status}`       | gauge | Runs currently stored, per status                   |
+
+Three things the shape is deliberate about.
+
+Only a daemon gets a source series. A trace backend is never polled, so calling
+it reachable would assert something the Hub has not observed.
+
+A daemon never polled successfully gets no `last_success` series at all. Zero
+would read as "succeeded just now", which is the opposite of never.
+
+`analysis_runs` is a gauge, not a `_total` counter. Retention deletes rows, so
+the series falls as well as rises, and every status is emitted even at zero
+because a gauge that vanishes reads as a scrape failure rather than as "nothing
+is in that state".
+
+Cardinality is bounded by configuration. `source` takes the ids in
+`Hub:Sources`, fixed at startup and restricted to 1 to 64 ASCII letters, digits,
+`.`, `_` or `-`. `status` takes six constants. Nothing a caller sends reaches a
+label.
+
+The endpoint carries no authentication, exactly like `/api/status`. Keep it
+behind whatever fronts the rest of the Hub. The chart leaves the scrape opted
+into rather than assumed:
+
+```yaml
+service:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: /metrics
+```
+
 ## Backup
 
 `first_seen` history is the one thing the Hub stores that nothing upstream can

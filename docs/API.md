@@ -31,6 +31,7 @@ the Hub's route to the daemon, which a push does not exercise.
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                            |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
+| `GET /metrics`                       | Prometheus text format, see [OPERATIONS.md](OPERATIONS.md#metrics)                                                                                                                         |
 | `GET /health/live`                   | Whether the process is up                                                                                                                                                                  |
 | `GET /health/ready`                  | Successful after SQLite initialization                                                                                                                                                     |
 

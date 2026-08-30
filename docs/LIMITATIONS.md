@@ -74,6 +74,7 @@ a path-based ingress gets a static report instead, because the engine's
 One replica, and not a knob. SQLite has a single writer and the volume is
 `ReadWriteOnce`, so the chart sets `replicas: 1`.
 
-The Hub exposes no Prometheus endpoint. `/health/live`, `/health/ready` and
-`GET /api/status` are the whole operational surface. A daemon's own `/metrics`
-is unaffected, the Hub simply does not add one of its own.
+`GET /metrics` covers reachability, the analysis queue and run counts, and
+nothing else. There is no series for stored findings, for retention purge
+duration, or for import throughput, so an alert on those has to read
+`/api/findings` or the logs. See [OPERATIONS.md](OPERATIONS.md#metrics).

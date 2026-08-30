@@ -19,6 +19,53 @@ cet état. Les corps de poll sont limités à 16 Mio, les requêtes ont un timeo
 imports sont transactionnels, et les logs n'identifient que l'identifiant de source et un
 code d'erreur stable.
 
+## Métriques
+
+`GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
+qu'au travers d'une bibliothèque : six familles de métriques sur des données que
+le Hub détient déjà ne justifient pas une dépendance dans un service dont les
+deux seuls paquets sont SQLite.
+
+| Métrique                                        | Type  | Ce à quoi elle répond                                     |
+|-------------------------------------------------|-------|-----------------------------------------------------------|
+| `perf_sentinel_hub_build_info{version}`         | gauge | Quelle version tourne                                     |
+| `perf_sentinel_hub_source_reachable{source}`    | gauge | Si le dernier poll d'un daemon a réussi                   |
+| `perf_sentinel_hub_source_unreachable_seconds`  | gauge | Depuis combien de temps il est injoignable, 0 s'il répond |
+| `perf_sentinel_hub_source_last_success_seconds` | gauge | L'âge du dernier poll réussi                              |
+| `perf_sentinel_hub_analysis_queue_depth`        | gauge | Les runs acceptés et pas encore pris par un worker        |
+| `perf_sentinel_hub_analysis_runs{status}`       | gauge | Les runs actuellement stockés, par statut                 |
+
+Trois partis pris dans cette forme.
+
+Seul un daemon reçoit une série de source. Un backend de traces n'est jamais
+interrogé, donc le dire joignable affirmerait une chose que le Hub n'a pas
+observée.
+
+Un daemon jamais interrogé avec succès ne reçoit aucune série `last_success`.
+Zéro se lirait comme "a réussi à l'instant", l'inverse de jamais.
+
+`analysis_runs` est une gauge, pas un compteur `_total`. La rétention supprime
+des lignes, donc la série descend autant qu'elle monte, et chaque statut est
+émis même à zéro : une gauge qui disparaît se lit comme un échec de collecte
+plutôt que comme "rien n'est dans cet état".
+
+La cardinalité est bornée par la configuration. `source` prend les identifiants
+de `Hub:Sources`, fixés au démarrage et restreints à 1 à 64 caractères ASCII
+alphanumériques, `.`, `_` ou `-`. `status` prend six constantes. Rien de ce
+qu'envoie un appelant n'atteint un libellé.
+
+L'endpoint ne porte aucune authentification, exactement comme `/api/status`.
+Gardez-le derrière ce qui protège déjà le reste du Hub. Le chart laisse la
+collecte en opt-in plutôt que de la supposer :
+
+```yaml
+service:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: /metrics
+```
+
 ## Sauvegarde
 
 L'historique `first_seen` est la seule chose que le Hub stocke qu'aucun amont ne peut

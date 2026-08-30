@@ -32,7 +32,7 @@ Environment variables use the .NET `Hub__...` form. Helm exposes the same settin
 
 | Setting                          | Default  | Validation                                                                                                   |
 |----------------------------------|----------|--------------------------------------------------------------------------------------------------------------|
-| `Sources[].Id`                   | none     | Non-empty and unique                                                                                         |
+| `Sources[].Id`                   | none     | Unique, 1 to 64 ASCII letters, digits, `.`, `_` or `-`                                                                                         |
 | `Sources[].Name`                 | none     | Non-empty                                                                                                    |
 | `Sources[].Environment`          | none     | Non-empty                                                                                                    |
 | `Sources[].Kind`                 | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled, and only a daemon may carry an import key |

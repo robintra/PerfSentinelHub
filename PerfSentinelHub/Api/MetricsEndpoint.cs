@@ -46,8 +46,7 @@ public static class MetricsEndpoint
         string version,
         CancellationToken cancellationToken)
     {
-        var states = await database.QuerySourceStatesAsync(cancellationToken);
-        var pushes = await database.QuerySourceImportsAsync(cancellationToken);
+        var (states, pushes) = await database.QuerySourceObservationsAsync(cancellationToken);
         var runs = await database.CountRunsByStatusAsync(cancellationToken);
         var now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // Read from the same snapshot as the per-status series rather than from

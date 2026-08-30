@@ -321,7 +321,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             command.Transaction = transaction;
             // findings.last_seen_ms is the MAX across sources, so stale per-source observations and
             // retired sources outlive the window unless they are purged on their own timestamps.
-            command.CommandText = """
+            // Interpolated for the status names only: a raw interpolated string uses
+            // braces for its holes, so the $cutoff SQL parameters stay literal.
+            command.CommandText = $"""
             DELETE FROM finding_sources WHERE rowid IN (
               SELECT rowid FROM finding_sources WHERE last_seen_ms < $cutoff LIMIT $chunk);
             DELETE FROM findings WHERE rowid IN (
@@ -332,10 +334,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
               SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
             DELETE FROM analysis_runs WHERE rowid IN (
               SELECT rowid FROM analysis_runs
-              WHERE status NOT IN ('pending', 'running')
+              WHERE status NOT IN ('{AnalysisStatuses.Pending}', '{AnalysisStatuses.Running}')
                 AND COALESCE(finished_at_ms, created_at_ms) < $run_cutoff LIMIT $chunk);
-            DELETE FROM source_imports WHERE rowid IN (
-              SELECT rowid FROM source_imports WHERE last_import_ms < $cutoff LIMIT $chunk);
             """;
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
             command.Parameters.AddWithValue("$run_cutoff", runCutoffMs);
@@ -361,26 +361,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         QueryAsync(new FindingQuery(null, null, null, _maxReadLimit), traceId, cancellationToken);
 
     /// <summary>
-    /// When each source last pushed, keyed by source id. A source missing from
-    /// the result has never pushed, which is not the same as a source that has
-    /// stopped: the daemon exporter sends nothing at all while it has no
-    /// findings, so an old timestamp here means "no new finding since", not
-    /// "the push path is broken".
-    /// </summary>
-    public async Task<Dictionary<string, long>> QuerySourceImportsAsync(
-        CancellationToken cancellationToken)
-    {
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT source_id, last_import_ms FROM source_imports;";
-        var imports = new Dictionary<string, long>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            imports[reader.GetString(0)] = reader.GetInt64(1);
-        return imports;
-    }
-
-    /// <summary>
     /// Collection state for every source that has one, keyed by source id.
     /// A configured source missing from the result has never been observed.
     /// </summary>
@@ -388,6 +368,34 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
+        return await ReadSourceStatesAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
+    /// The poll state and the push timestamp together, on one connection. The
+    /// two tables hold disjoint row sets, a push-only source having no poll
+    /// state, so this is two reads rather than a join: SQLite grew FULL OUTER
+    /// JOIN only in 3.39 and a LEFT JOIN would drop exactly those sources.
+    /// </summary>
+    public async Task<(Dictionary<string, SourceState> States, Dictionary<string, long> Imports)>
+        QuerySourceObservationsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var states = await ReadSourceStatesAsync(connection, cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT source_id, last_import_ms FROM source_imports;";
+        var imports = new Dictionary<string, long>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            imports[reader.GetString(0)] = reader.GetInt64(1);
+        return (states, imports);
+    }
+
+    private static async Task<Dictionary<string, SourceState>> ReadSourceStatesAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT source_id, last_attempt_ms, last_success_ms,

@@ -198,8 +198,11 @@ refused us" and "the binary broke" have different owners, and that classificatio
 heuristic on a bounded set of markers rather than a contract.
 
 Reports are deleted `Hub:Analysis:ReportRetention` after they succeed, and the run is
-marked expired while keeping its parameters. This is not an audit trail, and a link shared
-yesterday is already dead.
+marked expired while keeping its parameters. The row itself then survives until
+`Hub:Analysis:RunRetention`, thirty days by default, after which it is deleted and
+`GET /api/analyses/{id}` answers `404`. This is not an audit trail, and a link shared
+yesterday is already dead. A run still pending or running is never removed, however old
+its row looks.
 
 A run still running when the service stops comes back `interrupted` and is never replayed
 on its own. A silent retry would fire a second heavy query at a backend nobody asked to

@@ -210,8 +210,11 @@ responsable, et cette classification est une heuristique sur un ensemble borné 
 marqueurs plutôt qu'un contrat.
 
 Les rapports sont supprimés `Hub:Analysis:ReportRetention` après leur succès, et le run
-est marqué expiré en gardant ses paramètres. Ce n'est pas une piste d'audit, et un lien
-partagé hier est déjà mort.
+est marqué expiré en gardant ses paramètres. La ligne elle-même survit ensuite jusqu'à
+`Hub:Analysis:RunRetention`, trente jours par défaut, après quoi elle est supprimée et
+`GET /api/analyses/{id}` répond `404`. Ce n'est pas une piste d'audit, et un lien partagé
+hier est déjà mort. Un run encore en attente ou en cours n'est jamais supprimé, quel que
+soit l'âge apparent de sa ligne.
 
 Un run encore en cours à l'arrêt du service revient `interrupted` et n'est jamais rejoué
 de lui-même. Une reprise silencieuse lancerait une seconde requête lourde vers un backend

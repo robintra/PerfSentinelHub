@@ -110,8 +110,10 @@ also when anyone at all posts an unknown `source_id`, and the Hub cannot tell
 those apart: the only label that would separate them is the caller's own
 `source_id`, which is exactly the unbounded value that must never reach a label.
 Alerting on it would hand a stranger the ability to page you, and so would
-`bad_request`, whose query-string half is checked before the key is. `busy` is
-backpressure a daemon retries through, and the reachable-only-with-a-key half of
+`bad_request`, whose query-string half is checked before the key is.
+`gate_full` and `write_timeout` are backpressure a daemon retries through, kept
+apart because they name different knobs: too many uploaders at once against a
+writer held by the poll or by retention. The reachable-only-with-a-key half of
 `bad_request`, like `too_large`, is fixed in the exporter's repo rather than
 here. All four belong on the panel, where a
 human reads them with the context that tells them apart.

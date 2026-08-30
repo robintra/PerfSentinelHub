@@ -117,9 +117,12 @@ Hub ne peut pas distinguer les deux : le seul label qui les séparerait est le
 `source_id` de l'appelant, c'est-à-dire précisément la valeur non bornée qui ne
 doit jamais atteindre un label. Alerter dessus reviendrait à donner à un inconnu
 le moyen de vous réveiller, et `bad_request` aussi, dont la moitié query string
-est contrôlée avant la clé. `busy` est une contre-pression que le daemon
-retraverse en rejouant, et la moitié de `bad_request` qui exige une clé, comme
-`too_large`, se corrige dans le dépôt de l'exporteur plutôt qu'ici. Les quatre relèvent du panneau, où un humain les
+est contrôlée avant la clé. `gate_full` et `write_timeout` sont une
+contre-pression que le daemon retraverse en rejouant, séparés parce qu'ils
+nomment deux boutons différents : trop de téléverseurs à la fois, contre un
+écrivain retenu par le poll ou par la rétention. La moitié de `bad_request` qui
+exige une clé, comme `too_large`, se corrige dans le dépôt de l'exporteur
+plutôt qu'ici. Les quatre relèvent du panneau, où un humain les
 lit avec le contexte qui les distingue.
 
 Deux manques subsistent, à nommer plutôt qu'à maquiller. Un push bloqué avant

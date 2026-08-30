@@ -429,7 +429,7 @@
     },
     {
       "title": "Import rejections by reason",
-      "description": "Imports the Hub refused. Unlike the panel beside it, this is unambiguous: a refusal means a daemon reached the Hub and was turned away, never that the fleet is quiet. A steady unauthorized line is an expired ImportApiKey, busy is the write lock or the concurrency gate, and both bad_request and too_large point at the exporter rather than at the Hub. A push blocked before it arrives, by a network policy for instance, shows here as nothing at all: no request, no rejection.",
+      "description": "Imports the Hub refused. Unlike the panel beside it, this is unambiguous: a refusal means a daemon reached the Hub and was turned away, never that the fleet is quiet. A steady unauthorized line is an expired ImportApiKey, gate_full means too many uploaders at once, write_timeout means the writer is held by the poll or by retention, and both bad_request and too_large point at the exporter rather than at the Hub. A push blocked before it arrives, by a network policy for instance, shows here as nothing at all: no request, no rejection.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,

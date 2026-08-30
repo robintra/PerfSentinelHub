@@ -1,0 +1,43 @@
+# PerfSentinelHub gitleaks config
+#
+# Inherits the bundled default ruleset (AWS keys, GitHub tokens, JWT, private
+# keys, and the rest) and adds one narrow allowlist, so `generic-api-key` stops
+# flagging the engine's finding signatures carried by the demo fixtures.
+#
+# A signature is `<finding_type>:<service>:<sanitized_endpoint>:<32-hex>`, a
+# deterministic SHA-256 prefix that operators copy out of `analyze --format
+# json` into PR-reviewed acknowledgment files. Public by design, not a
+# credential. The fixtures under tests/browser/demo/fixtures/ are captures of a
+# real daemon, so they carry real signatures and are regenerated at every engine
+# bump by demo/capture-fixtures.sh.
+#
+# A rule allowlist rather than .gitleaksignore fingerprints: a fingerprint is
+# bound to a commit and a line number, so every regeneration of those fixtures
+# would leave four stale entries and eleven new findings.
+
+title = "PerfSentinelHub"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Engine finding signatures are public identifiers, not secrets"
+# regexTarget = "line" so the pattern sees the whole source line rather than
+# only the extracted secret. The leading token is pinned to the engine's actual
+# finding types, so a real credential cannot be smuggled through by formatting
+# it as `aws_secret_key:account:region:<hex>`, which a bare `[a-z_]+:` prefix
+# would have accepted.
+# AND, not the default OR: without it the path list and the regex are two
+# independent ways to be allowlisted, and the regex would apply everywhere.
+condition = "AND"
+regexTarget = "line"
+# Scoped to the generated fixtures. Measured: `regexTarget = "line"` allowlists
+# the whole line, so a credential sharing a line with a valid signature would be
+# silenced. Confining the allowlist to machine-generated capture output means
+# that bypass cannot reach hand-written code.
+paths = [
+  '''tests/browser/demo/fixtures/.*\.json''',
+]
+regexes = [
+  '''(?:n_plus_one_sql|n_plus_one_http|n_plus_one_messaging|redundant_sql|redundant_http|slow_sql|slow_http|excessive_fanout|chatty_service|pool_saturation|serialized_calls):[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9a-f]{32}''',
+]

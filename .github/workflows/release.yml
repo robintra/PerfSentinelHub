@@ -389,6 +389,8 @@ jobs:
         with:
           name: native-verified-${{ matrix.rid }}
           path: native
+      - name: Create the SPDX output directory
+        run: mkdir -p sbom
       - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           file: native/perf-sentinel-hub-${{ needs.metadata.outputs.version }}-${{ matrix.suffix }}

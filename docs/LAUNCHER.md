@@ -12,6 +12,11 @@ The form adapts to the selected source's `kind` rather than offering an independ
 live-or-historical switch. A switch would let an operator compose impossible states, such
 as a three-hour window against a daemon that keeps ten minutes.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
+  <img alt="The fleet health screen with a daemon row unfolded" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
+</picture>
+
 ## Gauges
 
 A gauge is toned once it is close to a cap it published. Red from 90 %, the engine's own
@@ -79,6 +84,11 @@ Detection overrides have no command-line flag, so a run that changed one carries
 download. The name is undotted because the engine only discovers the dotted
 `.perf-sentinel.toml`, which a download may not preserve, so the command names the file
 rather than relying on that discovery.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report-dark.png">
+  <img alt="A rendered report opened inside the launcher" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report.png">
+</picture>
 
 ## Live reports
 

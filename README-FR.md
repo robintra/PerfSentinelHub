@@ -42,6 +42,11 @@ curl http://localhost:5080/api/findings
 Le premier poll démarre immédiatement. Le lanceur est sur `http://localhost:5080/`, et le
 fichier SQLite survit aux redémarrages au chemin configuré.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-new-dark.png">
+  <img alt="Lancement d'une analyse contre un backend de traces" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-new.png">
+</picture>
+
 ## Installer avec Helm
 
 Le chart source déploie un réplica et un volume persistant. Fournissez au moins une source

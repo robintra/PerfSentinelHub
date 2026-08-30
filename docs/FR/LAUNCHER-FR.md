@@ -15,6 +15,11 @@ sélecteur indépendant entre live et historique. Un tel sélecteur laisserait u
 composer des états impossibles, comme une fenêtre de trois heures contre un daemon qui en
 garde dix minutes.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
+  <img alt="L'écran de santé de la flotte avec une ligne daemon dépliée" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
+</picture>
+
 ## Les jauges
 
 Une jauge est teintée dès qu'elle approche d'un plafond qu'elle a publié. Rouge à partir
@@ -89,6 +94,11 @@ changé une porte `-c perf-sentinel.toml`, et le fichier est imprimé à côté 
 prêt à copier ou à télécharger. Le nom est sans point parce que le moteur ne découvre que
 le `.perf-sentinel.toml` pointé, qu'un téléchargement peut ne pas préserver, donc la
 commande nomme le fichier au lieu de s'en remettre à cette découverte.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report-dark.png">
+  <img alt="Un rapport rendu, ouvert dans le lanceur" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report.png">
+</picture>
 
 ## Les rapports live
 

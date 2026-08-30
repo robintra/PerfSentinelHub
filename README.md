@@ -90,7 +90,7 @@ These registry commands work only once the public rehearsal and publication succ
 | [docs/API.md](docs/API.md)                     | The import, read and analysis APIs                                                                    |
 | [docs/LAUNCHER.md](docs/LAUNCHER.md)           | The browser interface, its printed commands and its live reports                                      |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md)       | Freshness, recovery, metrics with ready-made Grafana and Prometheus files, backup and restore         |
-| [docs/LIMITATIONS.md](docs/LIMITATIONS.md)     | What the Hub declares rather than measures, and what a run does not promise                                                               |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md)     | What the Hub declares rather than measures, and what a run does not promise                           |
 | [RELEASING.md](RELEASING.md)                   | What a release contains, how it is signed, and how to verify one publicly                             |
 | [CONTRIBUTING.md](CONTRIBUTING.md)             | Local gates, the pinned toolchain, and the pull request rules                                         |
 

@@ -67,11 +67,11 @@ service:
 
 Three files under [`examples/`](../examples), each validated rather than sketched.
 
-| File                                                             | Is                                                                |
-|------------------------------------------------------------------|--------------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)   | Eight panels over the six families, importable as it stands       |
-| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)     | Five rules, checked with `promtool check rules`                   |
-| [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)     | A scrape job for a deployment that names its targets              |
+| File                                                           | Is                                                          |
+|----------------------------------------------------------------|-------------------------------------------------------------|
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json) | Eight panels over the six families, importable as it stands |
+| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)   | Five rules, checked with `promtool check rules`             |
+| [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)   | A scrape job for a deployment that names its targets        |
 
 The engine ships its own dashboard for its own metrics, and the two do not
 overlap: no panel here reads a daemon series, and no panel there reads a Hub

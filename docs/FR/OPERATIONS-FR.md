@@ -70,11 +70,11 @@ service:
 
 Trois fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissés.
 
-| Fichier                                                             | Est                                                                    |
-|----------------------------------------------------------------------|--------------------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)   | Huit panneaux sur les six familles, importable tel quel                |
-| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)     | Cinq règles, contrôlées par `promtool check rules`                     |
-| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)     | Un job de collecte pour un déploiement qui nomme ses cibles            |
+| Fichier                                                           | Est                                                         |
+|-------------------------------------------------------------------|-------------------------------------------------------------|
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Huit panneaux sur les six familles, importable tel quel     |
+| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Cinq règles, contrôlées par `promtool check rules`          |
+| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)   | Un job de collecte pour un déploiement qui nomme ses cibles |
 
 Le moteur livre son propre tableau de bord pour ses propres métriques, et les
 deux ne se recouvrent pas : aucun panneau d'ici ne lit une série de daemon, et

@@ -136,14 +136,14 @@ def public_api_fixture():
     }
 
 
-def write_root(root: Path, secret="SONAR_TOKEN", policy_mutator=None):
+def write_root(root: Path, referenced_name="SONAR_TOKEN", policy_mutator=None):
     workflows = root / ".github" / "workflows"
     workflows.mkdir(parents=True)
     references = "\n".join(
         f"  {name}: ${{{{ secrets.{name} }}}}" for name in (*SECRETS,)
     )
-    if secret not in SECRETS:
-        references += f"\n  EXTRA: ${{{{ secrets.{secret} }}}}"
+    if referenced_name not in SECRETS:
+        references += f"\n  EXTRA: ${{{{ secrets.{referenced_name} }}}}"
     (workflows / "ci.yml").write_text(f"env:\n{references}\n", encoding="utf-8")
     policy = json.loads(
         (REPOSITORY / ".github" / "repository-policy.json").read_text(encoding="utf-8")
@@ -175,10 +175,10 @@ def write_root(root: Path, secret="SONAR_TOKEN", policy_mutator=None):
     )
 
 
-def run_checker(api, *, secret="SONAR_TOKEN", policy_mutator=None):
+def run_checker(api, *, referenced_name="SONAR_TOKEN", policy_mutator=None):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        write_root(root, secret, policy_mutator)
+        write_root(root, referenced_name, policy_mutator)
         fixture = root / "api.json"
         fixture.write_text(json.dumps(api), encoding="utf-8")
         return subprocess.run(
@@ -458,7 +458,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                 self.assertIn("release tag", result.stderr)
 
     def test_rejects_undeclared_workflow_secret(self):
-        result = run_checker(public_api_fixture(), secret="UNDECLARED_TOKEN")
+        result = run_checker(public_api_fixture(), referenced_name="UNDECLARED_TOKEN")
 
         self.assertEqual(1, result.returncode)
         self.assertIn("UNDECLARED_TOKEN", result.stderr)

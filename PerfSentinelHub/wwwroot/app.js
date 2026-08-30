@@ -3441,7 +3441,7 @@
       el("p", { class: "overline", text: "// " + spec.title }),
       el("p", { class: "outcome-body", text: spec.body })
     ]);
-    if (spec.counts) panel.appendChild(countStrip(spec.counts));
+    if (spec.counts) panel.appendChild(countStrip(spec.counts, "result"));
     const trimmed = trimNotice(run);
     if (trimmed) panel.appendChild(trimmed);
     (spec.warnings || []).forEach(function (warning) {
@@ -3463,13 +3463,15 @@
           ? "The quality gate passed. The dashboard holds the full detail."
           : "The quality gate did not pass. The dashboard holds the full detail.",
         counts: [
-          [String(result.findings), result.kept_findings == null ? "findings" : "found", "text"],
+          [result.quality_gate_passed ? "PASS" : "FAIL", "quality gate",
+            result.quality_gate_passed ? "ok" : "crit"],
+          [String(result.findings), result.kept_findings == null ? "findings" : "found",
+            result.critical > 0 ? "crit" : result.warning > 0 ? "warn"
+              : result.info > 0 ? "info" : "ok", null, true],
           [String(result.critical), "critical", "crit"],
           [String(result.warning), "warning", "warn"],
           [String(result.info), "info", "info"],
-          [String(result.traces_analyzed), "traces read", "text"],
-          [result.quality_gate_passed ? "pass" : "fail", "quality gate",
-            result.quality_gate_passed ? "ok" : "crit"]
+          [String(result.traces_analyzed), "traces read", "text"]
         ],
         warnings: result.warnings,
         primary: { label: "Open the dashboard", href: "#/report/" + run.id, filled: true },
@@ -3486,9 +3488,9 @@
           + "blank. Opening it will show an empty dashboard. That is the expected outcome, not a "
           + "rendering fault.",
         counts: [
-          [String(result.findings), "findings", "warn"],
-          [String(result.traces_analyzed), "traces read", "warn"],
-          [result.quality_gate_passed ? "pass" : "fail", "quality gate", "muted"]
+          [result.quality_gate_passed ? "PASS" : "FAIL", "quality gate", "muted"],
+          [String(result.findings), "findings", "warn", null, true],
+          [String(result.traces_analyzed), "traces read", "warn"]
         ],
         warnings: result.warnings,
         primary: { label: "Wait and run it again", href: "#/new", filled: false },
@@ -3548,12 +3550,25 @@
     ]);
   }
 
-  function countStrip(counts) {
+  /**
+   * `variant: "result"` carries the tone onto the cell itself, the way the
+   * rendered dashboard draws the same figures: the headline cell filled with the
+   * dominant severity, the severities beside it in their own pastel. The daemon
+   * gauges pass no variant and keep a neutral strip, because their tone means
+   * "near a cap", which is not a severity.
+   */
+  function countStrip(counts, variant) {
+    const toned = variant === "result";
     return el("div", { class: "counts" }, counts.map(function (cell) {
+      const tone = cell[2] && cell[2] !== "text" ? cell[2] : null;
       const figure = el("span", { class: "count-n", "data-tone": cell[2] },
         [document.createTextNode(cell[0])]);
       if (typeof cell[3] === "number") figure.appendChild(moveBadge(cell[3]));
-      return el("div", { class: "count" }, [figure, el("span", { class: "count-l", text: cell[1] })]);
+      return el("div", {
+        class: "count",
+        "data-grad": toned && !cell[4] ? tone : null,
+        "data-kpi": toned && cell[4] ? tone : null
+      }, [figure, el("span", { class: "count-l", text: cell[1] })]);
     }));
   }
 

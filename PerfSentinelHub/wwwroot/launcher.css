@@ -921,6 +921,26 @@ body[data-screen="report"] .shell-footer { display: none; }
 .count-n[data-tone="info"] { color: var(--info-fg); }
 .count-n[data-tone="ok"] { color: var(--ok-fg); }
 .count-n[data-tone="muted"] { color: var(--text-3); }
+
+/* The same treatment the rendered dashboard gives its overview tiles, so the
+   two surfaces read as one product: the headline cell filled with the dominant
+   severity and white text on it, the severities beside it in their own pastel.
+   The values are its values, including the darker fills the dark theme needs to
+   keep white text legible. */
+.count[data-grad="crit"] { background: var(--crit-bg); }
+.count[data-grad="warn"] { background: var(--warn-bg); }
+.count[data-grad="info"] { background: var(--info-bg); }
+.count[data-grad="ok"] { background: var(--ok-bg); }
+.count[data-kpi="crit"] { background: #bf4136; }
+.count[data-kpi="warn"] { background: #d97c24; }
+.count[data-kpi="info"] { background: #2e6ca3; }
+.count[data-kpi="ok"] { background: #0ba671; }
+:root[data-theme="dark"] .count[data-kpi="crit"] { background: #a8443b; }
+:root[data-theme="dark"] .count[data-kpi="warn"] { background: #b06a24; }
+:root[data-theme="dark"] .count[data-kpi="info"] { background: #2f6494; }
+:root[data-theme="dark"] .count[data-kpi="ok"] { background: #0d8a60; }
+.count[data-kpi] .count-n, .count[data-kpi] .count-n[data-tone] { color: #fff; }
+.count[data-kpi] .count-l { color: rgba(255, 255, 255, .78); }
 /* What the gauge moved by on the read just adopted, rising off the figure it
    belongs to and fading out. Out of the flow entirely: it overlaps the figure
    on the way past rather than making room for itself, and it is neither

@@ -23,28 +23,28 @@ drawn in Figma at 2000x2000. Every value below is measured from
 The legend is not decoration, it is the key to reading the board. Keep the four roles
 and their colours exactly as the perf-sentinel boards use them.
 
-| Role | Hex | Shape |
-|---|---|---|
+| Role                         | Hex       | Shape                                  |
+|------------------------------|-----------|----------------------------------------|
 | Hub or perf-sentinel surface | `#1A72E8` | card, or fully rounded pill for an API |
-| Human actor | `#D4A017` | pill with a **dashed** border |
-| Output, report, export | `#34A853` | card |
-| Infrastructure, datastore | `#7C4DFF` | card |
+| Human actor                  | `#D4A017` | pill with a **dashed** border          |
+| Output, report, export       | `#34A853` | card                                   |
+| Infrastructure, datastore    | `#7C4DFF` | card                                   |
 
 Everything else:
 
-| Usage | Hex |
-|---|---|
-| Page background | `#0A0E1A` |
-| Every card, pill and the legend bar | `#1A1F2E` |
-| Edge-label chip | `#0D0A14`, `rx=8` |
-| Legend bar border | `#4A5668`, `stroke-width=1.25` |
-| Arrows out of the product, and their labels | `#7BB4FF` |
-| Card title | white |
-| Card body copy | `#C7D6EB` |
-| Legend labels | `#D9E0ED` |
-| Page subtitle | `#A0AFC4` |
-| Zone heading, top right | `#FF7B7B` |
-| Central disc gradient | `#103C84` to `#0A142E` |
+| Usage                                       | Hex                            |
+|---------------------------------------------|--------------------------------|
+| Page background                             | `#0A0E1A`                      |
+| Every card, pill and the legend bar         | `#1A1F2E`                      |
+| Edge-label chip                             | `#0D0A14`, `rx=8`              |
+| Legend bar border                           | `#4A5668`, `stroke-width=1.25` |
+| Arrows out of the product, and their labels | `#7BB4FF`                      |
+| Card title                                  | white                          |
+| Card body copy                              | `#C7D6EB`                      |
+| Legend labels                               | `#D9E0ED`                      |
+| Page subtitle                               | `#A0AFC4`                      |
+| Zone heading, top right                     | `#FF7B7B`                      |
+| Central disc gradient                       | `#103C84` to `#0A142E`         |
 
 ## Card grammar
 
@@ -106,13 +106,13 @@ The glowing disc: **PerfSentinelHub**, *one for the fleet*.
 
 One card per screen, named as the UI names them, not as the routes spell them:
 
-| Card | Badge | Body |
-|---|---|---|
-| **Run an analysis** | `LAUNCHER` | *picks a source, builds the request* |
-| **Fleet health** | `LIVE` | *one row per source, a daemon row unfolds* |
-| **The team's short memory** | `RECENT` | *the last runs and who launched them* |
-| **Run screen** | `POLLS` | *pending, running, then a terminal state* |
-| **Report screen** | `IFRAME` | *the engine's own dashboard, embedded* |
+| Card                        | Badge      | Body                                       |
+|-----------------------------|------------|--------------------------------------------|
+| **Run an analysis**         | `LAUNCHER` | *picks a source, builds the request*       |
+| **Fleet health**            | `LIVE`     | *one row per source, a daemon row unfolds* |
+| **The team's short memory** | `RECENT`   | *the last runs and who launched them*      |
+| **Run screen**              | `POLLS`    | *pending, running, then a terminal state*  |
+| **Report screen**           | `IFRAME`   | *the engine's own dashboard, embedded*     |
 
 ### Right, in blue: the fleet
 
@@ -178,17 +178,17 @@ There are no `<text>` elements in the reference, every glyph is outlined to a pa
 the family is not recoverable from the file. It renders as an Inter or SF Pro class
 humanist grotesque. Sizes, derived from cap heights:
 
-| Role | Size |
-|---|---|
-| Page title | 54 |
-| Corner zone heading | 50 |
-| Centre node name | 44 |
-| Card title | 32 |
-| Legend label | 32 |
-| Edge label | 30 |
-| Card body | 25 |
-| All-caps badge | 23 |
-| Actor sub-line | 19 |
+| Role                | Size |
+|---------------------|------|
+| Page title          | 54   |
+| Corner zone heading | 50   |
+| Centre node name    | 44   |
+| Card title          | 32   |
+| Legend label        | 32   |
+| Edge label          | 30   |
+| Card body           | 25   |
+| All-caps badge      | 23   |
+| Actor sub-line      | 19   |
 
 ## Headings
 
@@ -201,17 +201,17 @@ humanist grotesque. Sizes, derived from cap heights:
 
 The verification the plan asks for: each arrow on the board corresponds to a real call.
 
-| Arrow | Where it lives |
-|---|---|
-| browser to Hub, launcher reads | `Api/ApiEndpoints.Analysis.cs:21-24` |
-| plugin to Hub, `GET /api/findings` | `Api/ApiEndpoints.cs:46-47` |
-| daemon to Hub, push | `Api/ApiEndpoints.cs:48`, stores at `:133` |
-| Hub to daemon, poll | `Collection/DaemonClient.cs:36` and `:111` |
-| Hub to daemon, export for a run | `Collection/DaemonClient.cs:106` |
-| Hub to daemon, config for the unfolded row | `Collection/DaemonClient.cs:66` |
-| reachability set and cleared | `Collection/SourcePoller.cs:30` and `:64` only |
-| Hub to SQLite | `Storage/Schema.cs`, three migrations |
-| Hub spawns the engine | `Analysis/AnalysisRunner.cs:148` and `:201` |
-| engine writes the report | `Analysis/AnalysisRunner.cs:51-52` |
-| report served into the iframe | `Api/ApiEndpoints.Analysis.cs:24` |
-| Hub to api.github.com | `Collection/UpdateChecker.cs:53` |
+| Arrow                                      | Where it lives                                 |
+|--------------------------------------------|------------------------------------------------|
+| browser to Hub, launcher reads             | `Api/ApiEndpoints.Analysis.cs:21-24`           |
+| plugin to Hub, `GET /api/findings`         | `Api/ApiEndpoints.cs:46-47`                    |
+| daemon to Hub, push                        | `Api/ApiEndpoints.cs:48`, stores at `:133`     |
+| Hub to daemon, poll                        | `Collection/DaemonClient.cs:36` and `:111`     |
+| Hub to daemon, export for a run            | `Collection/DaemonClient.cs:106`               |
+| Hub to daemon, config for the unfolded row | `Collection/DaemonClient.cs:66`                |
+| reachability set and cleared               | `Collection/SourcePoller.cs:30` and `:64` only |
+| Hub to SQLite                              | `Storage/Schema.cs`, three migrations          |
+| Hub spawns the engine                      | `Analysis/AnalysisRunner.cs:148` and `:201`    |
+| engine writes the report                   | `Analysis/AnalysisRunner.cs:51-52`             |
+| report served into the iframe              | `Api/ApiEndpoints.Analysis.cs:24`              |
+| Hub to api.github.com                      | `Collection/UpdateChecker.cs:53`               |

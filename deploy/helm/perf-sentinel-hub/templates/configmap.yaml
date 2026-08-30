@@ -8,7 +8,7 @@ data:
     {{- range .Values.sources }}
     {{- $sources = append $sources (dict "Id" .id "Name" .name "Environment" .environment "Kind" (default "daemon" .kind) "RetentionHours" .retentionHours "BaseUrl" .baseUrl "AuthHeaderName" .authHeaderName) }}
     {{- end }}
-    {{- $analysis := dict "EngineBinaryPath" .Values.hub.analysis.engineBinaryPath "ReportDirectory" "/data/reports" "IdentityHeader" .Values.hub.analysis.identityHeader "Workers" .Values.hub.analysis.workers "MaxTracesCap" .Values.hub.analysis.maxTracesCap "Timeout" .Values.hub.analysis.timeout "ReportRetention" .Values.hub.analysis.reportRetention }}
+    {{- $analysis := dict "EngineBinaryPath" .Values.hub.analysis.engineBinaryPath "ReportDirectory" "/data/reports" "IdentityHeader" .Values.hub.analysis.identityHeader "Workers" .Values.hub.analysis.workers "MaxTracesCap" .Values.hub.analysis.maxTracesCap "Timeout" .Values.hub.analysis.timeout "ReportRetention" .Values.hub.analysis.reportRetention "RunRetention" .Values.hub.analysis.runRetention }}
     {{- /* Nil-safe and false-safe. An upgrade with --reuse-values carries values
            that predate this key, so a bare lookup is a nil pointer; and `default
            true` would read an explicit false as absent and turn the check back

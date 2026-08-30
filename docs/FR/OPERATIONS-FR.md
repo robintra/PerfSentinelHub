@@ -22,7 +22,7 @@ code d'erreur stable.
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
-qu'au travers d'une bibliothèque : six familles de métriques sur des données que
+qu'au travers d'une bibliothèque : huit familles de métriques sur des données que
 le Hub détient déjà ne justifient pas une dépendance dans un service dont les
 deux seuls paquets sont SQLite.
 
@@ -33,6 +33,8 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_source_unreachable_seconds`  | gauge | Depuis combien de temps il est injoignable, 0 s'il répond |
 | `perf_sentinel_hub_source_last_success_seconds` | gauge | L'âge du dernier poll réussi                              |
 | `perf_sentinel_hub_analysis_queue_depth`        | gauge | Les runs acceptés et pas encore pris par un worker        |
+| `perf_sentinel_hub_source_last_import_seconds`  | gauge | Dernier push d'un daemon. Pas un battement de cœur, voir plus bas |
+| `perf_sentinel_hub_import_rejected_total{reason}` | counter | Imports refusés, par motif                            |
 | `perf_sentinel_hub_analysis_runs{status}`       | gauge | Les runs actuellement stockés, par statut                 |
 
 Trois partis pris dans cette forme.
@@ -48,13 +50,13 @@ plutôt que de passer au vert.
 Un daemon jamais interrogé avec succès ne reçoit aucune série `last_success`.
 Zéro se lirait comme "a réussi à l'instant", l'inverse de jamais.
 
-`analysis_runs` est une gauge, pas un compteur `_total`, parce qu'un run passe
-d'un statut à l'autre et qu'une série descend autant qu'elle monte. Elle n'est
-pas bornée pour autant : rien ne supprime de `analysis_runs`, donc le total
-empilé ne fait que croître, et `analysis_runs{status="interrupted"}` en
-particulier est un cumul depuis la création de la base plutôt qu'un arriéré
-actuel. Chaque statut est émis même à zéro, une gauge qui disparaît se lisant
-comme un échec de collecte plutôt que comme "rien n'est dans cet état".
+`analysis_runs` est une gauge, pas un compteur `_total`. Un run passe d'un statut
+à l'autre, et un run terminé expire sur `Hub:Analysis:RunRetention`, donc chaque
+série descend autant qu'elle monte. Un run encore `pending` ou `running` n'est
+jamais purgé quel que soit l'âge apparent de sa ligne, un worker s'apprêtant à y
+écrire ou y écrivant déjà. Chaque statut est émis même à zéro, une gauge qui
+disparaît se lisant comme un échec de collecte plutôt que comme "rien n'est dans
+cet état".
 
 La cardinalité est bornée par la configuration. `source` prend les identifiants
 de `Hub:Sources`, fixés au démarrage et restreints à 1 à 64 caractères ASCII
@@ -79,7 +81,7 @@ Trois fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissé
 
 | Fichier                                                           | Est                                                         |
 |-------------------------------------------------------------------|-------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Huit panneaux sur les six familles, importable tel quel     |
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Neuf panneaux sur les huit familles, importable tel quel    |
 | [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Une règle, contrôlée par `promtool check rules`             |
 | [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)   | Un job de collecte pour un déploiement qui nomme ses cibles |
 
@@ -108,12 +110,26 @@ Ce qui survit est la seule condition qu'aucun tableau de bord ne peut montrer,
 puisqu'un Hub mort ne publie aucune série et que tous les panneaux se vident
 exactement comme sur une collecte mal configurée.
 
-Deux manques méritent d'être nommés plutôt que maquillés. Rien ne compte un
-import, donc toute la flotte pourrait cesser de pousser pendant que chaque
-panneau reste vert, et seul le poll finirait par s'en apercevoir. Et Prometheus
-ne détient aucune liste des sources qui devraient exister, donc un daemon que le
-Hub n'a jamais joint est silencieux plutôt qu'alarmant, ce qui relève de l'écran
-de flotte.
+Le compteur d'imports est nouveau et ne mérite toujours pas de règle, ce qui
+vaut d'être dit puisqu'on s'attendrait au contraire. `unauthorized` monte quand
+une clé expire, et aussi quand n'importe qui poste un `source_id` inconnu, et le
+Hub ne peut pas distinguer les deux : le seul label qui les séparerait est le
+`source_id` de l'appelant, c'est-à-dire précisément la valeur non bornée qui ne
+doit jamais atteindre un label. Alerter dessus reviendrait à donner à un inconnu
+le moyen de vous réveiller, et `bad_request` aussi, dont la moitié query string
+est contrôlée avant la clé. `busy` est une contre-pression que le daemon
+retraverse en rejouant, et la moitié de `bad_request` qui exige une clé, comme
+`too_large`, se corrige dans le dépôt de l'exporteur plutôt qu'ici. Les quatre relèvent du panneau, où un humain les
+lit avec le contexte qui les distingue.
+
+Deux manques subsistent, à nommer plutôt qu'à maquiller. Un push bloqué avant
+d'arriver, par une politique réseau par exemple, ne produit aucune requête donc
+aucun rejet : le compteur ne voit pas la panne la plus courante, et
+`source_last_import_seconds` non plus, un daemon sans nouveau finding ne poussant
+rien et ressemblant exactement à cela. Les distinguer demanderait une provenance
+par finding que le Hub ne stocke pas. Et Prometheus ne détient aucune liste des
+sources qui devraient exister, donc un daemon que le Hub n'a jamais joint est
+silencieux plutôt qu'alarmant, ce qui relève de l'écran de flotte.
 
 ## Sauvegarde
 

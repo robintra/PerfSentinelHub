@@ -195,7 +195,7 @@
     },
     {
       "title": "Interrupted runs",
-      "description": "Runs the Hub marked interrupted because the process stopped while they were running or still queued. Nothing is replayed on its own, so these wait for a human. Nothing deletes them either, so this only ever rises: read it as a running total since the database was created, not as a current backlog.",
+      "description": "Runs the Hub marked interrupted because the process stopped while they were running or still queued. Nothing is replayed on its own, so these wait for a human. They age out on Hub:Analysis:RunRetention like any finished run, so this falls without anyone acting.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -315,7 +315,7 @@
     },
     {
       "title": "Analysis runs by status",
-      "description": "A gauge, not a counter. A run moves between statuses, so a series falls as well as rises, but no purge deletes a row: the stacked total only grows. increase() over any of these is meaningless. Each status is published even at zero, so a series that disappears is a scrape failure rather than an empty state.",
+      "description": "A gauge, not a counter. A run moves between statuses and a finished one ages out on Hub:Analysis:RunRetention, so every series falls as well as rises and increase() over any of them is meaningless. Each status is published even at zero, so a series that disappears is a scrape failure rather than an empty state.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -425,6 +425,44 @@
       },
       "options": {
         "showHeader": true
+      }
+    },
+    {
+      "title": "Import rejections by reason",
+      "description": "Imports the Hub refused. Unlike the panel beside it, this is unambiguous: a refusal means a daemon reached the Hub and was turned away, never that the fleet is quiet. A steady unauthorized line is an expired ImportApiKey, busy is the write lock or the concurrency gate, and both bad_request and too_large point at the exporter rather than at the Hub. A push blocked before it arrives, by a network policy for instance, shows here as nothing at all: no request, no rejection.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(perf_sentinel_hub_import_rejected_total{job=~\"$job\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
       }
     }
   ],

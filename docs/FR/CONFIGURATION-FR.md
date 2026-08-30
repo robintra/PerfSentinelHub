@@ -22,6 +22,7 @@ réglages sous `hub` et `sources`.
 | `Hub:Analysis:MaxTracesCap`      | `2000`                                                | 1 à 10000, la limite propre du moteur sur `--max-traces`                                              |
 | `Hub:Analysis:Timeout`           | `00:05:00`                                            | Positive, une heure au plus                                                                           |
 | `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 heures)                              | Durée positive                                                                                        |
+| `Hub:Analysis:RunRetention`      | `30.00:00:00` (30 jours)                              | Positive, plus longue que `ReportRetention`. Quand la ligne d'un run terminé est supprimée             |
 | `Hub:UpdateCheck:Enabled`        | `true`                                                | Si le Hub demande à GitHub la release publiée la plus récente                                         |
 | `Hub:UpdateCheck:Interval`       | `1.00:00:00` (1 jour)                                 | Au moins 15 minutes                                                                                   |
 | `Hub:UpdateCheck:EngineEndpoint` | API des releases GitHub de `robintra/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                               |

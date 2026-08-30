@@ -19,6 +19,10 @@ hub:
     maxTracesCap: 2000
     timeout: "00:05:00"
     reportRetention: "1.00:00:00"
+    # How long a finished run's row survives, well past the report it
+    # produced: an expired run keeps its parameters so it can be relaunched
+    # as it stands. Must be longer than reportRetention.
+    runRetention: "30.00:00:00"
   updateCheck:
     # Asks the GitHub releases API, once a day, what the newest published
     # version of the engine and of the Hub is, so the version chip can say

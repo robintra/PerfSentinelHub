@@ -21,7 +21,7 @@ transactional, and logs identify only the source ID and a stable error code.
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather
-than through a library: six metric families over data the Hub already holds do
+than through a library: eight metric families over data the Hub already holds do
 not justify a dependency in a service whose only two packages are SQLite.
 
 | Metric                                          | Type  | What it answers                                     |
@@ -30,6 +30,8 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_source_reachable{source}`    | gauge | Whether the last poll of a daemon succeeded         |
 | `perf_sentinel_hub_source_unreachable_seconds`  | gauge | How long it has been unreachable, 0 when it answers |
 | `perf_sentinel_hub_source_last_success_seconds` | gauge | Age of the last successful poll                     |
+| `perf_sentinel_hub_source_last_import_seconds`  | gauge | When a daemon last pushed. Not a heartbeat, see below |
+| `perf_sentinel_hub_import_rejected_total{reason}` | counter | Imports refused, by reason                       |
 | `perf_sentinel_hub_analysis_queue_depth`        | gauge | Runs accepted and not yet claimed by a worker       |
 | `perf_sentinel_hub_analysis_runs{status}`       | gauge | Runs currently stored, per status                   |
 
@@ -45,13 +47,12 @@ than turning green.
 A daemon never polled successfully gets no `last_success` series at all. Zero
 would read as "succeeded just now", which is the opposite of never.
 
-`analysis_runs` is a gauge, not a `_total` counter, because a run moves between
-statuses and a series falls as well as rises. It is not bounded, though: nothing
-deletes from `analysis_runs`, so the stacked total only grows and
-`analysis_runs{status="interrupted"}` in particular is a running total since the
-database was created rather than a current backlog. Every status is emitted even
-at zero, a gauge that vanishes reading as a scrape failure rather than as
-"nothing is in that state".
+`analysis_runs` is a gauge, not a `_total` counter. A run moves between statuses,
+and a finished one ages out on `Hub:Analysis:RunRetention`, so every series falls
+as well as rises. A run still `pending` or `running` is never purged however old
+its row looks, since a worker is about to write to it or already is. Every status
+is emitted even at zero, a gauge that vanishes reading as a scrape failure rather
+than as "nothing is in that state".
 
 Cardinality is bounded by configuration. `source` takes the ids in
 `Hub:Sources`, fixed at startup and restricted to 1 to 64 ASCII letters, digits,
@@ -76,7 +77,7 @@ Three files under [`examples/`](../examples), each validated rather than sketche
 
 | File                                                           | Is                                                          |
 |----------------------------------------------------------------|-------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json) | Eight panels over the six families, importable as it stands |
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json) | Nine panels over the eight families, importable as it stands |
 | [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)   | One rule, checked with `promtool check rules`               |
 | [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)   | A scrape job for a deployment that names its targets        |
 
@@ -103,11 +104,26 @@ What survives is the one condition no dashboard can show, because a dead Hub
 publishes no series and every panel goes blank exactly like a broken scrape
 config.
 
-Two gaps are worth naming rather than papering over. Nothing counts an import,
-so the whole fleet could stop pushing while every panel stays green, and the
-poll is the only thing that would eventually notice. And Prometheus holds no
-list of the sources that ought to exist, so a daemon the Hub has never reached
-is silent rather than alarming, which is a case for the fleet screen.
+The import counter is new and still does not earn a rule, which is worth stating
+because it looks like it should. `unauthorized` rises when a key expires and
+also when anyone at all posts an unknown `source_id`, and the Hub cannot tell
+those apart: the only label that would separate them is the caller's own
+`source_id`, which is exactly the unbounded value that must never reach a label.
+Alerting on it would hand a stranger the ability to page you, and so would
+`bad_request`, whose query-string half is checked before the key is. `busy` is
+backpressure a daemon retries through, and the reachable-only-with-a-key half of
+`bad_request`, like `too_large`, is fixed in the exporter's repo rather than
+here. All four belong on the panel, where a
+human reads them with the context that tells them apart.
+
+Two gaps remain, worth naming rather than papering over. A push blocked before
+it arrives, by a network policy for instance, produces no request and therefore
+no rejection, so the counter cannot see the most common breakage, and
+`source_last_import_seconds` cannot either, since a daemon with no new findings
+pushes nothing and looks identical. Telling those apart needs per-finding
+provenance the Hub does not store. And Prometheus holds no list of the sources
+that ought to exist, so a daemon the Hub has never reached is silent rather than
+alarming, which is a case for the fleet screen.
 
 ## Backup
 

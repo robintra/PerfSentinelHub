@@ -22,6 +22,7 @@ Environment variables use the .NET `Hub__...` form. Helm exposes the same settin
 | `Hub:Analysis:MaxTracesCap`      | `2000`                                             | 1 to 10000, the engine's own limit on `--max-traces`                                            |
 | `Hub:Analysis:Timeout`           | `00:05:00`                                         | Positive, at most one hour                                                                      |
 | `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 hours)                            | Positive duration                                                                               |
+| `Hub:Analysis:RunRetention`      | `30.00:00:00` (30 days)                            | Positive, longer than `ReportRetention`. When a finished run's row is deleted                   |
 | `Hub:UpdateCheck:Enabled`        | `true`                                             | Whether the Hub asks GitHub for the newest published release                                    |
 | `Hub:UpdateCheck:Interval`       | `1.00:00:00` (1 day)                               | At least 15 minutes                                                                             |
 | `Hub:UpdateCheck:EngineEndpoint` | GitHub releases API for `robintra/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                              |

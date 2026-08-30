@@ -986,6 +986,6 @@ jobs:
           # helm names a chart pulled by digest after that digest, not after the
           # version, so the pulled file is found rather than assumed.
           pulled="$(find chart-check -maxdepth 1 -name '*.tgz')"
-          test "$(printf '%s\n' "$pulled" | grep -c .)" -eq 1
+          test -f "$pulled"
           cmp "$root/perf-sentinel-hub-$VERSION.tgz" "$pulled"
           gh release create "v$VERSION" "$root"/* --verify-tag --title "PerfSentinel Hub $VERSION" --notes-from-tag

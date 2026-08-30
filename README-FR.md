@@ -17,6 +17,11 @@ C'est un service NativeAOT adossé à SQLite : le push depuis le daemon est le c
 poll horaire est un filet de sécurité, et le Hub conserve par défaut pendant 180 jours des
 enveloppes de findings compatibles en lecture.
 
+[docs/FR/architecture-FR.md](docs/FR/architecture-FR.md) dessine les cinq relations que
+ce fichier énonce en prose : la topologie complète, les deux sens dans lesquels un
+daemon et le Hub se parlent, ce que fait une analyse lancée, les trois horloges de
+rétention, et les états que traverse un run.
+
 Chaque badge ci-dessus rapporte quelque chose d'observé, sauf celui de la release, qui reste vide
 tant que le workflow de publication n'a pas tourné une première fois. Les badges de l'image de
 conteneur et du chart Helm sont délibérément absents : leurs pages de paquet répondent 404 tant

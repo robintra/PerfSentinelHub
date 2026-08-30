@@ -15,6 +15,11 @@ PerfSentinelHub gives IDE plugins one durable endpoint for findings collected fr
 It is a NativeAOT service backed by SQLite: daemon push is the primary path, hourly polling is a
 recovery safety net, and the Hub preserves read-compatible finding envelopes for 180 days by default.
 
+[docs/architecture.md](docs/architecture.md) draws the five relationships this file
+states in prose: the whole topology, the two directions a daemon and the Hub talk in,
+what a launched analysis does, the three retention clocks, and the states a run passes
+through.
+
 Every badge above reports something observed, except the release one, which stays empty until the
 release workflow runs for the first time. Badges for the container image and the Helm chart are
 deliberately absent: their package pages answer 404 until a release publishes them, and a badge
@@ -100,36 +105,36 @@ These registry commands are usable only after the public rehearsal and publicati
 Environment variables use the .NET `Hub__...` form; Helm exposes the same settings under `hub`
 and `sources`.
 
-| Setting | Default | Validation |
-| --- | --- | --- |
-| `Hub:DatabasePath` | `/data/hub.db` | Absolute path |
-| `Hub:PollInterval` | `01:00:00` | Positive duration |
-| `Hub:HttpTimeout` | `00:00:10` | Positive duration |
-| `Hub:MaxConcurrentPolls` | `4` | 1–32 |
-| `Hub:Retention` | `180.00:00:00` (180 days) | Positive duration |
-| `Hub:ResolutionGrace` | `7.00:00:00` (7 days) | Positive, below `Retention` |
-| `Hub:DefaultReadLimit` | `1000` | 1–`MaxReadLimit` |
-| `Hub:MaxReadLimit` | `10000` | 1–10000 |
-| `Hub:Analysis:EngineBinaryPath` | none | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
-| `Hub:Analysis:ReportDirectory` | `/data/reports` | Absolute, writable. Rendered reports live here |
-| `Hub:Analysis:IdentityHeader` | `X-Forwarded-User` | Header a reverse proxy sets with the requester's identity |
-| `Hub:Analysis:Workers` | `2` | 1–16 |
-| `Hub:Analysis:MaxTracesCap` | `2000` | 1–10000, the engine's own limit on `--max-traces` |
-| `Hub:Analysis:Timeout` | `00:05:00` | Positive, at most one hour |
-| `Hub:Analysis:ReportRetention` | `1.00:00:00` (24 hours) | Positive duration |
-| `Hub:UpdateCheck:Enabled` | `true` | Whether the Hub asks GitHub for the newest published release of each product |
-| `Hub:UpdateCheck:Interval` | `1.00:00:00` (1 day) | At least 15 minutes |
-| `Hub:UpdateCheck:EngineEndpoint` | GitHub releases API for `robintra/perf-sentinel` | Absolute HTTPS, no credentials, query, or fragment |
-| `Hub:UpdateCheck:HubEndpoint` | GitHub releases API for `robintra/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment |
-| `Hub:Sources` | none | At least one source |
-| `Sources[].Id` | none | Non-empty and unique |
-| `Sources[].Name` | none | Non-empty |
-| `Sources[].Environment` | none | Non-empty |
-| `Sources[].Kind` | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled and only a daemon may carry an import key |
-| `Sources[].RetentionHours` | none | Trace backends only, 1 hour to 10 years. How far back this backend keeps traces, declared because no backend API exposes it |
-| `Sources[].BaseUrl` | none | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
-| `Sources[].AuthHeaderName/Value` | none | Both absent or both present; no newlines |
-| `Sources[].ImportApiKey` | none | Optional push credential; at least 32 characters, supplied through a Secret |
+| Setting                          | Default                                            | Validation                                                                                                                                                                |
+|----------------------------------|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:DatabasePath`               | `/data/hub.db`                                     | Absolute path                                                                                                                                                             |
+| `Hub:PollInterval`               | `01:00:00`                                         | Positive duration                                                                                                                                                         |
+| `Hub:HttpTimeout`                | `00:00:10`                                         | Positive duration                                                                                                                                                         |
+| `Hub:MaxConcurrentPolls`         | `4`                                                | 1–32                                                                                                                                                                      |
+| `Hub:Retention`                  | `180.00:00:00` (180 days)                          | Positive duration                                                                                                                                                         |
+| `Hub:ResolutionGrace`            | `7.00:00:00` (7 days)                              | Positive, below `Retention`                                                                                                                                               |
+| `Hub:DefaultReadLimit`           | `1000`                                             | 1–`MaxReadLimit`                                                                                                                                                          |
+| `Hub:MaxReadLimit`               | `10000`                                            | 1–10000                                                                                                                                                                   |
+| `Hub:Analysis:EngineBinaryPath`  | none                                               | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable                                                                           |
+| `Hub:Analysis:ReportDirectory`   | `/data/reports`                                    | Absolute, writable. Rendered reports live here                                                                                                                            |
+| `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                 | Header a reverse proxy sets with the requester's identity                                                                                                                 |
+| `Hub:Analysis:Workers`           | `2`                                                | 1–16                                                                                                                                                                      |
+| `Hub:Analysis:MaxTracesCap`      | `2000`                                             | 1–10000, the engine's own limit on `--max-traces`                                                                                                                         |
+| `Hub:Analysis:Timeout`           | `00:05:00`                                         | Positive, at most one hour                                                                                                                                                |
+| `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 hours)                            | Positive duration                                                                                                                                                         |
+| `Hub:UpdateCheck:Enabled`        | `true`                                             | Whether the Hub asks GitHub for the newest published release of each product                                                                                              |
+| `Hub:UpdateCheck:Interval`       | `1.00:00:00` (1 day)                               | At least 15 minutes                                                                                                                                                       |
+| `Hub:UpdateCheck:EngineEndpoint` | GitHub releases API for `robintra/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                                                                                                        |
+| `Hub:UpdateCheck:HubEndpoint`    | GitHub releases API for `robintra/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                                                                                                        |
+| `Hub:Sources`                    | none                                               | At least one source                                                                                                                                                       |
+| `Sources[].Id`                   | none                                               | Non-empty and unique                                                                                                                                                      |
+| `Sources[].Name`                 | none                                               | Non-empty                                                                                                                                                                 |
+| `Sources[].Environment`          | none                                               | Non-empty                                                                                                                                                                 |
+| `Sources[].Kind`                 | `daemon`                                           | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled and only a daemon may carry an import key                                                               |
+| `Sources[].RetentionHours`       | none                                               | Trace backends only, 1 hour to 10 years. How far back this backend keeps traces, declared because no backend API exposes it                                               |
+| `Sources[].BaseUrl`              | none                                               | Required; absolute HTTP(S) URL without credentials, query, or fragment. A path prefix is kept, so `https://gw/perf-sentinel/` polls `https://gw/perf-sentinel/api/status` |
+| `Sources[].AuthHeaderName/Value` | none                                               | Both absent or both present; no newlines                                                                                                                                  |
+| `Sources[].ImportApiKey`         | none                                               | Optional push credential; at least 32 characters, supplied through a Secret                                                                                               |
 
 ### Where the Hub connects
 

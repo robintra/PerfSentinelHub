@@ -988,4 +988,6 @@ jobs:
           pulled="$(find chart-check -maxdepth 1 -name '*.tgz')"
           test -f "$pulled"
           cmp "$root/perf-sentinel-hub-$VERSION.tgz" "$pulled"
-          gh release create "v$VERSION" "$root"/* --verify-tag --title "PerfSentinel Hub $VERSION" --notes-from-tag
+          # This job runs without a checkout on purpose, so gh cannot infer the
+          # repository from a git remote and has to be told.
+          gh release create "v$VERSION" "$root"/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "PerfSentinel Hub $VERSION" --notes-from-tag

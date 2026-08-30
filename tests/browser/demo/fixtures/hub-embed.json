@@ -75,8 +75,8 @@
         "kind": "daemon",
         "retention_hours": null,
         "reachable": true,
-        "last_attempt_ms": 1756511998795,
-        "last_success_ms": 1756511998795,
+        "last_attempt_ms": 1756511999000,
+        "last_success_ms": 1756511999000,
         "unreachable_since_ms": null,
         "producer_version": "0.17.0",
         "last_error_code": null,
@@ -91,8 +91,8 @@
         "kind": "daemon",
         "retention_hours": null,
         "reachable": true,
-        "last_attempt_ms": 1756511998799,
-        "last_success_ms": 1756511998799,
+        "last_attempt_ms": 1756511999000,
+        "last_success_ms": 1756511999000,
         "unreachable_since_ms": null,
         "producer_version": "0.16.0",
         "last_error_code": null,
@@ -123,9 +123,9 @@
         "kind": "daemon",
         "retention_hours": null,
         "reachable": false,
-        "last_attempt_ms": 1756511999884,
+        "last_attempt_ms": 1756512000000,
         "last_success_ms": null,
-        "unreachable_since_ms": 1756511998803,
+        "unreachable_since_ms": 1756511999000,
         "producer_version": null,
         "last_error_code": "network_error",
         "base_url": "http://127.0.0.1:41403",
@@ -151,7 +151,7 @@
     ],
     "/api/analyses?limit=500": [
       {
-        "id": "8e78fb626be26afa",
+        "id": "0000000000000004",
         "status": "failed",
         "source_id": "tempo-eu",
         "source_name": "Tempo EU",
@@ -163,16 +163,16 @@
           "max_traces": 100
         },
         "requested_by": "unknown",
-        "created_at_ms": 1756511999085,
-        "started_at_ms": 1756511999867,
-        "finished_at_ms": 1756511999893,
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
         "expires_at_ms": null,
         "producer_version": null,
         "error_code": "source_rejected_request",
         "result": null
       },
       {
-        "id": "d2e683c3bb89cf4c",
+        "id": "0000000000000003",
         "status": "failed",
         "source_id": "search-prod",
         "source_name": "Search production",
@@ -180,16 +180,16 @@
         "kind": "daemon",
         "request": {},
         "requested_by": "unknown",
-        "created_at_ms": 1756511999084,
-        "started_at_ms": 1756511999864,
-        "finished_at_ms": 1756511999867,
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
         "expires_at_ms": null,
         "producer_version": null,
         "error_code": "source_unreachable",
         "result": null
       },
       {
-        "id": "9728716e78691849",
+        "id": "0000000000000002",
         "status": "succeeded",
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -197,10 +197,10 @@
         "kind": "daemon",
         "request": {},
         "requested_by": "unknown",
-        "created_at_ms": 1756511999083,
-        "started_at_ms": 1756511999799,
-        "finished_at_ms": 1756511999867,
-        "expires_at_ms": 1756598399867,
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": 1756598400000,
         "producer_version": "0.17.0",
         "error_code": null,
         "result": {
@@ -221,7 +221,7 @@
         }
       },
       {
-        "id": "1718b8b846c0202a",
+        "id": "0000000000000001",
         "status": "succeeded",
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
@@ -229,10 +229,10 @@
         "kind": "daemon",
         "request": {},
         "requested_by": "unknown",
-        "created_at_ms": 1756511999079,
-        "started_at_ms": 1756511999799,
-        "finished_at_ms": 1756511999863,
-        "expires_at_ms": 1756598399863,
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": 1756598400000,
         "producer_version": "0.17.0",
         "error_code": null,
         "result": {
@@ -253,8 +253,8 @@
         }
       }
     ],
-    "/api/analyses/1718b8b846c0202a": {
-      "id": "1718b8b846c0202a",
+    "/api/analyses/0000000000000001": {
+      "id": "0000000000000001",
       "status": "succeeded",
       "source_id": "checkout-prod",
       "source_name": "Checkout production",
@@ -262,10 +262,10 @@
       "kind": "daemon",
       "request": {},
       "requested_by": "unknown",
-      "created_at_ms": 1756511999079,
-      "started_at_ms": 1756511999799,
-      "finished_at_ms": 1756511999863,
-      "expires_at_ms": 1756598399863,
+      "created_at_ms": 1756511999000,
+      "started_at_ms": 1756512000000,
+      "finished_at_ms": 1756512000000,
+      "expires_at_ms": 1756598400000,
       "producer_version": "0.17.0",
       "error_code": null,
       "result": {
@@ -285,8 +285,8 @@
         ]
       }
     },
-    "/api/analyses/9728716e78691849": {
-      "id": "9728716e78691849",
+    "/api/analyses/0000000000000002": {
+      "id": "0000000000000002",
       "status": "succeeded",
       "source_id": "billing-stg",
       "source_name": "Billing staging",
@@ -294,10 +294,10 @@
       "kind": "daemon",
       "request": {},
       "requested_by": "unknown",
-      "created_at_ms": 1756511999083,
-      "started_at_ms": 1756511999799,
-      "finished_at_ms": 1756511999867,
-      "expires_at_ms": 1756598399867,
+      "created_at_ms": 1756511999000,
+      "started_at_ms": 1756512000000,
+      "finished_at_ms": 1756512000000,
+      "expires_at_ms": 1756598400000,
       "producer_version": "0.17.0",
       "error_code": null,
       "result": {
@@ -317,8 +317,8 @@
         ]
       }
     },
-    "/api/analyses/d2e683c3bb89cf4c": {
-      "id": "d2e683c3bb89cf4c",
+    "/api/analyses/0000000000000003": {
+      "id": "0000000000000003",
       "status": "failed",
       "source_id": "search-prod",
       "source_name": "Search production",
@@ -326,16 +326,16 @@
       "kind": "daemon",
       "request": {},
       "requested_by": "unknown",
-      "created_at_ms": 1756511999084,
-      "started_at_ms": 1756511999864,
-      "finished_at_ms": 1756511999867,
+      "created_at_ms": 1756511999000,
+      "started_at_ms": 1756512000000,
+      "finished_at_ms": 1756512000000,
       "expires_at_ms": null,
       "producer_version": null,
       "error_code": "source_unreachable",
       "result": null
     },
-    "/api/analyses/8e78fb626be26afa": {
-      "id": "8e78fb626be26afa",
+    "/api/analyses/0000000000000004": {
+      "id": "0000000000000004",
       "status": "failed",
       "source_id": "tempo-eu",
       "source_name": "Tempo EU",
@@ -347,9 +347,9 @@
         "max_traces": 100
       },
       "requested_by": "unknown",
-      "created_at_ms": 1756511999085,
-      "started_at_ms": 1756511999867,
-      "finished_at_ms": 1756511999893,
+      "created_at_ms": 1756511999000,
+      "started_at_ms": 1756512000000,
+      "finished_at_ms": 1756512000000,
       "expires_at_ms": null,
       "producer_version": null,
       "error_code": "source_rejected_request",
@@ -357,7 +357,7 @@
     },
     "/api/sources/checkout-prod/daemon": {
       "source_id": "checkout-prod",
-      "observed_at_ms": 1756512000017,
+      "observed_at_ms": 1756512000000,
       "state": "near_capacity",
       "error_code": null,
       "version": "0.17.0",
@@ -488,7 +488,7 @@
     },
     "/api/sources/billing-stg/daemon": {
       "source_id": "billing-stg",
-      "observed_at_ms": 1756512000024,
+      "observed_at_ms": 1756512000000,
       "state": "advised",
       "error_code": null,
       "version": "0.16.0",
@@ -619,7 +619,7 @@
     },
     "/api/sources/search-prod/daemon": {
       "source_id": "search-prod",
-      "observed_at_ms": 1756512000026,
+      "observed_at_ms": 1756512000000,
       "state": "unreachable",
       "error_code": "network_error",
       "version": null,

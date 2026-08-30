@@ -80,9 +80,12 @@ async function settle(id: string, seconds: number): Promise<string> {
   throw new Error(`run ${id} never reached a terminal state`);
 }
 
-// The same fixed epoch demo/capture-fixtures.sh pins, so a recapture of
-// unchanged data rewrites nothing.
+// The same fixed epoch demo/capture-fixtures.sh pins. Observations are then
+// rebased onto it and rounded to the second, which is as reproducible as a live
+// capture gets: run ids are renumbered below, but how long the four runs took
+// still varies between captures, so the file moves when that moves.
 const EPOCH_MS = 1_756_512_000_000;
+const SECOND_MS = 1_000;
 // Above this a number is a moment, below it a duration. window_duration_ms and
 // its neighbours are durations and must survive untouched.
 const IS_TIMESTAMP = 1_000_000_000_000;
@@ -93,7 +96,7 @@ function rebase(value: unknown, capturedAt: number): unknown {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       out[k] = k.endsWith("_ms") && typeof v === "number" && v > IS_TIMESTAMP
-        ? EPOCH_MS - (capturedAt - v)
+        ? Math.round((EPOCH_MS - (capturedAt - v)) / SECOND_MS) * SECOND_MS
         : rebase(v, capturedAt);
     }
     return out;
@@ -108,10 +111,18 @@ function rebase(value: unknown, capturedAt: number): unknown {
 async function captureEmbedFixtures(runs: string[]): Promise<void> {
   const capturedAt = Date.now();
   const routes: Record<string, unknown> = {};
+  // A run id is drawn from RandomNumberGenerator, so left alone it would rewrite
+  // this file on every capture. Renumbered in order, the fixture only moves when
+  // the data does. The replacements stay 16 hex characters because the launcher
+  // routes #/run/{id} on exactly that shape.
+  const stable = new Map(runs.map((id, i) => [id, (i + 1).toString(16).padStart(16, "0")]));
+  const renumber = (text: string) =>
+    [...stable].reduce((acc, [from, to]) => acc.split(from).join(to), text);
   const read = async (path: string) => {
     const response = await fetch(BASE + path);
     if (!response.ok) throw new Error(`${path} answered ${response.status}`);
-    routes[path] = rebase(await response.json(), capturedAt);
+    const body = rebase(await response.json(), capturedAt);
+    routes[renumber(path)] = JSON.parse(renumber(JSON.stringify(body)));
   };
 
   await read("/api/status");
@@ -212,7 +223,14 @@ export default async function globalSetup(): Promise<void> {
     { service: "checkout", lookback: "999h", max_traces: 100 });
   for (const id of [succeeded, alsoSucceeded, unreachable, refused]) await settle(id, 120);
 
-  await captureEmbedFixtures([succeeded, alsoSucceeded, unreachable, refused]);
+  try {
+    await captureEmbedFixtures([succeeded, alsoSucceeded, unreachable, refused]);
+  } catch (error) {
+    // The embed fixture is consumed by the website repository, not by this
+    // suite. A capture that fails leaves the previous one in place and must not
+    // stop the screenshots this suite exists to produce.
+    console.error("hub-embed.json was not refreshed:", error);
+  }
 
   writeFileSync(join(WORK, "state.json"), JSON.stringify({
     baseUrl: BASE,

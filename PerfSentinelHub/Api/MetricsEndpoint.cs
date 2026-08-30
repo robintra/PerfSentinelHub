@@ -52,7 +52,7 @@ public static class MetricsEndpoint
         var queued = Runs(runs, AnalysisStatuses.Pending);
 
         var text = new StringBuilder();
-        Family(text, "perf_sentinel_hub_build_info", "gauge", "The running version, always 1.");
+        Family(text, "perf_sentinel_hub_build_info", "The running version, always 1.");
         // Escaped like any label value, though an assembly version cannot carry a
         // reserved character.
         Line(text, "perf_sentinel_hub_build_info", $"version=\"{Escape(version)}\"", 1);
@@ -64,47 +64,47 @@ public static class MetricsEndpoint
         // family has to be contiguous, so merging them into one pass over the
         // sources would interleave families and produce a scrape Prometheus
         // rejects.
-        var daemons = options.Sources.Where(source => source.Kind == SourceKinds.Daemon).ToList();
+        var daemons = options.Sources
+            .Where(source => source.Kind == SourceKinds.Daemon)
+            .Select(source => (source.Id, State: states.GetValueOrDefault(source.Id)))
+            .ToList();
 
-        Family(text, "perf_sentinel_hub_source_reachable", "gauge",
+        Family(text, "perf_sentinel_hub_source_reachable",
             "1 when the Hub's last poll of this daemon succeeded, 0 while it is unreachable.");
-        foreach (var source in daemons)
+        foreach (var (id, state) in daemons)
         {
-            states.TryGetValue(source.Id, out var state);
-            Line(text, "perf_sentinel_hub_source_reachable", Label(source.Id),
+            Line(text, "perf_sentinel_hub_source_reachable", Label(id),
                 state?.UnreachableSinceMs is null ? 1 : 0);
         }
 
-        Family(text, "perf_sentinel_hub_source_unreachable_seconds", "gauge",
+        Family(text, "perf_sentinel_hub_source_unreachable_seconds",
             "How long this daemon has been unreachable, 0 while it answers.");
-        foreach (var source in daemons)
+        foreach (var (id, state) in daemons)
         {
-            states.TryGetValue(source.Id, out var state);
-            Line(text, "perf_sentinel_hub_source_unreachable_seconds", Label(source.Id),
+            Line(text, "perf_sentinel_hub_source_unreachable_seconds", Label(id),
                 state?.UnreachableSinceMs is { } since ? Seconds(now - since) : 0);
         }
 
         // A source never observed gets no series rather than a zero: zero would
         // read as "succeeded just now", which is the opposite of the truth.
-        Family(text, "perf_sentinel_hub_source_last_success_seconds", "gauge",
+        Family(text, "perf_sentinel_hub_source_last_success_seconds",
             "Age of the last successful poll. Absent for a daemon never polled successfully.");
-        foreach (var source in daemons)
+        foreach (var (id, state) in daemons)
         {
-            states.TryGetValue(source.Id, out var state);
             if (state?.LastSuccessMs is { } success)
             {
-                Line(text, "perf_sentinel_hub_source_last_success_seconds", Label(source.Id),
+                Line(text, "perf_sentinel_hub_source_last_success_seconds", Label(id),
                     Seconds(now - success));
             }
         }
 
-        Family(text, "perf_sentinel_hub_analysis_queue_depth", "gauge",
+        Family(text, "perf_sentinel_hub_analysis_queue_depth",
             "Analysis runs accepted and not yet claimed by a worker.");
         Line(text, "perf_sentinel_hub_analysis_queue_depth", null, queued);
 
         // A gauge, not a counter: retention deletes rows, so these fall as well
         // as rise and naming them _total would promise a monotonic series.
-        Family(text, "perf_sentinel_hub_analysis_runs", "gauge",
+        Family(text, "perf_sentinel_hub_analysis_runs",
             "Analysis runs currently stored, by status. Retention removes them, so this is not a total.");
         foreach (var status in AnalysisStatuses.All)
         {
@@ -115,10 +115,15 @@ public static class MetricsEndpoint
         return text.ToString();
     }
 
-    private static void Family(StringBuilder text, string name, string type, string help)
+    /// <summary>
+    /// Declares a family. Every one the Hub publishes is a gauge, including
+    /// analysis_runs: retention deletes rows, so the series falls as well as
+    /// rises and a counter would be a lie.
+    /// </summary>
+    private static void Family(StringBuilder text, string name, string help)
     {
         text.Append("# HELP ").Append(name).Append(' ').Append(help).Append('\n');
-        text.Append("# TYPE ").Append(name).Append(' ').Append(type).Append('\n');
+        text.Append("# TYPE ").Append(name).Append(" gauge\n");
     }
 
     private static void Line(StringBuilder text, string name, string? labels, double value)
@@ -143,7 +148,7 @@ public static class MetricsEndpoint
     private static double Seconds(long milliseconds) => Math.Max(0, milliseconds) / 1000.0;
 
     private static int Runs(IReadOnlyDictionary<string, int> runs, string status) =>
-        runs.TryGetValue(status, out var count) ? count : 0;
+        runs.GetValueOrDefault(status);
 
     /// <summary>
     /// Backslash, quote and newline, the three the exposition format reserves in

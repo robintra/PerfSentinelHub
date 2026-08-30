@@ -354,3 +354,16 @@ test("durPrecise always reaches the seconds a countdown is watched by", () => {
   assert.equal(PSL.durPrecise(-5_000), "0 s");
   assert.equal(PSL.durPrecise(null), "n/a");
 });
+
+test("durMinutes keeps the units dur() drops from an uptime", () => {
+  // dur() stops at two, so a daemon up ten days and twenty-three hours reads
+  // the same as one up ten days flat.
+  assert.equal(PSL.dur(950_400_000), "11 d");
+  assert.equal(PSL.durMinutes(950_400_000), "11 d 0 h 0 m");
+  assert.equal(PSL.durMinutes(888_120_000), "10 d 6 h 42 m");
+  assert.equal(PSL.durMinutes(3_600_000), "1 h 0 m");
+  assert.equal(PSL.durMinutes(90_000), "1 m");
+  // No seconds: the figure is re-read on an interval, so they would be stale.
+  assert.equal(PSL.durMinutes(59_000), "0 m");
+  assert.equal(PSL.durMinutes(null), "n/a");
+});

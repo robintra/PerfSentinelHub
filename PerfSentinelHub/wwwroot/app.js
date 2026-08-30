@@ -34,8 +34,12 @@
     runError: false,
     runTimer: null,
     noteTimer: null,
-    // Rewrites the report bar's countdown once a second.
-    expiryTicker: null,
+    // Every node whose text is a duration measured against the current moment,
+    // and the single ticker that rewrites them. A countdown drawn once is wrong
+    // a second later, and re-rendering the screen to refresh it would replace
+    // the report iframe and reload the report underneath the reader.
+    liveDurations: [],
+    durationTicker: null,
     runs: null,
     // Which daemon rows are folded open, and what each one answered. Kept
     // across a render so a rebuilt table comes back the way it was left.
@@ -407,12 +411,42 @@
     return match ? match[1] : null;
   }
 
+  /**
+   * Marks a node's text as a live duration. `compute` is re-run every second and
+   * its result written back, so a caller passes the same function it used to
+   * build the initial text.
+   */
+  function live(node, compute) {
+    if (typeof compute === "function") state.liveDurations.push({ node: node, compute: compute });
+    return node;
+  }
+
+  function startDurationTicker() {
+    if (!state.liveDurations.length) return;
+    state.durationTicker = setInterval(function () {
+      state.liveDurations.forEach(function (entry) {
+        // A failed resubmission borrows this line for six seconds and stashes
+        // the original on the node. Rewriting it now would wipe the error
+        // before anyone read it.
+        if (entry.node.dataset && entry.node.dataset.restore !== undefined) return;
+        entry.node.textContent = entry.compute();
+      });
+    }, 1000);
+  }
+
+  function stopDurationTicker() {
+    clearInterval(state.durationTicker);
+    state.durationTicker = null;
+    // The nodes themselves are about to be replaced, so the registry goes too.
+    state.liveDurations = [];
+  }
+
   function render() {
     // A tip whose anchor is about to be replaced would never see its mouseleave.
     closeTip();
     // Same for the daemon tickers: they write into nodes this render replaces.
     stopAllTickers();
-    stopExpiryTicker();
+    stopDurationTicker();
     state.screen = currentScreen();
     Array.prototype.forEach.call(document.querySelectorAll(".shell-tab"), function (tab) {
       if (tab.getAttribute("data-screen") === state.screen) tab.setAttribute("aria-current", "page");
@@ -437,6 +471,7 @@
     else if (state.screen === "run") main.replaceChildren(renderRunScreen(currentRunId()));
     else if (state.screen === "report") main.replaceChildren(renderReportScreen(currentRunId()));
     else main.replaceChildren(renderRecentScreen());
+    startDurationTicker();
   }
 
   /** The label with a rule running out to its right, as every screen head has. */
@@ -1364,8 +1399,10 @@
         [gaugeText(view.findings), "findings stored",
           PSL.gaugeTone(pct(view.findings)), moves.findings],
         // No cap and only one direction: an uptime that grows every read is
-        // not news, and a tone would say it is running out of something.
-        [view.uptime_seconds == null ? "unknown" : PSL.dur(view.uptime_seconds * 1000), "uptime"]
+        // not news, and a tone would say it is running out of something. Down to
+        // the minute, because two units hide a whole day: a daemon up for 10 d
+        // 23 h reads the same as one up for 10 d flat.
+        [view.uptime_seconds == null ? "unknown" : PSL.durMinutes(view.uptime_seconds * 1000), "uptime"]
       ]),
       el("p", {
         class: "daemon-lead",
@@ -3159,7 +3196,8 @@
       el("span", { class: "run-id", text: run.id })
     ]));
     section.appendChild(el("h1", { class: "page-title", text: view.headline }));
-    section.appendChild(el("p", { class: "page-sub", text: view.sub }));
+    const sub = typeof view.sub === "function" ? view.sub : null;
+    section.appendChild(live(el("p", { class: "page-sub", text: sub ? sub() : view.sub }), sub));
 
     const left = el("div", { class: "run-left" }, [eventLog(run, key)]);
     const outcome = outcomePanel(run, key, view);
@@ -3206,7 +3244,10 @@
           ? result.findings + " findings, and " + (caveats === 1 ? "a caveat" : caveats + " caveats")
             + " you should read first."
           : result.findings + " findings.",
-        sub: "The report is ready and will be deleted in " + PSL.dur(run.expires_at_ms - Date.now()) + "."
+        sub: function () {
+          return "The report is ready and will be deleted in "
+            + PSL.durPrecise(run.expires_at_ms - Date.now()) + ".";
+        }
       };
     }
     if (key === "interrupted") {
@@ -3219,8 +3260,10 @@
     if (key === "expired") {
       return {
         headline: "This report was deleted.",
-        sub: "Reports live " + state.status.limits.report_retention_hours + " hours. This one expired "
-          + PSL.dur(Date.now() - run.expires_at_ms) + " ago and the file is gone."
+        sub: function () {
+          return "Reports live " + state.status.limits.report_retention_hours + " hours. This one expired "
+            + PSL.durPrecise(Date.now() - run.expires_at_ms) + " ago and the file is gone.";
+        }
       };
     }
     return {
@@ -3353,14 +3396,16 @@
     facts.push(["detected by", run.producer_version
       ? PSL.detector(run.kind) + " " + run.producer_version
       : "not yet known", PSL.skew(run.producer_version) ? "warn" : "mono"]);
-    facts.push(["expires", expiryText(run), run.expires_at_ms && run.expires_at_ms < Date.now() ? "crit" : "mono"]);
+    facts.push(["expires", expiryText(run),
+      run.expires_at_ms && run.expires_at_ms < Date.now() ? "crit" : "mono",
+      function () { return expiryText(run); }]);
 
     return el("section", { class: "request" }, [
       el("p", { class: "overline", text: "// request" }),
       el("div", { class: "request-grid" }, facts.map(function (fact) {
         return el("div", { class: "fact-card" }, [
           el("span", { class: "fact-card-k", text: fact[0] }),
-          el("span", { class: "fact-card-v", "data-tone": fact[2], text: fact[1], title: fact[1] })
+          live(el("span", { class: "fact-card-v", "data-tone": fact[2], text: fact[1], title: fact[1] }), fact[3])
         ]);
       }))
     ]);
@@ -3369,7 +3414,7 @@
   function expiryText(run) {
     if (!run.expires_at_ms) return "not until it succeeds";
     const delta = run.expires_at_ms - Date.now();
-    return delta > 0 ? "in " + PSL.dur(delta) : PSL.dur(-delta) + " ago";
+    return delta > 0 ? "in " + PSL.durPrecise(delta) : PSL.durPrecise(-delta) + " ago";
   }
 
   function outcomePanel(run, key, _) {
@@ -3411,7 +3456,10 @@
         ],
         warnings: result.warnings,
         primary: { label: "Open the dashboard", href: "#/report/" + run.id, filled: true },
-        note: "Opens on this origin. The link dies in " + PSL.dur(run.expires_at_ms - Date.now()) + "."
+        note: function () {
+          return "Opens on this origin. The link dies in "
+            + PSL.durPrecise(run.expires_at_ms - Date.now()) + ".";
+        }
       };
     }
     if (key === "empty") {
@@ -3514,7 +3562,10 @@
   function actionRow(run, spec) {
     const row = el("div", { class: "outcome-actions" }, [actionButton(spec.primary, true)]);
     if (spec.secondary) row.appendChild(actionButton(spec.secondary, false));
-    if (spec.note) row.appendChild(el("span", { class: "outcome-note", text: spec.note }));
+    if (spec.note) {
+      const note = typeof spec.note === "function" ? spec.note : null;
+      row.appendChild(live(el("span", { class: "outcome-note", text: note ? note() : spec.note }), note));
+    }
     return row;
   }
 
@@ -3865,7 +3916,7 @@
     card.appendChild(el("span", { class: "run-card-facts" }, cardFacts(run, key).map(function (fact) {
       return el("span", { class: "fact" }, [
         el("span", { class: "fact-k", text: fact[0] }),
-        el("span", { class: "fact-v", "data-tone": fact[2] || "mono", text: fact[1] })
+        live(el("span", { class: "fact-v", "data-tone": fact[2] || "mono", text: fact[1] }), fact[3])
       ]);
     })));
     return card;
@@ -3883,7 +3934,8 @@
       PSL.skew(run.producer_version) ? "warn" : "mono"]);
     facts.push(["started", PSL.dur(now - started) + " ago"]);
     facts.push(["expires", run.expires_at_ms ? expiryText(run) : "n/a",
-      run.expires_at_ms && run.expires_at_ms < now ? "crit" : "mono"]);
+      run.expires_at_ms && run.expires_at_ms < now ? "crit" : "mono",
+      run.expires_at_ms ? function () { return expiryText(run); } : null]);
     const tuned = Object.keys((run.request || {}).detection || {});
     if (tuned.length > 0) {
       facts.push(["thresholds", tuned.length === 1 ? "1 changed" : tuned.length + " changed", "warn"]);
@@ -3932,7 +3984,8 @@
    */
   function renderReportScreen(id) {
     const frame = el("iframe", { class: "report-frame", src: "/reports/" + id + ".html", title: "Analysis report" });
-    const lifetime = el("span", { class: "report-engine", text: reportLifetime(id) });
+    const lifetime = live(el("span", { class: "report-engine", text: reportLifetime(id) }),
+                          function () { return reportLifetime(id); });
     const bar = el("div", { class: "report-bar" }, [
       el("a", { class: "pill-button", href: "#/run/" + id }, [
         svg([["path", { d: "M14 6l-6 6 6 6" }]], 14),
@@ -3942,17 +3995,7 @@
       el("span", { class: "report-spacer" }),
       lifetime
     ]);
-    // One text node per second, never a re-render: rebuilding this screen would
-    // replace the iframe and reload the report the reader is looking at.
-    state.expiryTicker = setInterval(function () {
-      lifetime.textContent = reportLifetime(id);
-    }, 1000);
     return el("div", { class: "report-shell" }, [bar, frame]);
-  }
-
-  function stopExpiryTicker() {
-    clearInterval(state.expiryTicker);
-    state.expiryTicker = null;
   }
 
   function reportLifetime(id) {

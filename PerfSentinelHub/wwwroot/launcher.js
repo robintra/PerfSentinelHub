@@ -94,12 +94,15 @@
   }
 
   /**
-   * The same duration, always carrying seconds. dur() stops at two units, which
-   * reads well for an age or an uptime and badly for a countdown someone watches.
+   * Every unit from the largest that applies down to `floor`, keeping the ones
+   * in between even when they are zero. dur() stops at two units, which reads
+   * well for an age skimmed in a table and badly for a figure someone watches:
+   * "10 d" hides a whole day of drift, and a countdown never appears to move.
    * @param {number | null | undefined} ms
+   * @param {"s" | "m"} floor
    * @returns {string}
    */
-  function durPrecise(ms) {
+  function durDown(ms, floor) {
     if (ms == null) return "n/a";
     const s = Math.max(0, Math.round(ms / 1000));
     const d = Math.floor(s / 86400);
@@ -108,10 +111,16 @@
     const parts = [];
     if (d) parts.push(d + " d");
     if (d || h) parts.push(h + " h");
-    if (d || h || m) parts.push(m + " m");
-    parts.push((s % 60) + " s");
+    if (d || h || m || floor === "m") parts.push(m + " m");
+    if (floor === "s") parts.push((s % 60) + " s");
     return parts.join(" ");
   }
+
+  /** A countdown, watched: down to the second. */
+  function durPrecise(ms) { return durDown(ms, "s"); }
+
+  /** An uptime, re-read on an interval: down to the minute, seconds would lie. */
+  function durMinutes(ms) { return durDown(ms, "m"); }
 
   /**
    * Same duration, split into figure and unit so a caller can set them at different
@@ -738,7 +747,7 @@
     get ENGINE() { return ENGINE; },
     get HUB() { return HUB; },
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
-    dur, durPrecise, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
+    dur, durPrecise, durMinutes, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, psq, SHELLS, shellById, defaultShell, exportLine,
     analysisCommand, monitorCommand, detectionToml, quotedForShell,

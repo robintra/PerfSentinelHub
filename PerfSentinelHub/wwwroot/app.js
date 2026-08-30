@@ -2229,7 +2229,7 @@
             el("span", {class: "panel-head-source", text: state.sources.length + " configured"})
         ]),
         el("div", {class: "source-list", role: "radiogroup", "aria-label": "Source"},
-            state.sources.map(sourceRadio)),
+            sourceRows()),
         el("p", {class: "panel-note"}, [
             el("span", {class: "panel-note-rule", "aria-hidden": "true"}),
             el("span", {
@@ -2237,6 +2237,28 @@
                     + "measures it. A misconfigured deployment can label production as staging."
             })
         ])
+    ]);
+  }
+
+  // Two kinds that behave differently enough to be worth separating: a daemon is
+  // polled and pushes on its own, a trace backend is only read when a run asks.
+  // Labelled only when both are configured, since one kind needs no split.
+  function sourceRows() {
+    const daemons = state.sources.filter(function (s) { return s.kind === "daemon"; });
+    const backends = state.sources.filter(function (s) { return s.kind !== "daemon"; });
+    if (!daemons.length || !backends.length) return state.sources.map(sourceRadio);
+    return [sourceGroupLabel("daemons")].concat(
+      daemons.map(sourceRadio),
+      [sourceGroupLabel("trace backends")],
+      backends.map(sourceRadio));
+  }
+
+  // aria-hidden: each row already names its own kind, so the label would only
+  // repeat it, and it is not a radio the group should offer.
+  function sourceGroupLabel(text) {
+    return el("div", { class: "source-group", role: "presentation", "aria-hidden": "true" }, [
+      el("span", { class: "overline", text: text }),
+      el("span", { class: "source-group-rule" })
     ]);
   }
 

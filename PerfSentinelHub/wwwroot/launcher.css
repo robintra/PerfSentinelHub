@@ -381,6 +381,9 @@ button { font: inherit; }
 
 .source-panel { padding: 16px; }
 .source-list { display: flex; flex-direction: column; gap: 8px; }
+.source-group { display: flex; align-items: center; gap: 10px; margin: 4px 2px 0; }
+.source-group:first-child { margin-top: 0; }
+.source-group-rule { flex: 1; height: 1px; background: var(--border); }
 .source-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

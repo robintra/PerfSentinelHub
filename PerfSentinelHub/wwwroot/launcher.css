@@ -983,14 +983,19 @@ body[data-screen="report"] .shell-footer { display: none; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 18px; }
 .legend .overline { margin-right: 4px; }
 .run-list { display: flex; flex-direction: column; gap: 10px; }
-.run-card { display: block; width: 100%; padding: 13px 16px; border: 0; border-radius: 10px; background: var(--surface-2); color: inherit; }
+/* One step off the page, with the strip inside stepping back toward it. Not
+   --surface-2: that token means "raised above a grey panel", which is lighter
+   than its ground and therefore white in the light theme, invisible here where
+   the ground is the page itself. .source-row and .cost-cell do sit on a panel
+   and keep it. */
+.run-card { display: block; width: 100%; padding: 13px 16px; border: 0; border-radius: 10px; background: var(--surface); color: inherit; }
 .run-card:hover { background: var(--accent-bg); text-decoration: none; }
 .run-card[data-status="expired"] { opacity: .62; }
 .run-card-line { display: flex; flex-wrap: wrap; align-items: center; gap: 11px; margin-bottom: 9px; }
 .run-card-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .run-card-spacer { flex: 1; }
 .run-card-id { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
-.run-card-args { display: block; margin-bottom: 10px; padding: 8px 11px; border-radius: 10px; background: var(--surface); font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-card-args { display: block; margin-bottom: 10px; padding: 8px 11px; border-radius: 10px; background: var(--bg); font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .run-card-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline; }
 .fact { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
 .fact-k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }

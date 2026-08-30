@@ -266,15 +266,15 @@ class CoverageCheckerTests(unittest.TestCase):
             (
                 "wrong root",
                 '<not-cobertura lines-covered="1" lines-valid="1"><packages><package>'
-                '<classes><class name="App" filename="src/App.cs"><lines>'
-                '<line number="1" hits="1" />'
-                '</lines></class></classes></package></packages></not-cobertura>',
+                + '<classes><class name="App" filename="src/App.cs"><lines>'
+                + '<line number="1" hits="1" />'
+                + '</lines></class></classes></package></packages></not-cobertura>',
             ),
             (
                 "missing packages",
                 '<coverage lines-covered="1" lines-valid="1">'
-                '<class name="App" filename="src/App.cs"><line number="1" hits="1" />'
-                '</class></coverage>',
+                + '<class name="App" filename="src/App.cs"><line number="1" hits="1" />'
+                + '</class></coverage>',
             ),
         )
         for name, body in reports:

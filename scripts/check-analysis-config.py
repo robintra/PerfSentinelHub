@@ -22,10 +22,12 @@ SONAR_SCANNER_ARGUMENTS = (
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx",
     "/d:sonar.sourceEncoding=UTF-8",
     "/d:sonar.python.version=3.12",
-    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"',
+    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**,PerfSentinelHub/wwwroot/fonts.css"',
     # scripts/ holds CI tooling, not shipped code: it stays analysed for quality but is kept out
-    # of the coverage figure, which measures the service itself.
-    '"/d:sonar.coverage.exclusions=scripts/**"',
+    # of the coverage figure, which measures the service itself. wwwroot/ is the browser bundle,
+    # covered by its own node --test suites rather than by the C# coverage run, and fonts.css is
+    # generated base64 payload that carries no logic to analyse at all.
+    '"/d:sonar.coverage.exclusions=scripts/**,PerfSentinelHub/wwwroot/**"',
     # secrets:S6338 reads the base64 NuGet lock hashes as Azure Storage keys, and pythonsecurity:S8707
     # flags CLI paths in tooling the workflow itself invokes with fixed arguments.
     "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint",

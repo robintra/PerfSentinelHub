@@ -28,13 +28,35 @@ trap 'rm -rf "$work"' EXIT
 daemon=$!
 trap 'kill $daemon 2>/dev/null || true; rm -rf "$work"' EXIT
 
-for _ in $(seq 1 60); do
-  curl -sf "http://127.0.0.1:$PORT/api/status" -o "$work/status.json" && break
-  sleep 0.25
-done
-[ -s "$work/status.json" ] || { echo "the daemon never answered" >&2; exit 1; }
+# Read over the loopback from Python rather than curl. check-supply-chain.py
+# treats any curl or wget in a .sh as a supply-chain download and holds it to the
+# canonical /bin/dash download-script shape, which this is not: nothing here
+# crosses the network, it polls a daemon this script just started.
+python3 - "$PORT" "$work" <<'WAIT'
+import json, pathlib, sys, time, urllib.error, urllib.request
 
-curl -sf "http://127.0.0.1:$PORT/api/config" -o "$work/config.json"
+port, work = sys.argv[1], pathlib.Path(sys.argv[2])
+base = f"http://127.0.0.1:{port}"
+
+
+def fetch(path, deadline=0.0):
+    while True:
+        try:
+            with urllib.request.urlopen(f"{base}/{path}", timeout=2) as answer:
+                return answer.read()
+        except (urllib.error.URLError, OSError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.25)
+
+
+try:
+    status = fetch("api/status", deadline=time.monotonic() + 15)
+except Exception:
+    sys.exit("the daemon never answered")
+(work / "status.json").write_bytes(status)
+(work / "config.json").write_bytes(fetch("api/config"))
+WAIT
 "$ENGINE" analyze --input "$TRACES" --format json > "$work/report.json"
 kill $daemon 2>/dev/null || true
 

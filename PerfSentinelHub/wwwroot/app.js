@@ -34,6 +34,8 @@
     runError: false,
     runTimer: null,
     noteTimer: null,
+    // Rewrites the report bar's countdown once a second.
+    expiryTicker: null,
     runs: null,
     // Which daemon rows are folded open, and what each one answered. Kept
     // across a render so a rebuilt table comes back the way it was left.
@@ -410,6 +412,7 @@
     closeTip();
     // Same for the daemon tickers: they write into nodes this render replaces.
     stopAllTickers();
+    stopExpiryTicker();
     state.screen = currentScreen();
     Array.prototype.forEach.call(document.querySelectorAll(".shell-tab"), function (tab) {
       if (tab.getAttribute("data-screen") === state.screen) tab.setAttribute("aria-current", "page");
@@ -3907,6 +3910,7 @@
    */
   function renderReportScreen(id) {
     const frame = el("iframe", { class: "report-frame", src: "/reports/" + id + ".html", title: "Analysis report" });
+    const lifetime = el("span", { class: "report-engine", text: reportLifetime(id) });
     const bar = el("div", { class: "report-bar" }, [
       el("a", { class: "pill-button", href: "#/run/" + id }, [
         svg([["path", { d: "M14 6l-6 6 6 6" }]], 14),
@@ -3914,9 +3918,19 @@
       ]),
       el("span", { class: "report-path", text: "report / " + id }),
       el("span", { class: "report-spacer" }),
-      el("span", { class: "report-engine", text: reportLifetime(id) })
+      lifetime
     ]);
+    // One text node per second, never a re-render: rebuilding this screen would
+    // replace the iframe and reload the report the reader is looking at.
+    state.expiryTicker = setInterval(function () {
+      lifetime.textContent = reportLifetime(id);
+    }, 1000);
     return el("div", { class: "report-shell" }, [bar, frame]);
+  }
+
+  function stopExpiryTicker() {
+    clearInterval(state.expiryTicker);
+    state.expiryTicker = null;
   }
 
   function reportLifetime(id) {
@@ -3924,7 +3938,8 @@
     const version = state.status && state.status.engine_version;
     const rendered = "Rendered by perf-sentinel " + (version || "unknown");
     if (!run || !run.expires_at_ms) return rendered;
-    return rendered + " · expires in " + PSL.dur(run.expires_at_ms - Date.now());
+    const left = run.expires_at_ms - Date.now();
+    return rendered + (left > 0 ? " · expires in " + PSL.durPrecise(left) : " · expired");
   }
 
   // ------------------------------------------------------------------ boot

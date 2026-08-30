@@ -342,3 +342,15 @@ test("knownShell answers null for anything that is not a shell id", () => {
   assert.equal(PSL.knownShell(null), null);
   assert.equal(PSL.knownShell(undefined), null);
 });
+
+test("durPrecise always reaches the seconds a countdown is watched by", () => {
+  // dur() stops at two units, which hides the only figure that moves.
+  assert.equal(PSL.dur(86_399_000), "23 h 59 m");
+  assert.equal(PSL.durPrecise(86_399_000), "23 h 59 m 59 s");
+  assert.equal(PSL.durPrecise(90_061_000), "1 d 1 h 1 m 1 s");
+  assert.equal(PSL.durPrecise(59_000), "59 s");
+  assert.equal(PSL.durPrecise(0), "0 s");
+  // A report already gone must not read as one second from expiry.
+  assert.equal(PSL.durPrecise(-5_000), "0 s");
+  assert.equal(PSL.durPrecise(null), "n/a");
+});

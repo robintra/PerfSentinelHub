@@ -94,6 +94,26 @@
   }
 
   /**
+   * The same duration, always carrying seconds. dur() stops at two units, which
+   * reads well for an age or an uptime and badly for a countdown someone watches.
+   * @param {number | null | undefined} ms
+   * @returns {string}
+   */
+  function durPrecise(ms) {
+    if (ms == null) return "n/a";
+    const s = Math.max(0, Math.round(ms / 1000));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor(s / 3600) % 24;
+    const m = Math.floor(s / 60) % 60;
+    const parts = [];
+    if (d) parts.push(d + " d");
+    if (d || h) parts.push(h + " h");
+    if (d || h || m) parts.push(m + " m");
+    parts.push((s % 60) + " s");
+    return parts.join(" ");
+  }
+
+  /**
    * Same duration, split into figure and unit so a caller can set them at different
    * sizes. A 40px "m" beside a 40px digit reads as two glyphs, not one duration.
    * @param {number | null | undefined} ms
@@ -718,7 +738,7 @@
     get ENGINE() { return ENGINE; },
     get HUB() { return HUB; },
     ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
-    dur, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
+    dur, durPrecise, durParts, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
     vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
     shq, psq, SHELLS, shellById, defaultShell, exportLine,
     analysisCommand, monitorCommand, detectionToml, quotedForShell,

@@ -9,8 +9,8 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-/// The Prometheus exposition format, written by hand. The whole surface is six
-/// metric families over data the Hub already holds, which is not worth a
+/// The Prometheus exposition format, written by hand. The whole surface is
+/// eight metric families over data the Hub already holds, which is not worth a
 /// dependency in a NativeAOT service whose only two packages are SQLite.
 ///
 /// Cardinality is bounded by configuration, not by requests: `source` takes the
@@ -28,10 +28,12 @@ public static class MetricsEndpoint
         app.MapGet("/metrics", async (
             HubDatabase database,
             IOptions<HubOptions> options,
+            ImportMetrics imports,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
-            var body = await RenderAsync(database, options.Value, timeProvider, version, cancellationToken);
+            var body = await RenderAsync(
+                database, options.Value, imports, timeProvider, version, cancellationToken);
             return Results.Text(body, ContentType);
         });
     }
@@ -39,11 +41,13 @@ public static class MetricsEndpoint
     private static async Task<string> RenderAsync(
         HubDatabase database,
         HubOptions options,
+        ImportMetrics imports,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
     {
         var states = await database.QuerySourceStatesAsync(cancellationToken);
+        var pushes = await database.QuerySourceImportsAsync(cancellationToken);
         var runs = await database.CountRunsByStatusAsync(cancellationToken);
         var now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // Read from the same snapshot as the per-status series rather than from
@@ -66,7 +70,10 @@ public static class MetricsEndpoint
         // rejects.
         var daemons = options.Sources
             .Where(source => source.Kind == SourceKinds.Daemon)
-            .Select(source => (source.Id, State: states.GetValueOrDefault(source.Id)))
+            .Select(source => (
+                source.Id,
+                State: states.GetValueOrDefault(source.Id),
+                LastImportMs: pushes.TryGetValue(source.Id, out var at) ? at : (long?)null))
             .ToList();
 
         // A daemon with no source_state row has never been attempted, or was
@@ -76,7 +83,7 @@ public static class MetricsEndpoint
         Family(text, "perf_sentinel_hub_source_reachable",
             "1 when the Hub's last poll of this daemon succeeded, 0 while it is unreachable. "
             + "Absent for a daemon the Hub has never observed.");
-        foreach (var (id, state) in daemons)
+        foreach (var (id, state, _) in daemons)
         {
             if (state is not null)
             {
@@ -88,7 +95,7 @@ public static class MetricsEndpoint
         Family(text, "perf_sentinel_hub_source_unreachable_seconds",
             "How long this daemon has been unreachable, 0 while it answers. "
             + "Absent for a daemon the Hub has never observed.");
-        foreach (var (id, state) in daemons)
+        foreach (var (id, state, _) in daemons)
         {
             if (state is not null)
             {
@@ -100,7 +107,7 @@ public static class MetricsEndpoint
         // Zero here would read as "succeeded just now", the opposite of never.
         Family(text, "perf_sentinel_hub_source_last_success_seconds",
             "Age of the last successful poll. Absent for a daemon never polled successfully.");
-        foreach (var (id, state) in daemons)
+        foreach (var (id, state, _) in daemons)
         {
             if (state?.LastSuccessMs is { } success)
             {
@@ -109,15 +116,39 @@ public static class MetricsEndpoint
             }
         }
 
+        // Not a heartbeat, and the HELP says so: the daemon exporter sends
+        // nothing at all while it has no findings, so an old value here means
+        // "no new finding since" and not "the push path is broken". The
+        // rejection counter below is the unambiguous half.
+        Family(text, "perf_sentinel_hub_source_last_import_seconds",
+            "Age of this daemon's last accepted push. A daemon with no new findings pushes "
+            + "nothing, so this rises on a quiet fleet. Absent for one that has never pushed.");
+        foreach (var (id, _, lastImportMs) in daemons)
+        {
+            if (lastImportMs is { } pushedAt)
+            {
+                Line(text, "perf_sentinel_hub_source_last_import_seconds", Label(id),
+                    Seconds(now - pushedAt));
+            }
+        }
+
+        Counter(text, "perf_sentinel_hub_import_rejected_total",
+            "Imports the Hub refused, by reason. Every reason is published from startup, since a "
+            + "series that appears only on the first failure reads as a scrape gap instead.");
+        foreach (var (reason, count) in imports.Snapshot())
+        {
+            Line(text, "perf_sentinel_hub_import_rejected_total", $"reason=\"{reason}\"", count);
+        }
+
         Family(text, "perf_sentinel_hub_analysis_queue_depth",
             "Analysis runs accepted and not yet claimed by a worker.");
         Line(text, "perf_sentinel_hub_analysis_queue_depth", null, queued);
 
-        // A gauge, not a counter: a run moves between statuses, so a per-status
-        // series falls as well as rises and _total would promise otherwise.
+        // A gauge, not a counter: a run moves between statuses and retention
+        // removes it, so a per-status series falls as well as rises.
         Family(text, "perf_sentinel_hub_analysis_runs",
-            "Analysis runs stored, by status. A run moves between statuses, so a series falls as "
-            + "well as rises, but no purge deletes a row and the total only grows.");
+            "Analysis runs stored, by status. A run moves between statuses and finished rows age "
+            + "out on Hub:Analysis:RunRetention, so every series falls as well as rises.");
         foreach (var status in AnalysisStatuses.All)
         {
             Line(text, "perf_sentinel_hub_analysis_runs", $"status=\"{status}\"",
@@ -128,14 +159,21 @@ public static class MetricsEndpoint
     }
 
     /// <summary>
-    /// Declares a family. Every one the Hub publishes is a gauge, analysis_runs
-    /// included: a run moves between statuses, so a per-status series falls as
-    /// well as rises and a counter would be a lie.
+    /// Declares a gauge. Most of this surface is one, analysis_runs included: a
+    /// run moves between statuses, so a per-status series falls as well as
+    /// rises and a counter would be a lie.
     /// </summary>
-    private static void Family(StringBuilder text, string name, string help)
+    private static void Family(StringBuilder text, string name, string help) =>
+        Family(text, name, "gauge", help);
+
+    /// <summary>Declares a counter, which only ever rises or resets to zero.</summary>
+    private static void Counter(StringBuilder text, string name, string help) =>
+        Family(text, name, "counter", help);
+
+    private static void Family(StringBuilder text, string name, string type, string help)
     {
         text.Append("# HELP ").Append(name).Append(' ').Append(help).Append('\n');
-        text.Append("# TYPE ").Append(name).Append(" gauge\n");
+        text.Append("# TYPE ").Append(name).Append(' ').Append(type).Append('\n');
     }
 
     private static void Line(StringBuilder text, string name, string? labels, double value)

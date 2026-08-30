@@ -88,31 +88,34 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
+        ImportMetrics metrics,
         CancellationToken cancellationToken)
     {
         if (!HasValidUtf8(request.QueryString.Value) ||
             request.Query.Count != 1 ||
             !request.Query.TryGetValue("source_id", out var sourceIds) ||
             sourceIds.Count != 1)
-            return TypedResults.BadRequest();
+            return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
         var sourceId = sourceIds[0];
         if (string.IsNullOrEmpty(sourceId))
-            return TypedResults.BadRequest();
+            return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
         var source = options.Value.Sources.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, sourceId, StringComparison.Ordinal));
         if (source is null || !IsAuthorized(request, source.ImportApiKey))
-            return TypedResults.Unauthorized();
+            return Refuse(metrics, ImportRejection.Unauthorized, TypedResults.Unauthorized());
         if (!gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
-            return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            return Refuse(metrics, ImportRejection.Busy,
+                TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
         }
 
         try
         {
             var payload = await ReadBodyAsync(request, cancellationToken);
             if (payload is null)
-                return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                return Refuse(metrics, ImportRejection.TooLarge,
+                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
 
             ParsedImport import;
             try
@@ -121,15 +124,16 @@ public static partial class ApiEndpoints
             }
             catch (ImportBatchTooLargeException)
             {
-                return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                return Refuse(metrics, ImportRejection.TooLarge,
+                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
             }
             catch (InvalidDataException)
             {
-                return TypedResults.BadRequest();
+                return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
             }
 
             if (import.Batch.Findings.Count == 0)
-                return TypedResults.BadRequest();
+                return Refuse(metrics, ImportRejection.BadRequest, TypedResults.BadRequest());
             var stored = await database.TryUpsertBatchAsync(
                 new SourceSnapshot(source.Id, source.Name, source.Environment, import.ProducerVersion),
                 import.Batch,
@@ -138,7 +142,8 @@ public static partial class ApiEndpoints
             if (!stored)
             {
                 request.HttpContext.Response.Headers.RetryAfter = "1";
-                return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                return Refuse(metrics, ImportRejection.Busy,
+                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
             }
 
             if (import.Batch.RejectedCount > 0)
@@ -261,6 +266,13 @@ public static partial class ApiEndpoints
         {
             return false;
         }
+    }
+
+    /// <summary>Counts a refused import and hands its result straight back.</summary>
+    private static T Refuse<T>(ImportMetrics metrics, ImportRejection reason, T result)
+    {
+        metrics.Rejected(reason);
+        return result;
     }
 
     private static bool IsAuthorized(HttpRequest request, string? apiKey)

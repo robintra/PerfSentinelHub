@@ -105,4 +105,16 @@ internal static class Schema
         CREATE INDEX IF NOT EXISTS ix_runs_created
           ON analysis_runs(created_at_ms DESC);
         """;
+
+    // When each source last pushed, kept apart from source_state on purpose.
+    // source_state describes the poll, whose every column would have to be
+    // nullable for a push-only source to own a row, and a push must never look
+    // like a successful poll. This table answers a different question: when the
+    // Hub last heard from a daemon on the path that is primary.
+    internal const string V4 = """
+        CREATE TABLE IF NOT EXISTS source_imports (
+          source_id TEXT PRIMARY KEY,
+          last_import_ms INTEGER NOT NULL
+        );
+        """;
 }

@@ -191,6 +191,47 @@ public sealed class MetricsEndpointTests : IDisposable
             Sample(body, "perf_sentinel_hub_analysis_queue_depth"));
     }
 
+    [Fact]
+    public async Task Every_import_rejection_reason_reports_from_startup()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("# TYPE perf_sentinel_hub_import_rejected_total counter", body, StringComparison.Ordinal);
+        // A series that only appears on the first failure reads as a scrape gap,
+        // and an alert cannot tell the two apart.
+        foreach (var reason in new[] { "bad_request", "unauthorized", "busy", "too_large" })
+        {
+            Assert.Contains(
+                $"perf_sentinel_hub_import_rejected_total{{reason=\"{reason}\"}} 0",
+                body,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task A_refused_import_advances_its_own_reason_and_no_other()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var response = await _client.PostAsync(
+            "/api/import/findings?source_id=not-a-configured-source",
+            new StringContent("{}"),
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        var body = await ScrapeAsync(cancellationToken);
+        Assert.Equal(1, Sample(body, "perf_sentinel_hub_import_rejected_total{reason=\"unauthorized\"}"));
+        Assert.Equal(0, Sample(body, "perf_sentinel_hub_import_rejected_total{reason=\"bad_request\"}"));
+    }
+
+    [Fact]
+    public async Task A_daemon_that_has_never_pushed_gets_no_import_age()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        // The exporter sends nothing while it has no findings, so a zero here
+        // would claim a push that never happened on a fleet that is merely quiet.
+        Assert.Contains("# HELP perf_sentinel_hub_source_last_import_seconds ", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("perf_sentinel_hub_source_last_import_seconds{", body, StringComparison.Ordinal);
+    }
+
     private static double Sample(string body, string series)
     {
         var line = body.Split('\n').Single(l => l.StartsWith(series + " ", StringComparison.Ordinal));

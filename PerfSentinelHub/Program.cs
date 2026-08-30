@@ -54,6 +54,7 @@ builder.Services.AddSingleton<EngineProbe>();
 // into the web host, would silently hand the first runs a static report.
 builder.Services.AddHostedService(provider => provider.GetRequiredService<EngineProbe>());
 builder.Services.AddSingleton<ImportGate>();
+builder.Services.AddSingleton<ImportMetrics>();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<AnalysisRunner>();
 builder.Services.AddHostedService<AnalysisWorker>();

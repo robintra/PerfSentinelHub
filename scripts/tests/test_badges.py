@@ -1,3 +1,4 @@
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -8,52 +9,15 @@ from pathlib import Path
 REPOSITORY = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY / "scripts" / "check-badges.py"
 CANONICAL_LICENSE = (REPOSITORY / "LICENSE").read_text(encoding="utf-8")
-REPO_URL = "https://github.com/robintra/PerfSentinelHub"
-SONAR_URL = "https://sonarcloud.io"
-SONAR_KEY = "robintrassard_PerfSentinelHub"
+# The checker owns the badge set. Restating it here let the two drift, which is
+# exactly what a green suite failed to catch: ten of these tests assert a
+# rejection, so they pass whether or not the two copies agree.
+_SPEC = importlib.util.spec_from_file_location("check_badges", CHECKER)
+CHECKER_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(CHECKER_MODULE)
 BADGES = {
-    ".NET": (
-        "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com"
-        "%2Frobintra%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version"
-        "&label=.NET&color=512BD4&logo=dotnet&logoColor=white",
-        "https://dotnet.microsoft.com/",
-    ),
-    "CI": (f"{REPO_URL}/actions/workflows/ci.yml/badge.svg", f"{REPO_URL}/actions/workflows/ci.yml"),
-    "Security Audit": (
-        f"{REPO_URL}/actions/workflows/security-audit.yml/badge.svg",
-        f"{REPO_URL}/actions/workflows/security-audit.yml",
-    ),
-    "CodeQL": (
-        f"{REPO_URL}/actions/workflows/codeql.yml/badge.svg",
-        f"{REPO_URL}/actions/workflows/codeql.yml",
-    ),
-    "Coverage": (
-        f"{SONAR_URL}/api/project_badges/measure?project={SONAR_KEY}&metric=coverage",
-        f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
-    ),
-    "Quality Gate": (
-        f"{SONAR_URL}/api/project_badges/measure?project={SONAR_KEY}&metric=alert_status",
-        f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
-    ),
-    "Release": (
-        f"{REPO_URL}/actions/workflows/release.yml/badge.svg",
-        f"{REPO_URL}/actions/workflows/release.yml",
-    ),
-    "Latest release": (
-        "https://img.shields.io/github/v/release/robintra/PerfSentinelHub"
-        "?display_name=tag&sort=semver&color=512BD4",
-        f"{REPO_URL}/releases/latest",
-    ),
-    "Container image": (
-        "https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED"
-        "?logo=docker&logoColor=white",
-        f"{REPO_URL}/pkgs/container/perf-sentinel-hub",
-    ),
-    "Helm chart": (
-        "https://img.shields.io/badge/chart-perf--sentinel--hub-0F1689"
-        "?logo=helm&logoColor=white",
-        f"{REPO_URL}/pkgs/container/charts%2Fperf-sentinel-hub",
-    ),
+    label: (image, destination)
+    for label, (image, destination, _) in CHECKER_MODULE.BADGES.items()
 }
 
 
@@ -77,33 +41,34 @@ def write_root(
     readme,
     *,
     include_daily_workflow=True,
-    sdk_version="10.0.400",
     license_text=CANONICAL_LICENSE,
+    readme_fr=None,
+    chart_name="perf-sentinel-hub",
 ):
     if isinstance(readme, bytes):
         (root / "README.md").write_bytes(readme)
     else:
         (root / "README.md").write_text(readme, encoding="utf-8")
+    fr = complete_readme() if readme_fr is None else readme_fr
+    (root / "README-FR.md").write_text(fr, encoding="utf-8")
     workflows = root / ".github" / "workflows"
     workflows.mkdir(parents=True)
-    for name in ("ci.yml", "codeql.yml", "release.yml"):
+    for name in ("codeql.yml", "release.yml"):
         (workflows / name).write_text(f"name: {name}\n", encoding="utf-8")
     if include_daily_workflow:
         (workflows / "security-audit.yml").write_text(
             "name: Security Audit\n", encoding="utf-8"
         )
-    (root / "global.json").write_text(
-        f'{{"sdk": {{"version": "{sdk_version}"}}}}\n', encoding="utf-8"
+    (workflows / "ci.yml").write_text(
+        f"name: CI\nsonar.projectKey={CHECKER_MODULE.SONAR_KEY}\n", encoding="utf-8"
     )
+    (root / "global.json").write_text('{"sdk": {"version": "10.0.400"}}\n', encoding="utf-8")
     (root / "LICENSE").write_text(license_text, encoding="utf-8")
-    (root / ".github/workflows/ci.yml").write_text(
-        "sonar.projectKey=robintrassard_PerfSentinelHub\n", encoding="utf-8"
-    )
     (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
     (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     chart = root / "deploy" / "helm" / "perf-sentinel-hub"
     chart.mkdir(parents=True)
-    (chart / "Chart.yaml").write_text("name: perf-sentinel-hub\n", encoding="utf-8")
+    (chart / "Chart.yaml").write_text(f"name: {chart_name}\n", encoding="utf-8")
 
 
 def run_checker(readme, **fixture_options):
@@ -258,6 +223,21 @@ class BadgeTests(unittest.TestCase):
 
                 self.assertEqual(1, result.returncode)
                 self.assertIn("LICENSE differs from canonical AGPL-3.0-only", result.stderr)
+
+    def test_requires_the_french_mirror_to_carry_the_same_block(self):
+        label, (image, destination) = tuple(BADGES.items())[-1]
+        drifted = complete_readme().replace(badge(label, image, destination) + "\n", "")
+
+        result = run_checker(complete_readme(), readme_fr=drifted)
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("README-FR.md must start with", result.stderr)
+
+    def test_rejects_evidence_that_no_longer_states_the_badge_claim(self):
+        result = run_checker(complete_readme(), chart_name="something-else")
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("no longer states", result.stderr)
 
 
 if __name__ == "__main__":

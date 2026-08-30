@@ -15,6 +15,12 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Fixed
 
+- `scripts/check-badges.py` runs in CI, validates `README-FR.md` alongside `README.md`, and reads
+  each badge's evidence file instead of only checking that it exists. It had none of the three: no
+  job ran it, so a README and a canonical block that disagreed passed every pull request, and the
+  only job that touched it ran unit tests building their own README from their own copy of the
+  badge set. That copy is now imported from the checker, so the two cannot drift.
+
 - `image.repository` defaults to `ghcr.io/robintra/perf-sentinel-hub` rather than the bare name
   `perf-sentinel-hub`. The published chart already carries a stamped `image.digest` naming a
   GitHub Container Registry image, so a bare repository left half the identity unresolved and an
@@ -23,7 +29,8 @@ All notable changes to PerfSentinelHub are recorded here.
 ### Documentation
 
 - The README carries its latest-release, container image and Helm chart badges again, all three
-  having been removed while nothing was published for them to point at.
+  having been removed while nothing was published for them to point at. The release badge takes the
+  `512BD4` of the .NET one rather than the shields default orange.
 
 ## [0.1.0] - 2026-08-30
 

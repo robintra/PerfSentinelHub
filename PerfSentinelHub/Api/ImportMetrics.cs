@@ -13,8 +13,11 @@ public enum ImportRejection
     /// <summary>Unknown source id, or a key that does not match the configured one.</summary>
     Unauthorized,
 
-    /// <summary>The concurrency gate was full, or the write lock timed out.</summary>
-    Busy,
+    /// <summary>Too many imports already in flight. Raise the uploader's spacing.</summary>
+    GateFull,
+
+    /// <summary>The write lock did not come free in five seconds.</summary>
+    WriteTimeout,
 
     /// <summary>Body over the size limit, or more findings than one batch accepts.</summary>
     TooLarge,
@@ -49,8 +52,11 @@ public sealed class ImportMetrics
     {
         ImportRejection.BadRequest => "bad_request",
         ImportRejection.Unauthorized => "unauthorized",
-        ImportRejection.Busy => "busy",
+        ImportRejection.GateFull => "gate_full",
+        ImportRejection.WriteTimeout => "write_timeout",
         ImportRejection.TooLarge => "too_large",
-        _ => "unknown",
+        // No catch-all: a reason added without a label here must fail the build
+        // rather than publish refusals under a name that says nothing.
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
     };
 }

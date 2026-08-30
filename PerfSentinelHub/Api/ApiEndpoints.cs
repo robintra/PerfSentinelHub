@@ -106,7 +106,7 @@ public static partial class ApiEndpoints
         if (!gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
-            return Refuse(metrics, ImportRejection.Busy,
+            return Refuse(metrics, ImportRejection.GateFull,
                 TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
         }
 
@@ -142,7 +142,7 @@ public static partial class ApiEndpoints
             if (!stored)
             {
                 request.HttpContext.Response.Headers.RetryAfter = "1";
-                return Refuse(metrics, ImportRejection.Busy,
+                return Refuse(metrics, ImportRejection.WriteTimeout,
                     TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
             }
 

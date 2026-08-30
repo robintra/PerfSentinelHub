@@ -49,23 +49,22 @@ def valid_config():
     }
 
 
-def dump_yaml(value, indent=0):
-    lines = []
+def dump_yaml_entry(label, item, indent):
+    """Render one mapping key or sequence dash, nesting when the item is a non-empty container."""
     prefix = " " * indent
+    if isinstance(item, (dict, list)) and item:
+        return [f"{prefix}{label}", *dump_yaml(item, indent + 2)]
+    return [f"{prefix}{label} {json.dumps(item)}"]
+
+
+def dump_yaml(value, indent=0):
     if isinstance(value, dict):
-        for key, item in value.items():
-            if isinstance(item, (dict, list)) and item:
-                lines.append(f"{prefix}{key}:")
-                lines.extend(dump_yaml(item, indent + 2))
-            else:
-                lines.append(f"{prefix}{key}: {json.dumps(item)}")
+        entries = [(f"{key}:", item) for key, item in value.items()]
     else:
-        for item in value:
-            if isinstance(item, (dict, list)) and item:
-                lines.append(f"{prefix}-")
-                lines.extend(dump_yaml(item, indent + 2))
-            else:
-                lines.append(f"{prefix}- {json.dumps(item)}")
+        entries = [("-", item) for item in value]
+    lines = []
+    for label, item in entries:
+        lines.extend(dump_yaml_entry(label, item, indent))
     return lines
 
 

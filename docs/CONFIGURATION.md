@@ -49,6 +49,11 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Sources[].AuthHeaderName/Value` | none     | Both absent or both present, no newlines                                                                     |
 | `Sources[].ImportApiKey`         | none     | Optional push credential, at least 32 characters, supplied through a Secret                                  |
 
+`Hub:DatabasePath` and `Hub:Analysis:ReportDirectory` default to `/data/hub.db` and
+`/data/reports`, which are the container's paths. Both are validated with
+`Path.IsPathFullyQualified`, which rejects a leading slash with no drive on Windows, so a
+Windows or macOS host must set both or the Hub refuses to start and names the offending key.
+
 `RetentionHours` is declared rather than measured, because no backend API exposes it. It
 carries the same caveat as `Environment`: it keeps a stale claim until someone edits it.
 

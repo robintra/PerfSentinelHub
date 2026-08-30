@@ -267,6 +267,7 @@ jobs:
         env:
           RID: ${{ matrix.rid }}
           Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Analysis__ReportDirectory: ${{ runner.temp }}/reports
           Hub__Sources__0__Id: smoke
           Hub__Sources__0__Name: Smoke
           Hub__Sources__0__Environment: release
@@ -296,11 +297,18 @@ jobs:
                   time.sleep(0.5)
           raise SystemExit('native health smoke timed out')
           PY
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "===== native-smoke.log ====="
+            cat "$RUNNER_TEMP/native-smoke.log" || echo "(absent)"
+          fi
+          exit "$status"
       - name: Verify Windows x64 PE and smoke health
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           Hub__DatabasePath: ${{ runner.temp }}/hub.db
+          Hub__Analysis__ReportDirectory: ${{ runner.temp }}/reports
           Hub__Sources__0__Id: smoke
           Hub__Sources__0__Name: Smoke
           Hub__Sources__0__Environment: release
@@ -319,6 +327,13 @@ jobs:
                 $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 http://127.0.0.1:5082/health/ready
                 if ($response.StatusCode -eq 200) { exit 0 }
               } catch { Start-Sleep -Milliseconds 500 }
+            }
+            Write-Host "exited: $($process.HasExited)"
+            if ($process.HasExited) { Write-Host "exit code: $($process.ExitCode)" }
+            foreach ($stream in 'native-smoke', 'native-smoke-error') {
+              Write-Host "===== $stream ====="
+              $path = "$env:RUNNER_TEMP/$stream.log"
+              if (Test-Path $path) { Get-Content $path } else { Write-Host '(absent)' }
             }
             throw 'native health smoke timed out'
           } finally {

@@ -50,6 +50,12 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Sources[].AuthHeaderName/Value` | aucun    | Les deux absents ou les deux présents, sans saut de ligne                                                           |
 | `Sources[].ImportApiKey`         | aucune   | Identifiant de push optionnel, au moins 32 caractères, fourni via un Secret                                         |
 
+`Hub:DatabasePath` et `Hub:Analysis:ReportDirectory` valent par défaut `/data/hub.db` et
+`/data/reports`, qui sont les chemins du conteneur. Tous deux sont validés par
+`Path.IsPathFullyQualified`, qui refuse une barre oblique initiale sans lettre de lecteur sur
+Windows, donc un hôte Windows ou macOS doit poser les deux sous peine de voir le Hub refuser
+de démarrer en nommant la clé fautive.
+
 `RetentionHours` est déclaré et non mesuré, aucune API de backend ne l'exposant. Il porte
 la même réserve que `Environment` : il garde une affirmation périmée jusqu'à ce que
 quelqu'un l'édite.

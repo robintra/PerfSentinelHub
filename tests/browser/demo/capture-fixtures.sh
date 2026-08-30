@@ -13,13 +13,13 @@ set -euo pipefail
 # producer. Only the gauge values are chosen: an idle daemon reports zeros.
 
 ENGINE="${1:-}"
-[ -x "$ENGINE" ] || { echo "usage: $0 /path/to/perf-sentinel" >&2; exit 2; }
+[[ -x "$ENGINE" ]] || { echo "usage: $0 /path/to/perf-sentinel" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/fixtures"
 PORT=41890
 TRACES="$(dirname "$ENGINE")/../../tests/fixtures/demo.json"
-[ -f "$TRACES" ] || { echo "no demo trace file at $TRACES" >&2; exit 1; }
+[[ -f "$TRACES" ]] || { echo "no demo trace file at $TRACES" >&2; exit 1; }
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

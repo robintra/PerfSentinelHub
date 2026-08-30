@@ -39,7 +39,7 @@ script (release-gate/lab-validations.txt), max-age-days=30.
 EOF
 }
 
-while [ "$#" -gt 0 ]; do
+while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --version)      VERSION="${2:?--version requires an argument}"; shift 2 ;;
     --ledger)       LEDGER="${2:?--ledger requires an argument}"; shift 2 ;;
@@ -49,7 +49,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-[ -n "${VERSION}" ] || { echo "missing --version" >&2; usage >&2; exit 2; }
+[[ -n "${VERSION}" ]] || { echo "missing --version" >&2; usage >&2; exit 2; }
 
 # Validate inputs. `MAX_AGE_DAYS` flows into bash arithmetic (bounded to
 # 5 digits to keep `cutoff_epoch` well inside signed int64). `VERSION`
@@ -59,7 +59,7 @@ done
 [[ "${VERSION}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "release-gate: --version must match vX.Y.Z or X.Y.Z (optionally with -suffix), got '${VERSION}'." >&2; exit 2; }
 [[ "${VERSION}" == v* ]] || VERSION="v${VERSION}"
 
-if [ ! -f "${LEDGER}" ]; then
+if [[ ! -f "${LEDGER}" ]]; then
   echo "release-gate: ledger ${LEDGER} not found." >&2
   echo "Run a lab validation in the perf-sentinel-simulation-lab repo, then use its scripts/record-validation.sh to produce a line to append here." >&2
   exit 1
@@ -69,7 +69,7 @@ fi
 # remedy differs (bootstrap a first validation vs run the lab on the
 # target version).
 data_line_count="$(awk '!/^#/ && !/^[[:space:]]*$/ { n++ } END { print n+0 }' "${LEDGER}")"
-if [ "${data_line_count}" -eq 0 ]; then
+if [[ "${data_line_count}" -eq 0 ]]; then
   echo "release-gate: ledger ${LEDGER} contains no validation entries (only comments or blank lines)." >&2
   echo "Bootstrap it by running a lab validation, then appending the line from scripts/record-validation.sh." >&2
   exit 1
@@ -91,7 +91,7 @@ match="$(awk -F '\t' -v ver="${VERSION}" '
   $1 == ver && $4 == "PASS" { print $0 }
 ' "${LEDGER}")"
 
-if [ -z "${match}" ]; then
+if [[ -z "${match}" ]]; then
   echo "release-gate: no PASS entry for ${VERSION} in ${LEDGER}." >&2
   echo "Run the lab against ${VERSION}, append a PASS line via scripts/record-validation.sh, then retry." >&2
   exit 1
@@ -126,12 +126,12 @@ fi
 # Reject future-dated entries. Most likely cause is an operator typo
 # (e.g. 2099 instead of 2026) rather than an attack, but the gate must
 # not silently approve a "PASS" claimed for a future date.
-if [ "${latest_epoch}" -gt "${today_epoch}" ]; then
+if [[ "${latest_epoch}" -gt "${today_epoch}" ]]; then
   echo "release-gate: ledger entry for ${VERSION} is dated ${latest_date}, which is in the future (today is $(date -u +%F)). Refusing to trust." >&2
   exit 1
 fi
 
-if [ "${latest_epoch}" -lt "${cutoff_epoch}" ]; then
+if [[ "${latest_epoch}" -lt "${cutoff_epoch}" ]]; then
   age_days=$(( (today_epoch - latest_epoch) / 86400 ))
   echo "release-gate: latest PASS for ${VERSION} is ${age_days} days old (lab commit ${latest_sha}, ${latest_date})." >&2
   echo "Threshold is ${MAX_AGE_DAYS} days. Re-run the lab against ${VERSION} and record a fresh entry." >&2

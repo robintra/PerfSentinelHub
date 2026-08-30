@@ -68,6 +68,9 @@ test("one run", async ({ page }, info) => {
 
 test("the rendered report", async ({ page }, info) => {
   await page.goto(`/#/report/${state.succeeded}`);
-  await page.waitForTimeout(4000);
+  // The dashboard is an iframe on the same origin. Waiting on its content
+  // rather than on a delay, because a blank frame screenshots just as well.
+  await expect(page.frameLocator("iframe").locator("body"))
+    .toContainText("Findings", { timeout: 30_000 });
   await page.screenshot({ path: nameFor("launcher-report", info.project.name) });
 });

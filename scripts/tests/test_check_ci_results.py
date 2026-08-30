@@ -294,7 +294,7 @@ class CiWorkflowTests(unittest.TestCase):
                 self.assertIn("trusted_root", body)
 
     def test_workflow_has_only_the_bounded_gate_jobs(self):
-        names = set(re.findall(r"^  ([a-z0-9-]+):$", workflow_text(), re.MULTILINE))
+        names = set(re.findall(r"^ {2}([a-z0-9-]+):$", workflow_text(), re.MULTILINE))
         self.assertEqual(ALL_JOBS, names)
 
     def test_every_job_has_explicit_permissions_timeout_and_hardening_first(self):
@@ -304,7 +304,7 @@ class CiWorkflowTests(unittest.TestCase):
                 body = job_body(name)
                 self.assertRegex(body, r"(?m)^    permissions:\n")
                 self.assertRegex(body, r"(?m)^    timeout-minutes: [0-9]+$")
-                uses = re.findall(r"(?m)^      - uses: ([^\s]+)", body)
+                uses = re.findall(r"(?m)^ {6}- uses: ([^\s]+)", body)
                 self.assertTrue(uses)
                 self.assertEqual(f"step-security/harden-runner@{harden_sha}", uses[0])
                 self.assertRegex(
@@ -335,7 +335,7 @@ class CiWorkflowTests(unittest.TestCase):
             self.assertIn("github.event_name == 'pull_request'", body)
             self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", body)
 
-        write_jobs = {name for name in ALL_JOBS if re.search(r"(?m)^      [a-z-]+: write$", job_body(name))}
+        write_jobs = {name for name in ALL_JOBS if re.search(r"(?m)^ {6}[a-z-]+: write$", job_body(name))}
         self.assertEqual(set(), write_jobs)
         publisher = job_body("publish-gate")
         self.assertNotRegex(publisher, r"(?m)^      checks: write$")
@@ -400,7 +400,7 @@ class CiWorkflowTests(unittest.TestCase):
 
         exact_needs = {"validate-dispatch", *VALIDATION_JOBS}
         for name in ("aggregate", "publish-gate"):
-            match = re.search(r"(?m)^    needs: \[([^]]+)\]$", job_body(name))
+            match = re.search(r"(?m)^ {4}needs: \[([^]]+)\]$", job_body(name))
             self.assertIsNotNone(match)
             self.assertEqual(exact_needs, {item.strip() for item in match.group(1).split(",")})
 
@@ -419,7 +419,7 @@ class CiWorkflowTests(unittest.TestCase):
 
     def test_required_gate_is_only_created_with_the_dedicated_app_token(self):
         text = workflow_text()
-        automatic_names = re.findall(r"(?m)^    name:\s+(.+)$", text)
+        automatic_names = re.findall(r"(?m)^ {4}name:[ \t]*(\S.*)$", text)
         self.assertNotIn("CI / Gate", automatic_names)
         self.assertEqual(1, text.count("name: 'CI / Gate'"))
 

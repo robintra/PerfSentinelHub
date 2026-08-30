@@ -1,0 +1,27 @@
+# Alerting rules for PerfSentinelHub.
+#
+# One rule, deliberately. The Hub is an internal tool in no production request
+# path, and push is the primary path: daemons POST their findings and retain
+# and retry coalesced batches, so nothing the Hub reports about its own poll
+# safety net is worth waking anyone. Every other condition is a panel on
+# examples/grafana-dashboard.json or a row on the launcher's fleet screen.
+# docs/OPERATIONS.md lists what was considered and rejected, and why.
+
+groups:
+  - name: perf-sentinel-hub
+    rules:
+      - alert: HubDown
+        expr: up{job="perf-sentinel-hub"} == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: The Hub has not answered a scrape in 30 minutes
+          description: >-
+            The one Hub condition no dashboard can show: a dead Hub publishes
+            no series, so every panel goes blank exactly like a broken scrape
+            config. The launcher is gone with it, served by the same process.
+            Delete this rule if your Alertmanager already routes a generic
+            TargetDown on up == 0, rather than alerting twice on one event.
+            Ticket it, do not page it: the daemons keep buffering, so the loss
+            horizon is their retry buffers filling, which is hours.

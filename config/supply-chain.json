@@ -300,6 +300,15 @@
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.11."
     },
     {
+      "name": "ghcr.io/robintra/perf-sentinel",
+      "kind": "container",
+      "version": "0.16.0",
+      "digest_or_sha": "sha256:12a6861abd5c9cd0dc2bf7b1d5c60d4d2aaa21c6e443713c4aa2ef3c380c76e3",
+      "released_at": "2026-08-28",
+      "source": "https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.16.0",
+      "reason": "The analysis engine the Hub runs. Copied from the published image so the build reaches no host outside the registry."
+    },
+    {
       "name": "helm",
       "kind": "github-release",
       "version": "4.2.3",

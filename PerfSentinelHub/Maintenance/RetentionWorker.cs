@@ -14,10 +14,14 @@ public sealed partial class RetentionWorker(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var cutoff = (timeProvider.GetUtcNow() - options.Value.Retention).ToUnixTimeMilliseconds();
+            var now = timeProvider.GetUtcNow();
+            var cutoff = (now - options.Value.Retention).ToUnixTimeMilliseconds();
+            // Finished runs age out on their own clock. Reusing Retention would
+            // keep six months of run history for a table nothing reads back.
+            var runCutoff = (now - options.Value.Analysis.RunRetention).ToUnixTimeMilliseconds();
             try
             {
-                await database.PurgeAsync(cutoff, stoppingToken);
+                await database.PurgeAsync(cutoff, runCutoff, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

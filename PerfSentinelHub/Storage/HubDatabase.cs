@@ -7,7 +7,7 @@ using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Storage;
 
-public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider) : IDisposable
+public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider)
 {
     private readonly string _databasePath = options.Value.DatabasePath;
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
@@ -15,9 +15,14 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private const int PurgeChunkSize = 5_000;
     private const string SourceIdParameter = "$source_id";
+    private const string ServiceParameter = "$service";
     private const string ObservedAtParameter = "$observed_at";
     private const string FirstSeenParameter = "$first_seen";
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
+    // Never disposed, and the class is deliberately not IDisposable. A
+    // SemaphoreSlim only holds a wait handle once AvailableWaitHandle is read,
+    // which nothing here does, so disposing would free nothing and would arm an
+    // ObjectDisposedException for any poll still in flight when the host stops.
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _ready;
 
@@ -46,7 +51,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             await using (var migration = connection.CreateCommand())
             {
                 migration.Transaction = transaction;
-                migration.CommandText = Schema.V1 + Schema.V2;
+                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -57,7 +62,8 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
                 version.Transaction = transaction;
                 version.CommandText = """
                     INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
-                    VALUES (1, $applied_at_ms), (2, $applied_at_ms);
+                    VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
+                           (4, $applied_at_ms);
                     """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -220,6 +226,20 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             await state.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        if (!fromPoll)
+        {
+            await using var imported = connection.CreateCommand();
+            imported.Transaction = transaction;
+            imported.CommandText = """
+                INSERT INTO source_imports(source_id, last_import_ms)
+                VALUES ($source_id, $observed_at)
+                ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
+                """;
+            imported.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
+            imported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+            await imported.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -279,17 +299,18 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         }
     }
 
-    public async Task PurgeAsync(long cutoffMs, CancellationToken cancellationToken)
+    public async Task PurgeAsync(long cutoffMs, long runCutoffMs, CancellationToken cancellationToken)
     {
         // Chunked: holding the write gate for one whole multi-GB delete would 503 every daemon
         // import for the duration of the purge.
-        while (await PurgeChunkAsync(cutoffMs, cancellationToken) > 0)
+        while (await PurgeChunkAsync(cutoffMs, runCutoffMs, cancellationToken) > 0)
         {
             // Every chunk is deleted by the call in the condition itself.
         }
     }
 
-    private async Task<int> PurgeChunkAsync(long cutoffMs, CancellationToken cancellationToken)
+    private async Task<int> PurgeChunkAsync(
+        long cutoffMs, long runCutoffMs, CancellationToken cancellationToken)
     {
         await _writeGate.WaitAsync(cancellationToken);
         try
@@ -300,7 +321,9 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             command.Transaction = transaction;
             // findings.last_seen_ms is the MAX across sources, so stale per-source observations and
             // retired sources outlive the window unless they are purged on their own timestamps.
-            command.CommandText = """
+            // Interpolated for the status names only: a raw interpolated string uses
+            // braces for its holes, so the $cutoff SQL parameters stay literal.
+            command.CommandText = $"""
             DELETE FROM finding_sources WHERE rowid IN (
               SELECT rowid FROM finding_sources WHERE last_seen_ms < $cutoff LIMIT $chunk);
             DELETE FROM findings WHERE rowid IN (
@@ -309,8 +332,13 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               SELECT rowid FROM endpoint_heartbeats WHERE last_seen_any_ms < $cutoff LIMIT $chunk);
             DELETE FROM source_state WHERE rowid IN (
               SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
+            DELETE FROM analysis_runs WHERE rowid IN (
+              SELECT rowid FROM analysis_runs
+              WHERE status NOT IN ('{AnalysisStatuses.Pending}', '{AnalysisStatuses.Running}')
+                AND COALESCE(finished_at_ms, created_at_ms) < $run_cutoff LIMIT $chunk);
             """;
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
+            command.Parameters.AddWithValue("$run_cutoff", runCutoffMs);
             command.Parameters.AddWithValue("$chunk", PurgeChunkSize);
             var deleted = await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -331,6 +359,64 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         string traceId,
         CancellationToken cancellationToken) =>
         QueryAsync(new FindingQuery(null, null, null, _maxReadLimit), traceId, cancellationToken);
+
+    /// <summary>
+    /// Collection state for every source that has one, keyed by source id.
+    /// A configured source missing from the result has never been observed.
+    /// </summary>
+    public async Task<Dictionary<string, SourceState>> QuerySourceStatesAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        return await ReadSourceStatesAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
+    /// The poll state and the push timestamp together, on one connection. The
+    /// two tables hold disjoint row sets, a push-only source having no poll
+    /// state, so this is two reads rather than a join: SQLite grew FULL OUTER
+    /// JOIN only in 3.39 and a LEFT JOIN would drop exactly those sources.
+    /// </summary>
+    public async Task<(Dictionary<string, SourceState> States, Dictionary<string, long> Imports)>
+        QuerySourceObservationsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var states = await ReadSourceStatesAsync(connection, cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT source_id, last_import_ms FROM source_imports;";
+        var imports = new Dictionary<string, long>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            imports[reader.GetString(0)] = reader.GetInt64(1);
+        return (states, imports);
+    }
+
+    private static async Task<Dictionary<string, SourceState>> ReadSourceStatesAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT source_id, last_attempt_ms, last_success_ms,
+                   unreachable_since_ms, producer_version, last_error_code
+            FROM source_state;
+            """;
+
+        var states = new Dictionary<string, SourceState>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            states[reader.GetString(0)] = new SourceState(
+                reader.IsDBNull(1) ? null : reader.GetInt64(1),
+                reader.IsDBNull(2) ? null : reader.GetInt64(2),
+                reader.IsDBNull(3) ? null : reader.GetInt64(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5));
+        }
+
+        return states;
+    }
 
     // Derived at read time, never stored: a finding whose endpoint still
     // heartbeats from a reachable source while the finding itself went
@@ -368,7 +454,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
     {
         var where = new StringBuilder("WHERE 1 = 1");
         var parameters = new List<(string Name, object Value)>();
-        AddFilter(where, parameters, "service", "$service", query.Service);
+        AddFilter(where, parameters, "service", ServiceParameter, query.Service);
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
@@ -379,6 +465,9 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
         await using var command = connection.CreateCommand();
         // The status is computed before LIMIT so a status filter fills its
         // page instead of returning whatever survived a post-filter.
+        // Every interpolated fragment is assembled above from private constants;
+        // external values remain bound parameters.
+#pragma warning disable S2077
         command.CommandText = $"""
             WITH statused AS (
               SELECT findings.*, {StatusExpression} AS status
@@ -402,6 +491,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
             ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
             """;
+#pragma warning restore S2077
         foreach (var (name, value) in parameters)
             command.Parameters.AddWithValue(name, value);
         command.Parameters.AddWithValue("$limit", query.Limit);
@@ -411,38 +501,36 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
 
         var rows = new List<StoredFinding>();
         var bySignature = new Dictionary<string, StoredFinding>(StringComparer.Ordinal);
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
         {
-            while (await reader.ReadAsync(cancellationToken))
+            var signature = reader.GetString(0);
+            if (!bySignature.TryGetValue(signature, out var finding))
             {
-                var signature = reader.GetString(0);
-                if (!bySignature.TryGetValue(signature, out var finding))
-                {
-                    var sources = new List<FindingSourceObservation>();
-                    finding = new StoredFinding(
-                        signature,
-                        reader.GetString(1),
-                        reader.GetInt64(2),
-                        reader.GetInt64(3),
-                        reader.GetString(4),
-                        reader.GetString(11),
-                        sources);
-                    if (!reader.IsDBNull(12))
-                        finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
-                    bySignature.Add(signature, finding);
-                    rows.Add(finding);
-                }
+                var sources = new List<FindingSourceObservation>();
+                finding = new StoredFinding(
+                    signature,
+                    reader.GetString(1),
+                    reader.GetInt64(2),
+                    reader.GetInt64(3),
+                    reader.GetString(4),
+                    reader.GetString(11),
+                    sources);
+                if (!reader.IsDBNull(12))
+                    finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
+                bySignature.Add(signature, finding);
+                rows.Add(finding);
+            }
 
-                if (!reader.IsDBNull(5))
-                {
-                    finding.Sources.Add(new FindingSourceObservation(
-                        reader.GetString(5),
-                        reader.GetString(6),
-                        reader.GetString(7),
-                        reader.GetString(8),
-                        reader.GetInt64(9),
-                        reader.IsDBNull(10) ? null : reader.GetInt64(10)));
-                }
+            if (!reader.IsDBNull(5))
+            {
+                finding.Sources.Add(new FindingSourceObservation(
+                    reader.GetString(5),
+                    reader.GetString(6),
+                    reader.GetString(7),
+                    reader.GetString(8),
+                    reader.GetInt64(9),
+                    reader.IsDBNull(10) ? null : reader.GetInt64(10)));
             }
         }
 
@@ -520,7 +608,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               AND candidate.signature NOT IN (SELECT predecessor_signature FROM finding_lineage)
             LIMIT 2;
             """;
-        command.Parameters.AddWithValue("$service", finding.Service);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
@@ -618,7 +706,7 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
             """;
         command.Parameters.AddWithValue("$signature", finding.Signature);
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
-        command.Parameters.AddWithValue("$service", finding.Service);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
         command.Parameters.AddWithValue("$severity", finding.Severity);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
@@ -683,15 +771,9 @@ public sealed class HubDatabase(IOptions<HubOptions> options, TimeProvider timeP
               last_seen_any_ms = MAX(endpoint_heartbeats.last_seen_any_ms, excluded.last_seen_any_ms);
             """;
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
-        command.Parameters.AddWithValue("$service", finding.Service);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    public void Dispose()
-    {
-        _initializeGate.Dispose();
-        _writeGate.Dispose();
     }
 }

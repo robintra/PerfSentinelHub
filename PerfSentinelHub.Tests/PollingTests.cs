@@ -1,10 +1,5 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
@@ -31,8 +26,12 @@ public sealed class PollingTests : IDisposable
             requests.Add(($"{context.Request.Path}{context.Request.QueryString}", context.Request.Headers.Authorization));
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsJsonAsync(new { version = "0.11.2" }, cancellationToken);
-            else
+            else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(fixture, cancellationToken);
+            else
+                // The catch-all fake lost app.Map's free 404: without this, a
+                // future client read would be fed the findings body and pass.
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
 
         var options = new HubOptions { DatabasePath = _databasePath, HttpTimeout = TimeSpan.FromSeconds(2) };
@@ -96,8 +95,10 @@ public sealed class PollingTests : IDisposable
         {
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
-            else
+            else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(payload, cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);
@@ -214,8 +215,10 @@ public sealed class PollingTests : IDisposable
             }
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
-            else
+            else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(fixture, cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);
@@ -261,25 +264,4 @@ public sealed class PollingTests : IDisposable
         "Fixtures",
         "daemon-findings-0.11.2.json");
 
-    private sealed class FakeDaemon(WebApplication app, Uri baseUrl) : IAsyncDisposable
-    {
-        public Uri BaseUrl { get; } = baseUrl;
-
-        public static async Task<FakeDaemon> StartAsync(
-            RequestDelegate handler,
-            CancellationToken cancellationToken)
-        {
-            var builder = WebApplication.CreateSlimBuilder();
-            builder.WebHost.UseUrls("http://127.0.0.1:0");
-            var app = builder.Build();
-            app.Map("/api/status", handler);
-            app.Map("/api/findings", handler);
-            await app.StartAsync(cancellationToken);
-            var addresses = app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!;
-            return new FakeDaemon(app, new Uri(addresses.Addresses.Single()));
-        }
-
-        public async ValueTask DisposeAsync() => await app.DisposeAsync();
-    }
 }

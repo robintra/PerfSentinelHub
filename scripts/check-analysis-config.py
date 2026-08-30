@@ -22,13 +22,15 @@ SONAR_SCANNER_ARGUMENTS = (
     "/d:sonar.cs.vstest.reportsPaths=artifacts/coverage/tests.trx",
     "/d:sonar.sourceEncoding=UTF-8",
     "/d:sonar.python.version=3.12",
-    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**"',
+    '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**,PerfSentinelHub/wwwroot/fonts.css"',
     # scripts/ holds CI tooling, not shipped code: it stays analysed for quality but is kept out
-    # of the coverage figure, which measures the service itself.
-    '"/d:sonar.coverage.exclusions=scripts/**"',
+    # of the coverage figure, which measures the service itself. wwwroot/ is the browser bundle,
+    # covered by its own node --test suites rather than by the C# coverage run, and fonts.css is
+    # generated base64 payload that carries no logic to analyse at all.
+    '"/d:sonar.coverage.exclusions=scripts/**,PerfSentinelHub/wwwroot/**"',
     # secrets:S6338 reads the base64 NuGet lock hashes as Azure Storage keys, and pythonsecurity:S8707
     # flags CLI paths in tooling the workflow itself invokes with fixed arguments.
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint",
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint,demopacing",
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338",
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json",
     "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707",
@@ -53,6 +55,10 @@ SONAR_SCANNER_ARGUMENTS = (
     # utility class. A protected constructor would only add a line no test can reach.
     "/d:sonar.issue.ignore.multicriteria.entrypoint.ruleKey=csharpsquid:S1118",
     "/d:sonar.issue.ignore.multicriteria.entrypoint.resourceKey=PerfSentinelHub/Program.cs",
+    # The demo specs record the documentation GIFs. Their waits pace a video for a reader who
+    # cannot pause it, so they are the deliverable rather than a missing synchronization.
+    "/d:sonar.issue.ignore.multicriteria.demopacing.ruleKey=typescript:S2925",
+    '"/d:sonar.issue.ignore.multicriteria.demopacing.resourceKey=tests/browser/demo/**"',
 )
 SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}

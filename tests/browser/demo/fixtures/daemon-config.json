@@ -1,0 +1,32 @@
+{
+  "listen_addr": "127.0.0.1",
+  "listen_port": 41890,
+  "listen_port_grpc": 41891,
+  "json_socket": "/tmp/perf-sentinel.sock",
+  "max_active_traces": 1000,
+  "trace_ttl_ms": 30000,
+  "sampling_rate": 1.0,
+  "max_events_per_trace": 1000,
+  "max_payload_size": 16777216,
+  "environment": "production",
+  "max_retained_findings": 10000,
+  "max_export_findings": 1000,
+  "max_retained_traces": 50,
+  "ingest_queue_capacity": 1024,
+  "analysis_queue_capacity": 1024,
+  "memory_high_water_pct": 0,
+  "api_enabled": true,
+  "tls_configured": false,
+  "ack_enabled": true,
+  "ack_api_key_set": false,
+  "cors_allowed_origins": [
+    "http://127.0.0.1:8080"
+  ],
+  "archive_configured": false,
+  "correlation_enabled": false,
+  "correlation_window_ms": 600000,
+  "correlation_lag_threshold_ms": 5000,
+  "correlation_min_co_occurrences": 5,
+  "correlation_min_confidence": 0.7,
+  "correlation_max_tracked_pairs": 10000
+}

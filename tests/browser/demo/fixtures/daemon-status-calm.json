@@ -1,0 +1,10 @@
+{
+  "version": "0.16.0",
+  "uptime_seconds": 263220,
+  "active_traces": 128,
+  "max_active_traces": 1000,
+  "analysis_queue_depth": 2,
+  "analysis_queue_capacity": 1024,
+  "stored_findings": 4,
+  "max_retained_findings": 10000
+}

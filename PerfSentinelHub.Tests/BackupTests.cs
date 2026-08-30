@@ -78,7 +78,7 @@ public sealed class BackupTests : IDisposable
 
     private async Task SeedDatabaseAsync(CancellationToken cancellationToken)
     {
-        using var database = new HubDatabase(
+        var database = new HubDatabase(
             Options.Create(new HubOptions { DatabasePath = _databasePath }),
             TimeProvider.System);
         await database.InitializeAsync(cancellationToken);

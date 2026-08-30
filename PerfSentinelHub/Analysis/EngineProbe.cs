@@ -1,0 +1,156 @@
+using System.Text;
+using Microsoft.Extensions.Options;
+using PerfSentinelHub.Configuration;
+
+namespace PerfSentinelHub.Analysis;
+
+/// <summary>
+/// Reads the version of the perf-sentinel binary the Hub runs, and whether it
+/// takes `--daemon-url`, once, at startup and before the listener opens. A
+/// missing or unusable binary leaves the version null and the Hub starts
+/// anyway: collection and the read API do not depend on it.
+/// </summary>
+public sealed partial class EngineProbe(
+    IOptions<HubOptions> options,
+    ILogger<EngineProbe> logger) : IHostedService
+{
+    // A `--version` line is a dozen bytes. Anything beyond this is not one,
+    // and reading to the end would let a wrong binary size the buffer.
+    private const int MaxOutputBytes = 1024;
+
+    // `report --help` is clap's own page, around 8 KiB on the engine this Hub
+    // embeds. Generous enough for a longer one, still a bounded read.
+    private const int MaxHelpBytes = 64 * 1024;
+
+    // Declared inside `#[cfg(feature = "daemon")]` in the engine, so a binary
+    // built without that feature does not ignore the flag, it refuses to parse
+    // it at all and renders nothing.
+    private const string DaemonUrlFlag = "--daemon-url";
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
+
+    private readonly AnalysisOptions _analysis = options.Value.Analysis;
+
+    /// <summary>Null until probed, and null forever if the probe failed.</summary>
+    public string? Version { get; private set; }
+
+    /// <summary>
+    /// Whether this binary's `report` accepts `--daemon-url`, which is what
+    /// makes a daemon's report live rather than a photograph. False until
+    /// probed, and false whenever the probe could not answer: the cost of
+    /// being wrong that way is a static report, where being wrong the other
+    /// way is a run that renders nothing.
+    /// </summary>
+    public bool SupportsDaemonUrl { get; private set; }
+
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (_analysis.EngineBinaryPath is not { } path)
+        {
+            LogNoBinaryConfigured(logger);
+            return;
+        }
+
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ProbeTimeout);
+        try
+        {
+            // Concurrent, and not one after the other: the deadline below is one
+            // budget for the pair, so a slow `--version` would otherwise eat the
+            // help probe's share of it and every daemon report would quietly
+            // render static. WhenAll observes both even when the first faults.
+            var version = RunVersionAsync(path, _analysis.ReportDirectory, timeout.Token);
+            var daemonUrl = ReadsDaemonUrlAsync(path, _analysis.ReportDirectory, timeout.Token);
+            await Task.WhenAll(version, daemonUrl);
+
+            Version = ParseVersion(version.Result);
+            if (Version is null)
+                LogUnreadableVersion(logger, path);
+            else
+                LogEngineVersion(logger, Version, path);
+
+            SupportsDaemonUrl = daemonUrl.Result;
+            if (!SupportsDaemonUrl)
+                LogNoDaemonUrl(logger, path);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            LogProbeTimedOut(logger, path);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            LogProbeFailed(logger, exception, path);
+        }
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static async Task<string?> RunVersionAsync(
+        string path,
+        string workingDirectory,
+        CancellationToken cancellationToken)
+    {
+        var result = await EngineProcess.RunAsync(
+            path, ["--version"], MaxOutputBytes, workingDirectory, cancellationToken);
+        return result.Succeeded ? Encoding.UTF8.GetString(result.StandardOutput) : null;
+    }
+
+    /// <summary>
+    /// Asks the binary itself rather than inferring it from the version: two
+    /// binaries of the same version differ here if they were built with
+    /// different features.
+    /// </summary>
+    private static async Task<bool> ReadsDaemonUrlAsync(
+        string path,
+        string workingDirectory,
+        CancellationToken cancellationToken)
+    {
+        var result = await EngineProcess.RunAsync(
+            path, ["report", "--help"], MaxHelpBytes, workingDirectory, cancellationToken);
+        return result.Succeeded &&
+               Encoding.UTF8.GetString(result.StandardOutput)
+                   .Contains(DaemonUrlFlag, StringComparison.Ordinal);
+    }
+
+    // clap prints `perf-sentinel 0.16.0`. The version is the last token of the
+    // first line. It must start with a digit: a pre-release carries letters
+    // (0.16.0-rc.1) so letters alone cannot be the test, and without the
+    // leading digit the last word of any sentence would pass as a version.
+    private static string? ParseVersion(string? output)
+    {
+        var firstLine = output?.Split('\n', 2)[0].Trim();
+        if (string.IsNullOrEmpty(firstLine))
+            return null;
+
+        var candidate = firstLine[(firstLine.LastIndexOf(' ') + 1)..];
+        return candidate.Length is > 0 and <= 64 &&
+               char.IsAsciiDigit(candidate[0]) &&
+               candidate.All(character =>
+                   char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '+')
+            ? candidate
+            : null;
+    }
+
+    [LoggerMessage(1400, LogLevel.Information,
+        "No Hub:Analysis:EngineBinaryPath configured, analysis runs are unavailable.")]
+    private static partial void LogNoBinaryConfigured(ILogger logger);
+
+    [LoggerMessage(1401, LogLevel.Information, "Engine version {Version} from {Path}.")]
+    private static partial void LogEngineVersion(ILogger logger, string version, string path);
+
+    [LoggerMessage(1402, LogLevel.Warning, "Engine binary {Path} did not report a usable version.")]
+    private static partial void LogUnreadableVersion(ILogger logger, string path);
+
+    [LoggerMessage(1403, LogLevel.Warning, "Engine binary {Path} did not answer within the probe timeout.")]
+    private static partial void LogProbeTimedOut(ILogger logger, string path);
+
+    [LoggerMessage(1404, LogLevel.Warning, "Engine binary {Path} could not be run.")]
+    private static partial void LogProbeFailed(ILogger logger, Exception exception, string path);
+
+    // What was observed, not what was concluded: a help page that could not be
+    // read is not proof the flag is missing, and an operator wondering why
+    // their reports are static needs the difference.
+    [LoggerMessage(1405, LogLevel.Information,
+        "No --daemon-url in `report --help` from {Path}, so daemon reports render static.")]
+    private static partial void LogNoDaemonUrl(ILogger logger, string path);
+}

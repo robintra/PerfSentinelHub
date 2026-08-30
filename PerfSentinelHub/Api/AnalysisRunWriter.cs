@@ -1,0 +1,148 @@
+using System.Text.Json;
+using PerfSentinelHub.Analysis;
+using PerfSentinelHub.Storage;
+
+namespace PerfSentinelHub.Api;
+
+/// <summary>
+/// Writes runs on the wire. `request` and `result` are stored as JSON text and
+/// are re-emitted verbatim rather than round-tripped through a model: their
+/// shape varies with the source kind and belongs to the launcher's contract.
+/// </summary>
+public static partial class AnalysisRunWriter
+{
+    public static async Task WriteArrayAsync(
+        HttpResponse response,
+        IReadOnlyList<AnalysisRun> runs,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        response.ContentType = "application/json";
+        await using var writer = new Utf8JsonWriter(response.BodyWriter);
+        writer.WriteStartArray();
+        foreach (var run in runs)
+            WriteRun(writer, run, logger);
+        writer.WriteEndArray();
+        await writer.FlushAsync(cancellationToken);
+        await response.BodyWriter.FlushAsync(cancellationToken);
+    }
+
+    public static async Task WriteObjectAsync(
+        HttpResponse response,
+        AnalysisRun run,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        response.ContentType = "application/json";
+        await using var writer = new Utf8JsonWriter(response.BodyWriter);
+        WriteRun(writer, run, logger);
+        await writer.FlushAsync(cancellationToken);
+        await response.BodyWriter.FlushAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The stored form of a run's result. Written by hand so the wire names
+    /// stay snake_case without threading a serializer policy through the
+    /// source-generated context.
+    /// </summary>
+    public static string SerializeSummary(ReportSummary summary)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteBoolean("empty", summary.Empty);
+            writer.WriteNumber("findings", summary.Findings);
+            writer.WriteNumber("critical", summary.Critical);
+            writer.WriteNumber("warning", summary.Warning);
+            writer.WriteNumber("info", summary.Info);
+            writer.WriteNumber("traces_analyzed", summary.TracesAnalyzed);
+            writer.WriteBoolean("quality_gate_passed", summary.QualityGatePassed);
+            // Absent on a run whose file could not be measured.
+            if (summary.ReportBytes is { } bytes)
+                writer.WriteNumber("report_bytes", bytes);
+            writer.WriteStartArray("warnings");
+            foreach (var warning in summary.Warnings)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("kind", warning.Kind);
+                writer.WriteString("message", warning.Message);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    private static void WriteRun(Utf8JsonWriter writer, AnalysisRun run, ILogger logger)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("id", run.Id);
+        writer.WriteString("status", run.Status);
+        writer.WriteString("source_id", run.SourceId);
+        writer.WriteString("source_name", run.SourceName);
+        writer.WriteString("environment", run.Environment);
+        writer.WriteString("kind", run.Kind);
+        WriteRawOrNull(writer, "request", run.RequestJson, run.Id, logger);
+        writer.WriteString("requested_by", run.RequestedBy);
+        writer.WriteNumber("created_at_ms", run.CreatedAtMs);
+        JsonWrite.NumberOrNull(writer, "started_at_ms", run.StartedAtMs);
+        JsonWrite.NumberOrNull(writer, "finished_at_ms", run.FinishedAtMs);
+        JsonWrite.NumberOrNull(writer, "expires_at_ms", run.ExpiresAtMs);
+        JsonWrite.StringOrNull(writer, "producer_version", run.ProducerVersion);
+        JsonWrite.StringOrNull(writer, "error_code", run.ErrorCode);
+        WriteRawOrNull(writer, "result", run.ResultJson, run.Id, logger);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// Stored text is parsed before the property name is written: a throw after
+    /// the writer has started would abort a body already partly flushed, and
+    /// the client would see a truncated array behind a 200.
+    /// </summary>
+    private static void WriteRawOrNull(
+        Utf8JsonWriter writer,
+        string name,
+        string? json,
+        string runId,
+        ILogger logger)
+    {
+        JsonDocument? document = null;
+        try
+        {
+            if (json is not null)
+                document = JsonDocument.Parse(json);
+        }
+        catch (JsonException exception)
+        {
+            // Answering null keeps the body valid, but silence would leave a
+            // succeeded run showing no result with nothing saying why.
+            LogUnreadableColumn(logger, exception, runId, name);
+            document = null;
+        }
+
+        if (document is null)
+        {
+            writer.WriteNull(name);
+            return;
+        }
+
+        using (document)
+        {
+            writer.WritePropertyName(name);
+            document.RootElement.WriteTo(writer);
+        }
+    }
+
+    [LoggerMessage(1700, LogLevel.Error,
+        "Run {RunId} has unreadable JSON in its {Column} column, served as null.")]
+    private static partial void LogUnreadableColumn(
+        ILogger logger,
+        Exception exception,
+        string runId,
+        string column);
+
+
+}

@@ -10,6 +10,7 @@ Describe the problem and the smallest change that solves it.
 - [ ] Every commit is signed and reports a verified signature.
 - [ ] No secret, credential, private finding, or generated report is included.
 - [ ] Documentation and operator commands match the implementation.
+- [ ] Diagrams and launcher screenshots regenerated when a screen or a flow changed (see `CONTRIBUTING.md`).
 
 ## Trust boundary
 

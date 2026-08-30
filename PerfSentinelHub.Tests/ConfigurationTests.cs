@@ -59,7 +59,25 @@ public sealed class ConfigurationTests
             ValidOptions() with { MaxConcurrentPolls = 33 },
             ValidOptions() with { DefaultReadLimit = 0 },
             ValidOptions() with { MaxReadLimit = 10_001 },
-            ValidOptions() with { DefaultReadLimit = 101, MaxReadLimit = 100 }
+            ValidOptions() with { DefaultReadLimit = 101, MaxReadLimit = 100 },
+            // A run row has to outlive the report it produced: an expired run
+            // keeps its parameters so it can be relaunched as it stands.
+            ValidOptions() with
+            {
+                Analysis = new AnalysisOptions
+                {
+                    ReportRetention = TimeSpan.FromDays(2),
+                    RunRetention = TimeSpan.FromDays(1)
+                }
+            },
+            ValidOptions() with
+            {
+                Analysis = new AnalysisOptions
+                {
+                    ReportRetention = TimeSpan.FromDays(1),
+                    RunRetention = TimeSpan.FromDays(1)
+                }
+            }
         ];
 
         Assert.All(invalid, options =>
@@ -104,6 +122,106 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Analysis_settings_bind_from_the_documented_strings()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Analysis:EngineBinaryPath"] = "/opt/perf-sentinel/perf-sentinel",
+                ["Hub:Analysis:Timeout"] = "00:05:00",
+                // A day is not "24:00:00": TimeSpan hours stop at 23, and the
+                // README hands the operator this exact string to copy.
+                ["Hub:Analysis:ReportRetention"] = "1.00:00:00",
+                ["Hub:Sources:0:Id"] = "test",
+                ["Hub:Sources:0:Name"] = "Test",
+                ["Hub:Sources:0:Environment"] = "test",
+                ["Hub:Sources:0:Kind"] = "jaeger_query",
+                ["Hub:Sources:0:BaseUrl"] = "http://127.0.0.1:10428"
+            })
+            .Build();
+
+        var options = configuration.GetSection(HubOptions.SectionName).Get<HubOptions>();
+
+        Assert.NotNull(options);
+        Assert.Equal("/opt/perf-sentinel/perf-sentinel", options.Analysis.EngineBinaryPath);
+        Assert.Equal(TimeSpan.FromMinutes(5), options.Analysis.Timeout);
+        Assert.Equal(TimeSpan.FromHours(24), options.Analysis.ReportRetention);
+        Assert.Equal(SourceKinds.JaegerQuery, options.Sources[0].Kind);
+        Assert.True(new HubOptionsValidator().Validate(null, options with
+        {
+            DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db")
+        }).Succeeded);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Daemon")]
+    [InlineData("victoria")]
+    public void Unknown_source_kind_is_rejected(string kind)
+    {
+        var options = ValidOptions() with { Sources = [ValidSource() with { Kind = kind }] };
+
+        Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
+    public void Only_a_daemon_can_carry_an_import_key()
+    {
+        // A trace backend never pushes: a key on one is a misconfiguration
+        // that would otherwise sit there authorising an import path nothing
+        // uses.
+        var source = ValidSource() with
+        {
+            Kind = SourceKinds.Tempo,
+            ImportApiKey = "0123456789abcdef0123456789abcdef" // gitleaks:allow -- synthetic test credential
+        };
+
+        Assert.False(new HubOptionsValidator().Validate(null, ValidOptions() with { Sources = [source] }).Succeeded);
+    }
+
+    [Fact]
+    public void Trace_retention_belongs_to_a_backend_and_stays_in_range()
+    {
+        SourceOptions[] invalid =
+        [
+            // A daemon takes no window, so nothing would read the value.
+            ValidSource() with { RetentionHours = 24 },
+            ValidSource() with { Kind = SourceKinds.Tempo, RetentionHours = 0 },
+            ValidSource() with { Kind = SourceKinds.Tempo, RetentionHours = 87_601 }
+        ];
+
+        Assert.All(invalid, source => Assert.False(
+            new HubOptionsValidator().Validate(null, ValidOptions() with { Sources = [source] }).Succeeded));
+        Assert.True(new HubOptionsValidator().Validate(null, ValidOptions() with
+        {
+            Sources = [ValidSource() with { Kind = SourceKinds.Tempo, RetentionHours = 24 }]
+        }).Succeeded);
+    }
+
+    [Fact]
+    public void Invalid_analysis_options_are_rejected()
+    {
+        AnalysisOptions[] invalid =
+        [
+            new() { EngineBinaryPath = "relative/perf-sentinel" },
+            new() { EngineBinaryPath = "  " },
+            new() { Workers = 0 },
+            new() { Workers = 17 },
+            new() { MaxTracesCap = 0 },
+            // Above the engine's own ceiling: accepted here, this only moved the
+            // failure to argument parsing, after the operator had been shown the
+            // number and the command carrying it.
+            new() { MaxTracesCap = AnalysisOptions.EngineMaxTraces + 1 },
+            new() { Timeout = TimeSpan.Zero },
+            new() { Timeout = TimeSpan.FromHours(2) },
+            new() { ReportRetention = TimeSpan.Zero }
+        ];
+
+        Assert.All(invalid, analysis => Assert.False(
+            new HubOptionsValidator().Validate(null, ValidOptions() with { Analysis = analysis }).Succeeded));
+    }
+
+    [Fact]
     public void Invalid_bound_configuration_stops_the_host()
     {
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -122,7 +240,7 @@ public sealed class ConfigurationTests
         Assert.Throws<OptionsValidationException>(factory.CreateClient);
     }
 
-    private static HubOptions ValidOptions() => new()
+    internal static HubOptions ValidOptions() => new()
     {
         DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db"),
         Sources = [ValidSource()]

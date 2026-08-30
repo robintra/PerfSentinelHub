@@ -18,7 +18,13 @@ public sealed partial class PollWorker(
         // A query would capture the disposable semaphore and obscure its lifetime.
         // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var source in _options.Sources)
+        {
+            // A trace backend serves no findings endpoint. Polling one would
+            // mark a healthy source unreachable on every interval.
+            if (source.Kind != SourceKinds.Daemon)
+                continue;
             tasks.Add(RunSourceAsync(source, concurrency, stoppingToken));
+        }
         await Task.WhenAll(tasks);
     }
 

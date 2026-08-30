@@ -398,6 +398,35 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
         self.assertTrue(any("source" in error for error in errors))
 
+    def test_accepts_own_ghcr_container_source(self):
+        item = inventory_item(
+            name="ghcr.io/robintra/perf-sentinel",
+            kind="container",
+            version="0.16.0",
+            digest_or_sha="sha256:" + "d" * 64,
+            released_at="2026-08-28",
+            source="https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.16.0",
+        )
+
+        errors = checker.validate_inventory([item])
+
+        self.assertEqual([], errors)
+
+    def test_rejects_ghcr_container_from_another_namespace(self):
+        # GHCR hosts anyone's images, so the namespace is part of the rule.
+        item = inventory_item(
+            name="ghcr.io/someone-else/perf-sentinel",
+            kind="container",
+            version="0.16.0",
+            digest_or_sha="sha256:" + "d" * 64,
+            released_at="2026-08-28",
+            source="https://ghcr.io/v2/someone-else/perf-sentinel/manifests/0.16.0",
+        )
+
+        errors = checker.validate_inventory([item])
+
+        self.assertTrue(any("source" in error for error in errors))
+
     def test_accepts_official_docker_hub_qodana_container_source(self):
         item = inventory_item(
             name="jetbrains/qodana-dotnet",

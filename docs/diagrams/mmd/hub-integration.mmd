@@ -1,0 +1,59 @@
+---
+title: PerfSentinelHub integration
+---
+flowchart LR
+    subgraph people["Who reads it"]
+        direction TB
+        sre["QA / SRE / On-call<br/><i>watches the fleet</i>"]
+        dev["Developer<br/><i>launches an analysis</i>"]
+    end
+
+    subgraph browser["Browser, the launcher"]
+        direction TB
+        screens["Run an analysis<br/>Fleet health<br/>The team's short memory"]
+        runview["Run screen<br/><i>polls until terminal</i>"]
+        reportview["Report screen<br/><i>iframe over /reports/id.html</i>"]
+    end
+
+    plugin["IDE plugin, CI<br/><i>/api/findings only,<br/>never the launcher</i>"]
+
+    hub["PerfSentinelHub<br/><i>one for the fleet</i>"]
+
+    subgraph fleet["The fleet"]
+        direction TB
+        daemons["perf-sentinel daemons<br/><i>one per environment</i>"]
+        backends["Trace backends<br/><i>Tempo, Jaeger query</i>"]
+    end
+
+    db[("SQLite, one file<br/><i>findings, lineage, runs</i>")]
+    engine["perf-sentinel binary<br/><i>subprocess, two spawns per run</i>"]
+    html["report.html<br/><i>kept 24 hours, then deleted</i>"]
+    gh["api.github.com<br/><i>once a day, the only destination<br/>that is not a configured source</i>"]
+
+    sre --> screens
+    dev --> screens
+    screens --> hub
+    runview --> hub
+    hub --> runview
+    plugin -- "GET /api/findings" --> hub
+
+    daemons -- "push, POST /api/import/findings" --> hub
+    hub -- "poll, GET api/status and api/findings" --> daemons
+    hub -- "GET api/export/report<br/><i>first step of a daemon run</i>" --> daemons
+
+    hub --> db
+    hub -- "spawns" --> engine
+    engine -- "queries" --> backends
+    engine -- "writes" --> html
+    html --> reportview
+    hub -. "reads the latest release" .-> gh
+
+    style people fill:#4a3b2d,stroke:#fbbf24
+    style browser fill:#2d3b4a,stroke:#60a5fa
+    style fleet fill:#2d3b4a,stroke:#60a5fa
+    style plugin fill:#2d3b4a,stroke:#60a5fa
+    style hub fill:#2d3b4a,stroke:#60a5fa
+    style db fill:#3b2d4a,stroke:#a78bfa
+    style gh fill:#3b2d4a,stroke:#a78bfa
+    style engine fill:#2d4a3e,stroke:#4ade80
+    style html fill:#2d4a3e,stroke:#4ade80

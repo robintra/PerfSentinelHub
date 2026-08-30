@@ -1,0 +1,43 @@
+---
+title: "Push and poll: which path owns which fact"
+---
+flowchart LR
+    daemon["perf-sentinel daemon<br/><i>[daemon.hub_export] enabled</i>"]
+    hub["PerfSentinelHub"]
+
+    subgraph push["Push, the primary path"]
+        direction TB
+        p1["POST /api/import/findings<br/><i>X-API-Key, 1 to 100 findings, 2 MiB cap</i>"]
+        p2["TryUpsertBatchAsync<br/><i>5 s lock timeout, then 503 Retry-After: 1</i>"]
+        p1 --> p2
+    end
+
+    subgraph poll["Poll, the safety net"]
+        direction TB
+        q1["GET api/status<br/><i>version is mandatory</i>"]
+        q2["GET api/findings<br/><i>limit=1000, include_acked=true</i>"]
+        q3["UpsertBatchAsync<br/><i>blocking</i>"]
+        q1 --> q2 --> q3
+    end
+
+    findings[("findings<br/><i>keyed on signature, idempotent</i>")]
+    state[("source_state<br/><i>unreachable_since_ms</i>")]
+    note["A push that lands while the poll fails<br/>leaves the source unreachable.<br/><i>Reachability is a poll fact, not a data fact.</i>"]
+
+    daemon -- "pushes when it has something" --> push
+    hub -- "asks every PollInterval" --> poll
+    poll --> daemon
+
+    p2 --> findings
+    q3 --> findings
+    q1 -- "success clears it,<br/>failure sets it" --> state
+    p2 -. "never touches it" .-> state
+    state --> note
+
+    style push fill:#2d4a3e,stroke:#4ade80
+    style poll fill:#2d3b4a,stroke:#60a5fa
+    style findings fill:#3b2d4a,stroke:#a78bfa
+    style state fill:#3b2d4a,stroke:#a78bfa
+    style note fill:#4a3b2d,stroke:#fbbf24
+    style hub fill:#2d3b4a,stroke:#60a5fa
+    style daemon fill:#2d3b4a,stroke:#60a5fa

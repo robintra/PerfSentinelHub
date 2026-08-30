@@ -206,6 +206,23 @@ def container_source_matches(item: dict) -> bool:
         and source.fragment == ""
     ):
         return True
+    ghcr_match = re.fullmatch(
+        rf"/v2/(?P<namespace>{SAFE_NAME})/(?P<repository>{SAFE_NAME})/manifests/(?P<tag>{SAFE_VERSION})",
+        source.path,
+    )
+    # Restricted to this account's own namespace, the way the Docker Hub branch
+    # below is restricted to jetbrains. GHCR hosts anyone's images.
+    if (
+        source.scheme == "https"
+        and source.netloc == "ghcr.io"
+        and ghcr_match
+        and ghcr_match.group("namespace") == "robintra"
+        and item["name"] == f"ghcr.io/{ghcr_match.group('namespace')}/{ghcr_match.group('repository')}"
+        and item["version"] == ghcr_match.group("tag")
+        and source.query == ""
+        and source.fragment == ""
+    ):
+        return True
     docker_hub_match = re.fullmatch(
         rf"/v2/namespaces/(?P<namespace>{SAFE_NAME})/repositories/"
         rf"(?P<repository>{SAFE_NAME})/tags/(?P<tag>{SAFE_VERSION})",
@@ -435,7 +452,11 @@ def validate_download_script(path: Path, root: Path, text: str, inventory: list[
 
 
 def structured_files(root: Path) -> list[Path]:
-    ignored = {".dotnet", ".git", "artifacts", "bin", "obj", "__pycache__"}
+    # node_modules holds the browser demo suite's dependencies. It is gitignored
+    # and never reaches CI, so its vendored workflows are not this repository's
+    # supply chain to declare; scanning it only fails the check on machines where
+    # someone ran npm install.
+    ignored = {".dotnet", ".git", "artifacts", "bin", "node_modules", "obj", "__pycache__"}
     return sorted(
         path
         for path in root.rglob("*")

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>perf-sentinel hub</title>
+<script>
+/* Resolves the theme before the first paint. tokens.css defines its palettes
+   under [data-theme], so a root without the attribute has no variables at all
+   and the page would flash unstyled. The stored position may be auto, light or
+   dark; only the resolved light or dark ever reaches the DOM. */
+(function () {
+  var stored = null;
+  try {
+    /* sessionStorage first: the dashboard writes the same key, so a theme
+       chosen over there comes back here within the tab. */
+    stored = sessionStorage.getItem("perf-sentinel:theme") || localStorage.getItem("perf-sentinel:theme");
+  } catch (e) { stored = null; }
+  const position = stored === "light" || stored === "dark" ? stored : "auto";
+  let theme = position;
+  if (position === "auto")
+    theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.themePosition = position;
+})();
+</script>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+<header class="shell-topbar">
+  <a class="shell-wordmark" href="#/new" aria-label="perf-sentinel hub, new analysis">
+    <img src="logo-horiz-light.svg" alt="perf-sentinel" data-logo="light">
+    <img src="logo-horiz-dark.svg" alt="perf-sentinel" data-logo="dark">
+    <span class="shell-wordmark-suffix">hub</span>
+  </a>
+
+  <nav class="shell-tabs" aria-label="Screens">
+    <a class="shell-tab" href="#/new" data-screen="new">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle><path d="M10 8.5l6 3.5-6 3.5z"></path>
+      </svg>
+      New analysis
+    </a>
+    <a class="shell-tab" href="#/recent" data-screen="recent">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path>
+      </svg>
+      Recent
+    </a>
+    <a class="shell-tab" href="#/sources" data-screen="sources">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <ellipse cx="12" cy="6" rx="7.5" ry="3"></ellipse>
+        <path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"></path>
+        <path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"></path>
+      </svg>
+      Sources
+      <span class="shell-tab-badge" id="sources-badge" hidden></span>
+    </a>
+  </nav>
+
+  <div class="shell-cluster">
+    <div class="shell-version" id="version-chip">
+      <span class="shell-version-label">hub</span>
+      <span class="shell-version-value" id="version-hub">…</span>
+      <span class="shell-version-rule" aria-hidden="true"></span>
+      <span class="shell-version-label">engine</span>
+      <span class="shell-version-value" id="version-engine">…</span>
+    </div>
+
+    <div class="shell-identity" id="identity"
+         title="Established by the reverse proxy in front of the Hub. There is no account to manage here.">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="8" r="3.6"></circle><path d="M4.8 20c.9-3.6 3.8-5.4 7.2-5.4s6.3 1.8 7.2 5.4"></path>
+      </svg>
+      <span id="identity-name"></span>
+    </div>
+
+    <button type="button" class="shell-theme" id="theme-toggle" aria-live="polite">
+      <span class="shell-theme-glyph" id="theme-glyph" aria-hidden="true"></span>
+      <span id="theme-label">System</span>
+    </button>
+  </div>
+</header>
+
+<main class="shell-main" id="main"></main>
+
+<footer class="shell-footer">
+  <span class="shell-credit">Powered by
+    <a href="https://perf-sentinel.dev/" target="_blank" rel="noopener noreferrer">Perf Sentinel</a>
+    &middot; design &amp; logo by
+    <a href="https://www.linkedin.com/in/gwendoline-meignen-b0224873/" target="_blank" rel="noopener noreferrer">Gwendoline Meignen</a>
+  </span>
+</footer>
+
+<script src="launcher.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

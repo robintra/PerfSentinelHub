@@ -19,3 +19,9 @@ artifacts/
 # config locale portant le credential d'import (§9)
 appsettings.*.local.json
 __pycache__/
+
+# Playwright demo suite artifacts
+/tests/browser/node_modules/
+/tests/browser/demo-videos/
+/tests/browser/test-results/
+/tests/browser/playwright-report/

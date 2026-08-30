@@ -7,6 +7,8 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
+    private static readonly string[] FindingStatuses = ["active", "likely_resolved", "not_observed"];
+
     private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
@@ -41,7 +43,7 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         var envelope = Assert.Single(document.RootElement.EnumerateArray());
         Assert.Contains(
             envelope.GetProperty("status").GetString(),
-            new[] { "active", "likely_resolved", "not_observed" });
+            FindingStatuses);
     }
 
     [Theory]

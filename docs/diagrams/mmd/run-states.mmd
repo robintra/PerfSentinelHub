@@ -1,0 +1,32 @@
+---
+title: "A run reaches a terminal state, whatever happens"
+---
+flowchart TD
+    submit["POST /api/analyses<br/><i>202, nothing has run yet</i>"]
+    pending["pending<br/><i>waiting for a worker</i>"]
+    running["running<br/><i>claimed atomically</i>"]
+
+    succeeded["succeeded<br/><i>the html exists</i>"]
+    failed["failed<br/><i>one of eight codes</i>"]
+    interrupted["interrupted<br/><i>the service restarted</i>"]
+    expired["expired<br/><i>the html was swept</i>"]
+
+    submit --> pending
+    pending -- "TryClaimNextRunAsync" --> running
+    pending -- "source removed or changed kind<br/><i>invalid_request</i>" --> failed
+    running -- "both spawns returned" --> succeeded
+    running -- "source_unreachable, timeout,<br/>binary_failed, output_too_large, ..." --> failed
+    running -- "process died mid-run,<br/><i>marked at the next startup</i>" --> interrupted
+    succeeded -- "ReportRetention elapsed,<br/><i>the row and its parameters stay</i>" --> expired
+
+    norerun["Nothing is retried, ever.<br/><i>A silent replay would fire a second heavy<br/>query at a backend nobody asked twice.</i>"]
+    interrupted --> norerun
+
+    style submit fill:#2d3b4a,stroke:#60a5fa
+    style pending fill:#2d3b4a,stroke:#60a5fa
+    style running fill:#2d3b4a,stroke:#60a5fa
+    style succeeded fill:#2d4a3e,stroke:#4ade80
+    style expired fill:#3b2d4a,stroke:#a78bfa
+    style failed fill:#4a3b2d,stroke:#fbbf24
+    style interrupted fill:#4a3b2d,stroke:#fbbf24
+    style norerun fill:#4a3b2d,stroke:#fbbf24

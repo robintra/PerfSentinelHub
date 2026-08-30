@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -14,7 +15,34 @@ public static partial class ApiEndpoints
     {
         var version = typeof(ApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown";
 
-        app.MapGet("/api/status", () => new StatusResponse("perf-sentinel-hub", version));
+        app.MapGet("/api/status", async (
+            HttpRequest request,
+            EngineProbe engine,
+            UpdateChecker updates,
+            HubDatabase database,
+            IOptions<HubOptions> hubOptions,
+            CancellationToken cancellationToken) =>
+        {
+            var analysis = hubOptions.Value.Analysis;
+            return new StatusResponse(
+                "perf-sentinel-hub",
+                version,
+                KnownIdentity(request, analysis),
+                engine.Version,
+                updates.LatestEngineVersion,
+                updates.LatestHubVersion,
+                await database.CountPendingRunsAsync(cancellationToken),
+                analysis.Workers,
+                new StatusLimits(
+                    analysis.MaxTracesCap,
+                    (int)analysis.Timeout.TotalSeconds,
+                    (int)analysis.ReportRetention.TotalHours,
+                    analysis.MaxTracesEmbedded),
+                [.. DetectionOverrides.Schema
+                    .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))]);
+        });
+        app.MapGet("/api/sources", GetSourcesAsync);
+        app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
         app.MapGet("/api/findings", GetFindingsAsync);
         app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync);
@@ -23,10 +51,40 @@ public static partial class ApiEndpoints
             database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
     }
 
+    private static async Task<IReadOnlyList<SourceResponse>> GetSourcesAsync(
+        HubDatabase database,
+        IOptions<HubOptions> options,
+        CancellationToken cancellationToken)
+    {
+        var states = await database.QuerySourceStatesAsync(cancellationToken);
+        return [.. options.Value.Sources.Select(source =>
+        {
+            states.TryGetValue(source.Id, out var state);
+            return new SourceResponse(
+                source.Id,
+                source.Name,
+                source.Environment,
+                source.Kind,
+                source.RetentionHours,
+                // A source that has never failed is reachable, including one
+                // that has never been observed at all: the Hub has no evidence
+                // against it, and a trace backend is never polled.
+                state?.UnreachableSinceMs is null,
+                state?.LastAttemptMs,
+                state?.LastSuccessMs,
+                state?.UnreachableSinceMs,
+                state?.ProducerVersion,
+                state?.LastErrorCode,
+                source.EndpointArgument,
+                source.EngineSubcommand,
+                source.AuthHeaderName);
+        })];
+    }
+
     private static async Task<IResult> ImportFindingsAsync(
         HttpRequest request,
         HubDatabase database,
-        ImportGate gate,
+        ImportAdmission admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
@@ -36,25 +94,27 @@ public static partial class ApiEndpoints
             request.Query.Count != 1 ||
             !request.Query.TryGetValue("source_id", out var sourceIds) ||
             sourceIds.Count != 1)
-            return TypedResults.BadRequest();
+            return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
         var sourceId = sourceIds[0];
         if (string.IsNullOrEmpty(sourceId))
-            return TypedResults.BadRequest();
+            return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
         var source = options.Value.Sources.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, sourceId, StringComparison.Ordinal));
         if (source is null || !IsAuthorized(request, source.ImportApiKey))
-            return TypedResults.Unauthorized();
-        if (!gate.TryEnter())
+            return admission.Refuse(ImportRejection.Unauthorized, TypedResults.Unauthorized());
+        if (!admission.Gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
-            return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            return admission.Refuse(ImportRejection.GateFull,
+                TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
         }
 
         try
         {
             var payload = await ReadBodyAsync(request, cancellationToken);
             if (payload is null)
-                return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                return admission.Refuse(ImportRejection.TooLarge,
+                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
 
             ParsedImport import;
             try
@@ -63,15 +123,16 @@ public static partial class ApiEndpoints
             }
             catch (ImportBatchTooLargeException)
             {
-                return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                return admission.Refuse(ImportRejection.TooLarge,
+                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
             }
             catch (InvalidDataException)
             {
-                return TypedResults.BadRequest();
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
             }
 
             if (import.Batch.Findings.Count == 0)
-                return TypedResults.BadRequest();
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
             var stored = await database.TryUpsertBatchAsync(
                 new SourceSnapshot(source.Id, source.Name, source.Environment, import.ProducerVersion),
                 import.Batch,
@@ -80,7 +141,8 @@ public static partial class ApiEndpoints
             if (!stored)
             {
                 request.HttpContext.Response.Headers.RetryAfter = "1";
-                return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                return admission.Refuse(ImportRejection.WriteTimeout,
+                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
             }
 
             if (import.Batch.RejectedCount > 0)
@@ -92,7 +154,7 @@ public static partial class ApiEndpoints
         }
         finally
         {
-            gate.Exit();
+            admission.Gate.Exit();
         }
     }
 
@@ -101,6 +163,7 @@ public static partial class ApiEndpoints
         HubDatabase database,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!TryParseQuery(context.Request, options.Value, out var query))
@@ -114,6 +177,7 @@ public static partial class ApiEndpoints
             context.Response,
             rows,
             timeProvider.GetUtcNow(),
+            loggerFactory.CreateLogger("FindingsApi"),
             cancellationToken);
     }
 
@@ -122,6 +186,7 @@ public static partial class ApiEndpoints
         HttpResponse response,
         HubDatabase database,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var rows = await database.FindByTraceAsync(traceId, cancellationToken);
@@ -129,6 +194,7 @@ public static partial class ApiEndpoints
             response,
             rows,
             timeProvider.GetUtcNow(),
+            loggerFactory.CreateLogger("FindingsApi"),
             cancellationToken);
     }
 
@@ -240,15 +306,7 @@ public static partial class ApiEndpoints
 
 // Bounds how many import bodies may be buffered at once (MaxImports * 2 MiB). It is not a write
 // lock -- HubDatabase serializes writes -- so one slow uploader must not stall the whole fleet.
-public sealed class ImportGate : IDisposable
+public sealed class ImportGate() : RequestGate(MaxImports)
 {
     public const int MaxImports = 4;
-
-    private readonly SemaphoreSlim _gate = new(MaxImports, MaxImports);
-
-    public bool TryEnter() => _gate.Wait(0);
-
-    public void Exit() => _gate.Release();
-
-    public void Dispose() => _gate.Dispose();
 }

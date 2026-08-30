@@ -17,7 +17,70 @@ public sealed record HubOptions
     public TimeSpan ResolutionGrace { get; set; } = TimeSpan.FromDays(7);
     public int DefaultReadLimit { get; set; } = 1000;
     public int MaxReadLimit { get; set; } = 10_000;
+    public AnalysisOptions Analysis { get; set; } = new();
+    public UpdateCheckOptions UpdateCheck { get; set; } = new();
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
+}
+
+public sealed record AnalysisOptions
+{
+    // Absent means the Hub keeps collecting findings but cannot run an
+    // analysis: the launcher reads a null engine version and says so.
+    public string? EngineBinaryPath { get; set; }
+    // Where rendered reports live. Must be writable: the container is
+    // read-only everywhere else.
+    public string ReportDirectory { get; set; } = "/data/reports";
+    // Header a reverse proxy sets with the established identity. The Hub has
+    // no account surface and records the value as a claim, never verifies it.
+    public string IdentityHeader { get; set; } = "X-Forwarded-User";
+    // Not a setting: configuration binding ignores a const, and it sits with the
+    // properties only to be near the one it bounds.
+    // The engine's own ceiling on --max-traces, which it enforces when it parses
+    // its arguments. A cap above it would pass every check here and then fail the
+    // run on an engine error the operator never asked for.
+    public const int EngineMaxTraces = 10_000;
+
+    public int Workers { get; set; } = 2;
+    public int MaxTracesCap { get; set; } = 2000;
+    // Span trees embedded in the rendered report. Passing this at all opts the
+    // sink out of size targeting, which is why it is set: without it a wide
+    // sweep loses findings to the budget, and the finding list is the thing an
+    // operator came for. The trees are what gets capped instead.
+    public int MaxTracesEmbedded { get; set; } = 50;
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
+    public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
+    // How long a finished run's row survives. Far longer than ReportRetention on
+    // purpose: the report is deleted after a day, the row outlives it so an
+    // expired run can still be read and relaunched with its own parameters.
+    public TimeSpan RunRetention { get; set; } = TimeSpan.FromDays(30);
+}
+
+/// <summary>
+/// Whether the Hub asks GitHub what the newest published release of each
+/// product is. This is the only outbound destination the Hub has that is not a
+/// configured source, so it is stated here rather than implied, and one key
+/// turns it off for a deployment with no egress.
+/// </summary>
+public sealed record UpdateCheckOptions
+{
+    public bool Enabled { get; set; } = true;
+    // A release lands a few times a month at most. Anything shorter spends
+    // requests to learn nothing, and the rate limit is 60 an hour per address.
+    public TimeSpan Interval { get; set; } = TimeSpan.FromDays(1);
+    public Uri EngineEndpoint { get; set; } =
+        new("https://api.github.com/repos/robintra/perf-sentinel/releases/latest");
+    public Uri HubEndpoint { get; set; } =
+        new("https://api.github.com/repos/robintra/PerfSentinelHub/releases/latest");
+}
+
+public static class SourceKinds
+{
+    public const string Daemon = "daemon";
+    public const string Tempo = "tempo";
+    public const string JaegerQuery = "jaeger_query";
+
+    public static bool IsKnown(string kind) =>
+        kind is Daemon or Tempo or JaegerQuery;
 }
 
 public sealed record SourceOptions
@@ -25,7 +88,27 @@ public sealed record SourceOptions
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string Environment { get; set; } = "";
+    // A daemon detects its own findings and is polled. A trace backend stores
+    // traces and detects nothing, so it is never polled and only ever read by
+    // an analysis run.
+    public string Kind { get; set; } = SourceKinds.Daemon;
+    // How far back this backend keeps traces, declared here because no backend
+    // API exposes it. Bounds the launcher's time-range picker. Declared and not
+    // measured, so it carries the same caveat as the environment: it keeps a
+    // stale claim until someone edits it.
+    public int? RetentionHours { get; set; }
     public Uri? BaseUrl { get; set; }
+    // The endpoint as it goes on a command line. Computed once so the run the Hub
+    // launches and the command it publishes cannot drift apart.
+    public string EndpointArgument => BaseUrl!.ToString().TrimEnd('/');
+    // The engine subcommand that reads this source, null for a daemon: a daemon is
+    // read over HTTP and has no subcommand of its own.
+    public string? EngineSubcommand => Kind switch
+    {
+        SourceKinds.Daemon => null,
+        SourceKinds.Tempo => "tempo",
+        _ => "jaeger-query"
+    };
     public string? AuthHeaderName { get; set; }
     public string? AuthHeaderValue { get; set; }
     // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a
@@ -73,22 +156,87 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:DefaultReadLimit must be between 1 and MaxReadLimit.");
         if (options.Sources.Count == 0)
             errors.Add("Hub:Sources must contain at least one source.");
+        ValidateAnalysisSettings(options.Analysis, errors);
+        ValidateUpdateCheckSettings(options.UpdateCheck, errors);
     }
+
+    private static void ValidateAnalysisSettings(AnalysisOptions analysis, List<string> errors)
+    {
+        if (analysis.EngineBinaryPath is { } path &&
+            (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)))
+            errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
+        if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
+            errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
+        if (IsInvalidIdentityHeader(analysis.IdentityHeader))
+            errors.Add("Hub:Analysis:IdentityHeader must be a header name.");
+        if (analysis.Workers is < 1 or > 16)
+            errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
+        if (analysis.MaxTracesCap is < 1 or > AnalysisOptions.EngineMaxTraces)
+            errors.Add($"Hub:Analysis:MaxTracesCap must be between 1 and {AnalysisOptions.EngineMaxTraces}, "
+                + "the engine's own limit on --max-traces.");
+        if (analysis.MaxTracesEmbedded is < 0 or > 10_000)
+            errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
+        if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
+            errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
+        if (analysis.ReportRetention <= TimeSpan.Zero)
+            errors.Add("Hub:Analysis:ReportRetention must be positive.");
+        if (analysis.RunRetention <= analysis.ReportRetention)
+            errors.Add("Hub:Analysis:RunRetention must be longer than Hub:Analysis:ReportRetention, "
+                + "since an expired run keeps its parameters after its report is deleted.");
+    }
+
+    private static void ValidateUpdateCheckSettings(UpdateCheckOptions update, List<string> errors)
+    {
+        if (!update.Enabled) return;
+        if (update.Interval < TimeSpan.FromMinutes(15))
+            errors.Add("Hub:UpdateCheck:Interval must be at least 15 minutes.");
+        // Held to a tighter shape than a source: https only, and no query, so
+        // whoever reads the configuration sees the whole destination.
+        if (IsInvalidUpdateEndpoint(update.EngineEndpoint))
+            errors.Add("Hub:UpdateCheck:EngineEndpoint must be an absolute HTTPS URL "
+                + "without credentials, query, or fragment.");
+        if (IsInvalidUpdateEndpoint(update.HubEndpoint))
+            errors.Add("Hub:UpdateCheck:HubEndpoint must be an absolute HTTPS URL "
+                + "without credentials, query, or fragment.");
+    }
+
+    private static bool IsInvalidUpdateEndpoint(Uri? endpoint) =>
+        endpoint is null ||
+        !endpoint.IsAbsoluteUri ||
+        endpoint.Scheme != Uri.UriSchemeHttps ||
+        !string.IsNullOrEmpty(endpoint.UserInfo) ||
+        !string.IsNullOrEmpty(endpoint.Query) ||
+        !string.IsNullOrEmpty(endpoint.Fragment);
 
     private static void ValidateSource(SourceOptions source, HashSet<string> ids, List<string> errors)
     {
-        if (string.IsNullOrWhiteSpace(source.Id) ||
-            source.Id.Length > 64 ||
-            source.Id.Any(character =>
-                !char.IsAsciiLetterOrDigit(character) && character != '.' && character != '_' && character != '-') ||
-            !ids.Add(source.Id))
+        if (!IsValidSourceId(source.Id) || !ids.Add(source.Id))
             errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
         if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
             errors.Add($"Source '{source.Id}' requires a name and environment.");
+        if (!SourceKinds.IsKnown(source.Kind))
+            errors.Add($"Source '{source.Id}' kind must be 'daemon', 'tempo' or 'jaeger_query'.");
+        if (source.Kind != SourceKinds.Daemon && source.ImportApiKey is not null)
+            errors.Add($"Source '{source.Id}' is not a daemon and cannot carry an import API key.");
+        ValidateRetentionHours(source, errors);
         ValidateBaseUrl(source, errors);
         ValidateAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
             errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
+    }
+
+    private static void ValidateRetentionHours(SourceOptions source, List<string> errors)
+    {
+        if (source.RetentionHours is not { } retentionHours)
+            return;
+
+        // A daemon takes no window, so nothing would ever read the value. A
+        // setting with no consumer is worse than a missing one: someone tunes
+        // it and nothing happens.
+        if (source.Kind == SourceKinds.Daemon)
+            errors.Add($"Source '{source.Id}' is a daemon and takes no trace retention.");
+        else if (retentionHours is < 1 or > 87_600)
+            errors.Add($"Source '{source.Id}' retention must be between 1 hour and 10 years.");
     }
 
     private static void ValidateBaseUrl(SourceOptions source, List<string> errors)
@@ -141,4 +289,13 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static bool IsInvalidImportApiKey(string value) =>
         value.Length < 32 || string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl);
+
+    private static bool IsInvalidIdentityHeader(string value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.Any(character => char.IsControl(character) || character == ' ');
+
+    private static bool IsValidSourceId(string id) =>
+        !string.IsNullOrWhiteSpace(id) &&
+        id.Length <= 64 &&
+        id.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
 }

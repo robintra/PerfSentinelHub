@@ -469,8 +469,10 @@ jobs:
           set -euo pipefail
           # Trivy reads an OCI *layout*, a directory holding index.json, and refuses
           # the archive buildx writes: "stat <tar>/index.json: not a directory".
+          # Always under RUNNER_TEMP: the release root is uploaded whole and
+          # verify-release.py accepts only regular files in it.
           for source in "$RUNNER_TEMP/amd64-a.oci.tar" "$RUNNER_TEMP/arm64-a.oci.tar" "release/perf-sentinel-hub-$VERSION.oci.tar"; do
-            layout="${source%.tar}.layout"
+            layout="$RUNNER_TEMP/$(basename "${source%.tar}").layout"
             mkdir -p "$layout"
             tar xf "$source" -C "$layout"
             test -f "$layout/index.json"
@@ -494,7 +496,7 @@ jobs:
           skip-setup-trivy: true
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          input: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.layout
+          input: ${{ runner.temp }}/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.layout
           format: table
           exit-code: 1
           ignore-unfixed: true

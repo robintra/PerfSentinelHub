@@ -243,7 +243,13 @@ def validate_chart(path: Path, version: str, image_digest: str):
         deployment = members[prefix + "templates/deployment.yaml"].decode("utf-8")
     except (KeyError, UnicodeError) as error:
         raise ValueError(f"chart required files are missing or invalid: {error}") from error
-    if f"version: {version}\n" not in chart or f'appVersion: "{version}"\n' not in chart:
+    # helm package rewrites Chart.yaml: it reorders the keys and drops the quotes
+    # around appVersion, so the quoted form never survives packaging. YAML reads
+    # both as the same string, so both are accepted and nothing else is.
+    if (
+        re.search(rf'(?m)^version: {re.escape(version)}$', chart) is None
+        or re.search(rf'(?m)^appVersion: "?{re.escape(version)}"?$', chart) is None
+    ):
         raise ValueError("chart version differs from release")
     repositories = re.findall(r"(?m)^ {2}repository: ([^\s#]+)\s*$", values)
     if len(repositories) != 1 or IMAGE_REPOSITORY.fullmatch(repositories[0]) is None:

@@ -92,6 +92,7 @@ publication réussies.
 | [docs/FR/API-FR.md](docs/FR/API-FR.md)                     | Les API d'import, de lecture et d'analyse                                                                        |
 | [docs/FR/LAUNCHER-FR.md](docs/FR/LAUNCHER-FR.md)           | L'interface de navigateur, ses commandes imprimées et ses rapports live                                          |
 | [docs/FR/OPERATIONS-FR.md](docs/FR/OPERATIONS-FR.md)       | Fraîcheur, rétablissement, sauvegarde et restauration                                                            |
+| [docs/FR/LIMITATIONS-FR.md](docs/FR/LIMITATIONS-FR.md)     | Ce que le Hub déclare au lieu de le mesurer, et ce qu'un run ne promet pas                                       |
 | [RELEASING.md](RELEASING.md)                               | Ce que contient une release, comment elle est signée, et comment en vérifier une publiquement                    |
 | [CONTRIBUTING.md](CONTRIBUTING.md)                         | Les portes locales, la chaîne d'outils épinglée, et les règles de pull request                                   |
 

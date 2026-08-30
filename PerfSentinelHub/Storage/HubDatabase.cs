@@ -7,7 +7,7 @@ using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Storage;
 
-public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider) : IDisposable
+public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvider timeProvider)
 {
     private readonly string _databasePath = options.Value.DatabasePath;
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
@@ -19,6 +19,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private const string ObservedAtParameter = "$observed_at";
     private const string FirstSeenParameter = "$first_seen";
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
+    // Never disposed, and the class is deliberately not IDisposable. A
+    // SemaphoreSlim only holds a wait handle once AvailableWaitHandle is read,
+    // which nothing here does, so disposing would free nothing and would arm an
+    // ObjectDisposedException for any poll still in flight when the host stops.
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _ready;
 
@@ -720,11 +724,5 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    public void Dispose()
-    {
-        _initializeGate.Dispose();
-        _writeGate.Dispose();
     }
 }

@@ -169,7 +169,6 @@ public sealed class StorageTests
 
         public void Dispose()
         {
-            Database.Dispose();
             SqliteConnection.ClearAllPools();
             File.Delete(DatabasePath);
             File.Delete($"{DatabasePath}-shm");

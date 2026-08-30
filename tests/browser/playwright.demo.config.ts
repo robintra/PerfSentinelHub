@@ -18,6 +18,10 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   outputDir: "./demo-videos",
+  // The tour records a walkthrough rather than asserts on one, and it is paced
+  // for someone watching a GIF they cannot pause. Playwright's 30 s default is
+  // shorter than the tour itself.
+  timeout: 240_000,
   reporter: [["list"]],
   globalSetup: "./global-setup.ts",
   globalTeardown: "./global-teardown.ts",

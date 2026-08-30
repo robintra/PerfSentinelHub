@@ -15,6 +15,19 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Fixed
 
+- `/api/status` and the `perf_sentinel_hub_build_info` metric report `0.1.1` rather than `0.1.1.0`.
+  Both read `AssemblyVersion`, which .NET pads to four components, so the version the Hub published
+  about itself matched neither its own tag, its chart `appVersion`, nor its image label, and a
+  dashboard joining the metric's `version` label against a release tag never matched. Both now read
+  the informational version, through one accessor rather than two copies. The launcher already
+  ignored the fourth component when comparing, so nothing downstream changes.
+
+- `scripts/release.sh` runs the lab validation gate itself instead of leaving it to the operator's
+  memory, and takes `--skip-lab` to bypass that one gate for a release the lab cannot tell apart
+  from the last it validated. The bypass never writes the ledger and warns twice, so a skipped lab
+  leaves a trace rather than a false PASS. `release-gate/check-lab-validation.sh` had existed since
+  the first release without a single caller.
+
 - `scripts/check-badges.py` runs in CI, validates `README-FR.md` alongside `README.md`, and reads
   each badge's evidence file instead of only checking that it exists. It had none of the three: no
   job ran it, so a README and a canonical block that disagreed passed every pull request, and the

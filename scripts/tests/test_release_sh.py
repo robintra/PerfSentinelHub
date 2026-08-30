@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import os
 import shutil
@@ -10,12 +11,14 @@ from pathlib import Path
 REPOSITORY = Path(__file__).resolve().parents[2]
 RELEASE = REPOSITORY / "scripts" / "release.sh"
 CHECKER = REPOSITORY / "scripts" / "check-version.py"
+LAB_GATE = REPOSITORY / "release-gate" / "check-lab-validation.sh"
 
 
 class ReleaseScriptTests(unittest.TestCase):
     def setUp(self):
         self.assertTrue(RELEASE.is_file(), "scripts/release.sh is missing")
         self.assertTrue(CHECKER.is_file(), "scripts/check-version.py is missing")
+        self.assertTrue(LAB_GATE.is_file(), "release-gate/check-lab-validation.sh is missing")
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)
         self.repository = self.root / "repository"
@@ -37,6 +40,24 @@ class ReleaseScriptTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("no repository or remote mutation", result.stdout)
+        self.assertEqual(before, self.snapshot())
+
+    def test_rejects_a_version_the_lab_never_validated(self):
+        self.commit_ledger()
+
+        result = self.run_release("v0.1.0", "--dry-run")
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("check-lab-validation.sh refused v0.1.0", result.stderr)
+
+    def test_skip_lab_bypasses_the_only_skippable_gate_loudly(self):
+        self.commit_ledger()
+        before = self.snapshot()
+
+        result = self.run_release("v0.1.0", "--dry-run", "--skip-lab")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("lab-validation gate bypassed by operator", result.stderr)
         self.assertEqual(before, self.snapshot())
 
     def test_rejects_prerelease_tag(self):
@@ -154,6 +175,9 @@ class ReleaseScriptTests(unittest.TestCase):
         (self.repository / "deploy/helm/perf-sentinel-hub").mkdir(parents=True)
         shutil.copy2(RELEASE, self.repository / "scripts/release.sh")
         shutil.copy2(CHECKER, self.repository / "scripts/check-version.py")
+        (self.repository / "release-gate").mkdir()
+        shutil.copy2(LAB_GATE, self.repository / "release-gate/check-lab-validation.sh")
+        self.write_ledger("v0.1.0")
         (self.repository / "PerfSentinelHub/PerfSentinelHub.csproj").write_text(
             "<Project><PropertyGroup><Version>0.1.0</Version></PropertyGroup></Project>\n",
             encoding="utf-8",
@@ -191,6 +215,19 @@ class ReleaseScriptTests(unittest.TestCase):
         self.run_command("git", "init", "-q", "--bare", "--initial-branch=main", str(self.remote), cwd=self.root)
         self.git("remote", "add", "origin", str(self.remote))
         self.git("push", "-u", "origin", "main")
+
+    def write_ledger(self, *versions):
+        today = datetime.date.today().isoformat()
+        lines = "".join(f"{version}\tabc1234\t{today}\tPASS\n" for version in versions)
+        (self.repository / "release-gate/lab-validations.txt").write_text(
+            "# fixture ledger\n" + lines, encoding="utf-8"
+        )
+
+    def commit_ledger(self, *versions):
+        self.write_ledger(*versions)
+        self.git("add", "release-gate/lab-validations.txt")
+        self.git("commit", "-m", "ledger")
+        self.git("push", "-q", str(self.remote), "main")
 
     def run_release(self, *arguments, input_text=None):
         return subprocess.run(

@@ -84,15 +84,22 @@ cluster, a workload fleet and an image built from the commit under test.
    It exits non-zero when there is no PASS for that version, when the newest one is older than
    thirty days, or when the ledger is unreadable.
 
+`scripts/release.sh` runs this itself and refuses to tag when it fails, so the assertion is not
+left to memory. It is the one gate an operator may bypass, with `--skip-lab`, for a release the
+lab cannot tell apart from the last one it validated: a documentation, packaging or tooling
+change the rest of the suite already covers. The bypass writes nothing to the ledger and says so
+twice, once on the gate line and once in the confirmation prompt, so a skipped lab leaves a trace
+rather than a false PASS. Every other gate fails closed.
+
 The script is a copy of perf-sentinel's, which is the original and carries the full test suite.
 Keep the two in step: a fix to the date handling or the ledger schema belongs in both.
 
 ## Publish a release
 
 1. Confirm that `main` is clean, synchronized, protected, and public. Run `make release-check`.
-   Assert the lab validation gate above for the version you are about to tag.
-2. Create the signed tag with `scripts/release.sh v0.MINOR.PATCH`. The local script uploads no
-   artifact.
+2. Create the signed tag with `scripts/release.sh v0.MINOR.PATCH`, which re-runs the version and
+   lab gates itself, or `scripts/release.sh v0.MINOR.PATCH --skip-lab` for a release the lab has
+   no way to distinguish. The local script uploads no artifact.
 3. Wait for every build, duplicate-build comparison, native smoke test, scan, signature,
    attestation, and closed-manifest check to pass.
 4. Review the workflow summary and approve the `hub-release` environment manually. Publication

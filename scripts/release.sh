@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TAG=""
 DRY_RUN=0
+SKIP_LAB=0
 SIGNING_SCRATCH=""
 
 fail() {
@@ -15,7 +16,7 @@ fail() {
 }
 
 usage() {
-  printf 'Usage: %s v0.MINOR.PATCH [--dry-run]\n' "$(basename "$0")" >&2
+  printf 'Usage: %s v0.MINOR.PATCH [--dry-run] [--skip-lab]\n' "$(basename "$0")" >&2
   exit 2
 }
 
@@ -31,6 +32,10 @@ while [[ "$#" -gt 0 ]]; do
     --dry-run)
       [[ "${DRY_RUN}" -eq 0 ]] || usage
       DRY_RUN=1
+      ;;
+    --skip-lab)
+      [[ "${SKIP_LAB}" -eq 0 ]] || usage
+      SKIP_LAB=1
       ;;
     -*) usage ;;
     *)
@@ -90,6 +95,17 @@ ensure_tag_absent() {
   esac
 }
 
+# The lab gate is the only one an operator may bypass, and a bypass is loud.
+# The ledger is never written here, so a skipped lab leaves no false PASS.
+ensure_lab_validation() {
+  if [[ "${SKIP_LAB}" -eq 1 ]]; then
+    printf 'release: WARNING lab-validation gate bypassed by operator (--skip-lab). %s was NOT validated in the simulation lab, and no PASS was recorded in the ledger.\n' "${TAG}" >&2
+    return
+  fi
+  "${REPOSITORY}/release-gate/check-lab-validation.sh" --version "${TAG}" \
+    || fail "release-gate/check-lab-validation.sh refused ${TAG}. Run the lab and append a PASS entry to release-gate/lab-validations.txt, or pass --skip-lab to bypass this gate explicitly"
+}
+
 verify_signing_identity() {
   local signing_key signing_format allowed_signers key value
   signing_key="$(git config --get user.signingkey 2>/dev/null || true)"
@@ -130,6 +146,7 @@ ensure_synchronized_main
 ensure_tag_absent
 verify_signing_identity
 make release-check VERSION="${VERSION}"
+ensure_lab_validation
 
 short_sha="$(git rev-parse --short=12 HEAD)"
 if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -138,6 +155,9 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
   exit 0
 fi
 
+if [[ "${SKIP_LAB}" -eq 1 ]]; then
+  printf 'WARNING: lab-validation gate skipped (--skip-lab), %s was NOT lab-validated.\n' "${TAG}" >&2
+fi
 printf 'Type %s to confirm the signed tag and pushes: ' "${TAG}"
 IFS= read -r confirmation || fail "confirmation was not provided"
 [[ "${confirmation}" = "${TAG}" ]] || fail "confirmation did not exactly match ${TAG}; nothing was mutated"
@@ -147,6 +167,7 @@ ensure_clean
 ensure_synchronized_main
 ensure_tag_absent
 make release-check VERSION="${VERSION}"
+ensure_lab_validation
 
 if ! git tag -s "${TAG}" -m "PerfSentinelHub ${TAG}"; then
   fail "signed tag creation failed"

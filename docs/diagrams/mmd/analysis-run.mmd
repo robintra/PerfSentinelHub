@@ -1,0 +1,41 @@
+---
+title: "What a launched analysis actually does"
+---
+sequenceDiagram
+    actor dev as Developer
+    participant ui as Launcher
+    participant api as POST /api/analyses
+    participant db as SQLite
+    participant worker as AnalysisWorker
+    participant src as Source
+    participant engine as perf-sentinel
+
+    dev->>ui: fills the form
+    ui->>api: submit
+    Note over api: validated against the source kind<br/>before anything is queued, so an<br/>impossible pair is refused now
+    api->>db: insert run, pending
+    api-->>ui: 202 Accepted, Location: /api/analyses/id
+
+    loop every second while idle
+        worker->>db: TryClaimNextRunAsync
+    end
+    db-->>worker: pending becomes running
+
+    alt source is a daemon
+        worker->>src: GET api/export/report
+        src-->>worker: report JSON
+    else source is a trace backend
+        worker->>engine: spawn, tempo or jaeger-query
+        Note over worker,engine: the auth header travels as an<br/>environment variable, never on argv
+        engine->>src: queries the backend
+        engine-->>worker: report JSON on stdout
+    end
+
+    worker->>engine: spawn, report --input --output
+    Note over worker,engine: a second spawn because only report<br/>writes HTML, cwd is the report directory
+    engine-->>worker: id.html written
+    worker->>db: succeeded
+
+    ui->>api: GET /api/analyses/id
+    api-->>ui: succeeded
+    ui->>dev: iframe over /reports/id.html

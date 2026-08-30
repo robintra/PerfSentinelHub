@@ -1,0 +1,43 @@
+---
+title: "Three retention clocks, none derivable from the others"
+---
+flowchart TD
+    imported["A finding is stored"]
+    submitted["A run is submitted"]
+
+    subgraph c1["Hub:Retention, 180 days"]
+        direction TB
+        r1["RetentionWorker, once a day<br/><i>PurgeAsync in chunks so a long purge<br/>does not reject an incoming import</i>"]
+        r1out["The row is gone"]
+        r1 --> r1out
+    end
+
+    subgraph c2["Hub:ResolutionGrace, 7 days"]
+        direction TB
+        g1["No worker, a CASE at read time"]
+        g2["Seen inside the window<br/><i>active</i>"]
+        g3["Older, endpoint still heartbeating<br/><i>likely_resolved</i>"]
+        g4["Older, nothing heartbeating<br/><i>not_observed</i>"]
+        g1 --> g2
+        g1 --> g3
+        g1 --> g4
+    end
+
+    subgraph c3["Hub:Analysis:ReportRetention, 24 hours"]
+        direction TB
+        s1["AnalysisWorker sweep, every 60 s<br/><i>finer than the lifetime, so a countdown<br/>never outlives the file it counts down to</i>"]
+        s2["The html is deleted,<br/>the run row is kept and marked expired"]
+        s1 --> s2
+    end
+
+    imported --> c1
+    imported --> c2
+    submitted --> c3
+
+    warn["A poll that omits a finding does not resolve it.<br/><i>The daemon ring buffer may have evicted it,<br/>and missing is not the same as resolved.</i>"]
+    c2 --> warn
+
+    style c1 fill:#3b2d4a,stroke:#a78bfa
+    style c2 fill:#2d3b4a,stroke:#60a5fa
+    style c3 fill:#2d4a3e,stroke:#4ade80
+    style warn fill:#4a3b2d,stroke:#fbbf24

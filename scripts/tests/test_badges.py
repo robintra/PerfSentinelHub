@@ -39,6 +39,21 @@ BADGES = {
         f"{REPO_URL}/actions/workflows/release.yml/badge.svg",
         f"{REPO_URL}/actions/workflows/release.yml",
     ),
+    "Latest release": (
+        "https://img.shields.io/github/v/release/robintra/PerfSentinelHub"
+        "?display_name=tag&sort=semver&color=512BD4",
+        f"{REPO_URL}/releases/latest",
+    ),
+    "Container image": (
+        "https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED"
+        "?logo=docker&logoColor=white",
+        f"{REPO_URL}/pkgs/container/perf-sentinel-hub",
+    ),
+    "Helm chart": (
+        "https://img.shields.io/badge/chart-perf--sentinel--hub-0F1689"
+        "?logo=helm&logoColor=white",
+        f"{REPO_URL}/pkgs/container/charts%2Fperf-sentinel-hub",
+    ),
 }
 
 
@@ -84,6 +99,11 @@ def write_root(
     (root / ".github/workflows/ci.yml").write_text(
         "sonar.projectKey=robintrassard_PerfSentinelHub\n", encoding="utf-8"
     )
+    (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
+    (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    chart = root / "deploy" / "helm" / "perf-sentinel-hub"
+    chart.mkdir(parents=True)
+    (chart / "Chart.yaml").write_text("name: perf-sentinel-hub\n", encoding="utf-8")
 
 
 def run_checker(readme, **fixture_options):

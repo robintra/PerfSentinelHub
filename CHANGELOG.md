@@ -20,6 +20,11 @@ All notable changes to PerfSentinelHub are recorded here.
   GitHub Container Registry image, so a bare repository left half the identity unresolved and an
   install that did not override it ended in `ImagePullBackOff` against Docker Hub.
 
+### Documentation
+
+- The README carries its latest-release, container image and Helm chart badges again, all three
+  having been removed while nothing was published for them to point at.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added

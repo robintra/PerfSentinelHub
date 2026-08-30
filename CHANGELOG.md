@@ -45,6 +45,9 @@ All notable changes to PerfSentinelHub are recorded here.
   having been removed while nothing was published for them to point at. The release badge takes the
   `512BD4` of the .NET one rather than the shields default orange.
 
+- The launcher screenshots and both tour GIFs are regenerated against this version, so the version
+  chip they show matches the release rather than the one before it.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added

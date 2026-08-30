@@ -306,10 +306,25 @@ class RepositoryPolicyTests(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn(field, result.stderr)
 
-    def test_accepts_canonical_pull_request_review_semantics(self):
+    def test_accepts_only_the_canonical_pull_request_review_policy(self):
+        non_canonical = {
+            "extra approval": lambda policy: policy["branch_ruleset"].update(required_approving_review_count=1),
+            "unresolved threads": lambda policy: policy["branch_ruleset"].update(required_review_thread_resolution=False),
+            "stale reviews kept": lambda policy: policy["branch_ruleset"].update(dismiss_stale_reviews_on_push=False),
+            "code owner review": lambda policy: policy["branch_ruleset"].update(require_code_owner_review=True),
+            "last push approval": lambda policy: policy["branch_ruleset"].update(require_last_push_approval=True),
+            "merge method dropped": lambda policy: policy["branch_ruleset"].update(allowed_merge_methods=["squash"]),
+        }
+
         result = run_checker(public_api_fixture())
 
         self.assertEqual(0, result.returncode, result.stderr)
+        for name, mutation in non_canonical.items():
+            with self.subTest(name=name):
+                result = run_checker(public_api_fixture(), policy_mutator=mutation)
+
+                self.assertEqual(1, result.returncode)
+                self.assertIn("non-canonical", result.stderr)
 
     def test_rejects_each_pull_request_review_semantic_drift(self):
         expected = {

@@ -76,9 +76,21 @@ public sealed class ReferenceConfigurationTests
     /// </summary>
     private static Type? Nested(Type type)
     {
-        if (type.IsGenericType && type.GetGenericArguments() is [{ } element]
-            && element.Namespace == typeof(HubOptions).Namespace)
-            return element;
-        return type.Namespace == typeof(HubOptions).Namespace && !type.IsEnum ? type : null;
+        if (type.Namespace == typeof(HubOptions).Namespace)
+            return type.IsEnum ? null : type;
+        if (!type.IsGenericType) return null;
+
+        var arguments = type.GetGenericArguments()
+            .Where(argument => argument.Namespace == typeof(HubOptions).Namespace)
+            .ToArray();
+        if (arguments.Length == 0) return null;
+
+        // A settings type reached through a container shape this walk does not
+        // model would otherwise be skipped in silence, in the one test whose job
+        // is catching what the reference forgot.
+        Assert.True(
+            arguments.Length == 1 && type.GetGenericArguments() is [_],
+            $"Unmodelled container {type} holds settings; teach Walk how to descend into it.");
+        return arguments[0];
     }
 }

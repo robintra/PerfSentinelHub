@@ -59,7 +59,25 @@ public sealed class ConfigurationTests
             ValidOptions() with { MaxConcurrentPolls = 33 },
             ValidOptions() with { DefaultReadLimit = 0 },
             ValidOptions() with { MaxReadLimit = 10_001 },
-            ValidOptions() with { DefaultReadLimit = 101, MaxReadLimit = 100 }
+            ValidOptions() with { DefaultReadLimit = 101, MaxReadLimit = 100 },
+            // A run row has to outlive the report it produced: an expired run
+            // keeps its parameters so it can be relaunched as it stands.
+            ValidOptions() with
+            {
+                Analysis = new AnalysisOptions
+                {
+                    ReportRetention = TimeSpan.FromDays(2),
+                    RunRetention = TimeSpan.FromDays(1)
+                }
+            },
+            ValidOptions() with
+            {
+                Analysis = new AnalysisOptions
+                {
+                    ReportRetention = TimeSpan.FromDays(1),
+                    RunRetention = TimeSpan.FromDays(1)
+                }
+            }
         ];
 
         Assert.All(invalid, options =>

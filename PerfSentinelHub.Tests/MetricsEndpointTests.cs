@@ -3,6 +3,7 @@ using System.Net;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -198,7 +199,8 @@ public sealed class MetricsEndpointTests : IDisposable
         Assert.Contains("# TYPE perf_sentinel_hub_import_rejected_total counter", body, StringComparison.Ordinal);
         // A series that only appears on the first failure reads as a scrape gap,
         // and an alert cannot tell the two apart.
-        foreach (var reason in new[] { "bad_request", "unauthorized", "busy", "too_large" })
+        foreach (var reason in new[]
+                 { "bad_request", "unauthorized", "gate_full", "write_timeout", "too_large" })
         {
             Assert.Contains(
                 $"perf_sentinel_hub_import_rejected_total{{reason=\"{reason}\"}} 0",
@@ -230,6 +232,30 @@ public sealed class MetricsEndpointTests : IDisposable
         // would claim a push that never happened on a fleet that is merely quiet.
         Assert.Contains("# HELP perf_sentinel_hub_source_last_import_seconds ", body, StringComparison.Ordinal);
         Assert.DoesNotContain("perf_sentinel_hub_source_last_import_seconds{", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_push_gives_its_daemon_an_import_age()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = _factory.Services.GetRequiredService<HubDatabase>();
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
+            cancellationToken));
+        var pushedAt = DateTimeOffset.UtcNow.AddMinutes(-2).ToUnixTimeMilliseconds();
+        Assert.True(await database.TryUpsertBatchAsync(
+            new SourceSnapshot("checkout", "Checkout", "production", "0.11.2"),
+            batch,
+            pushedAt,
+            cancellationToken));
+
+        var body = await ScrapeAsync(cancellationToken);
+        // The push path, not the poll path: only TryUpsertBatchAsync writes here,
+        // and a poll must never make a daemon look like it pushed.
+        var age = Sample(body, "perf_sentinel_hub_source_last_import_seconds{source=\"checkout\"}");
+        Assert.InRange(age, 110, 180);
+        Assert.DoesNotContain("perf_sentinel_hub_source_last_import_seconds{source=\"tempo-eu\"}",
+            body, StringComparison.Ordinal);
     }
 
     private static double Sample(string body, string series)

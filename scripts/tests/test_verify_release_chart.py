@@ -84,6 +84,15 @@ class ChartVersionTests(unittest.TestCase):
                 f"name: perf-sentinel-hub\nversion: {VERSION}1\nappVersion: {VERSION}\n"
             )
 
+    def test_the_committed_chart_carries_the_pinned_image_helper(self):
+        helpers = (
+            REPOSITORY / "deploy/helm/perf-sentinel-hub/templates/_helpers.tpl"
+        ).read_text(encoding="utf-8")
+
+        # verify-release.py only ever sees the packaged chart, so without this
+        # the source and the pin drift until a tag is already cut.
+        self.assertIn(verify.IMAGE_HELPER, helpers)
+
 
 if __name__ == "__main__":
     unittest.main()

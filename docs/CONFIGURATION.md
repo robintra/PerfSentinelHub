@@ -40,7 +40,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 
 | Setting                          | Default  | Validation                                                                                                   |
 |----------------------------------|----------|--------------------------------------------------------------------------------------------------------------|
-| `Sources[].Id`                   | none     | Unique, 1 to 64 ASCII letters, digits, `.`, `_` or `-`                                                                                         |
+| `Sources[].Id`                   | none     | Unique, 1 to 64 ASCII letters, digits, `.`, `_` or `-`                                                       |
 | `Sources[].Name`                 | none     | Non-empty                                                                                                    |
 | `Sources[].Environment`          | none     | Non-empty                                                                                                    |
 | `Sources[].Kind`                 | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled, and only a daemon may carry an import key |

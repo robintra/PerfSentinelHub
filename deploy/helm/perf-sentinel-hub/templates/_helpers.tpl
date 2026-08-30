@@ -11,5 +11,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest) -}}
 {{- fail "image.digest must be an immutable sha256 digest" -}}
 {{- end -}}
+{{- if eq .Values.image.digest (printf "sha256:%s" (repeat 64 "0")) -}}
+{{- fail "image.digest is still the unstamped placeholder. Pass --set image.digest, or install the published chart, which carries a stamped one" -}}
+{{- end -}}
 {{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
 {{- end }}

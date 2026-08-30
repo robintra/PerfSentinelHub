@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- The chart refuses to render while `image.digest` is still the all-zero release placeholder, and
+  names the flag to pass. The placeholder satisfies the digest shape guard, so an install from a
+  checkout that forgot `--set image.digest` used to reach the cluster and fail there as
+  `ImagePullBackOff` rather than at `helm template`. A test now also asserts the committed chart
+  carries the image helper `scripts/verify-release.py` pins, which until now was compared only at
+  release time, against the packaged chart.
+
 ## [0.1.1] - 2026-08-30
 
 ### Changed

@@ -240,17 +240,39 @@ def compose_layout(
                 raise ValueError("OCI sources contain conflicting content for one digest")
             blobs[name] = content
 
+    index = json.dumps(
+        {
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "manifests": descriptors,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+    # The image index is a blob that index.json points at, never index.json itself.
+    # A digest resolves against a referenceable descriptor, so a consumer such as
+    # oras cannot find the image by digest in a layout whose index is only the
+    # entry file. root_manifests already reads this shape and reports the inner
+    # index's digest, which is the same value either way.
+    index_digest = hashlib.sha256(index).hexdigest()
     entries = {
         "oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
         INDEX_FILE: json.dumps(
             {
                 "schemaVersion": 2,
                 "mediaType": "application/vnd.oci.image.index.v1+json",
-                "manifests": descriptors,
+                "manifests": [
+                    {
+                        "mediaType": "application/vnd.oci.image.index.v1+json",
+                        "digest": f"sha256:{index_digest}",
+                        "size": len(index),
+                    }
+                ],
             },
             sort_keys=True,
             separators=(",", ":"),
         ).encode("ascii"),
+        f"blobs/sha256/{index_digest}": index,
         **blobs,
     }
     temporary_name = None

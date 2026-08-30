@@ -44,16 +44,26 @@ public static class MetricsEndpoint
         CancellationToken cancellationToken)
     {
         var states = await database.QuerySourceStatesAsync(cancellationToken);
-        var queued = await database.CountPendingRunsAsync(cancellationToken);
         var runs = await database.CountRunsByStatusAsync(cancellationToken);
         var now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+        // Read from the same snapshot as the per-status series rather than from
+        // a second query: two counts of the same rows taken a moment apart can
+        // disagree inside one scrape.
+        var queued = Runs(runs, AnalysisStatuses.Pending);
 
         var text = new StringBuilder();
         Family(text, "perf_sentinel_hub_build_info", "gauge", "The running version, always 1.");
+        // Escaped like any label value, though an assembly version cannot carry a
+        // reserved character.
         Line(text, "perf_sentinel_hub_build_info", $"version=\"{Escape(version)}\"", 1);
 
         // Only a daemon is polled, so reachability is meaningless for a trace
         // backend and no series is written for one.
+        //
+        // The three families below are three loops on purpose. Every sample of a
+        // family has to be contiguous, so merging them into one pass over the
+        // sources would interleave families and produce a scrape Prometheus
+        // rejects.
         var daemons = options.Sources.Where(source => source.Kind == SourceKinds.Daemon).ToList();
 
         Family(text, "perf_sentinel_hub_source_reachable", "gauge",
@@ -99,7 +109,7 @@ public static class MetricsEndpoint
         foreach (var status in AnalysisStatuses.All)
         {
             Line(text, "perf_sentinel_hub_analysis_runs", $"status=\"{status}\"",
-                runs.TryGetValue(status, out var count) ? count : 0);
+                Runs(runs, status));
         }
 
         return text.ToString();
@@ -124,7 +134,16 @@ public static class MetricsEndpoint
 
     private static string Label(string sourceId) => $"source=\"{Escape(sourceId)}\"";
 
+    /// <summary>
+    /// A stored timestamp ahead of the Hub's clock, from skew or from a restored
+    /// backup, clamps to zero. Zero here reads as "just now", which understates
+    /// an age rather than overstating it, so a duration alert can miss. The
+    /// alternative, publishing a negative age, breaks every threshold instead.
+    /// </summary>
     private static double Seconds(long milliseconds) => Math.Max(0, milliseconds) / 1000.0;
+
+    private static int Runs(IReadOnlyDictionary<string, int> runs, string status) =>
+        runs.TryGetValue(status, out var count) ? count : 0;
 
     /// <summary>
     /// Backslash, quote and newline, the three the exposition format reserves in

@@ -452,7 +452,11 @@ def validate_download_script(path: Path, root: Path, text: str, inventory: list[
 
 
 def structured_files(root: Path) -> list[Path]:
-    ignored = {".dotnet", ".git", "artifacts", "bin", "obj", "__pycache__"}
+    # node_modules holds the browser demo suite's dependencies. It is gitignored
+    # and never reaches CI, so its vendored workflows are not this repository's
+    # supply chain to declare; scanning it only fails the check on machines where
+    # someone ran npm install.
+    ignored = {".dotnet", ".git", "artifacts", "bin", "node_modules", "obj", "__pycache__"}
     return sorted(
         path
         for path in root.rglob("*")

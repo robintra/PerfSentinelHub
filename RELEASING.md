@@ -25,6 +25,14 @@ from it, and the MVID the native image embeds. Without that, two builds of one c
 are never byte identical and the duplicate-build comparison can never pass. A crash
 address still resolves to a function, not to a file and a line.
 
+The duplicate-build comparison covers every shipped file byte for byte, with one named
+exception: on `win-x64` the symbols archive is compared by its presence and not by its
+bytes, because `link.exe` writes a PDB that two builds of one commit do not agree on.
+`/Brepro` settles the PE header, which is why the runtime archive and the executable
+inside it do match, and it does not reach the PDB. Linux and macOS compare their symbols
+in full. `SHA256SUMS` is still compared on Windows, minus the single line naming that
+archive, so the runtime archive's digest stays pinned on all four targets.
+
 The same closed release also contains one multi-architecture Linux OCI image archive, one
 digest-bound Helm chart, an SPDX document and a Cosign bundle for every subject, plus
 GitHub provenance. `release-manifest.json` and `SHA256SUMS` bind the exact filenames,

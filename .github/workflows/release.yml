@@ -216,9 +216,24 @@ jobs:
           right = {path.name for path in Path('candidate-b').iterdir() if path.is_file()}
           if left != expected or right != expected:
               raise SystemExit('candidate file set differs from the exact native contract')
-          for name in sorted(expected):
+          # link.exe writes a PDB that is not byte stable between two builds of one
+          # commit. /Brepro settles the PE header, which is why the runtime archive is
+          # identical, but it does not reach the PDB. Linux and macOS compare their
+          # symbols in full, so the exclusion is scoped to this one RID and this one
+          # file, never to the runtime archive or the binary inside it. SHA256SUMS
+          # carries that file's digest, so on win-x64 its other lines are compared
+          # instead of the whole file, which still pins the runtime archive.
+          symbols = f'perf-sentinel-hub-{version}-{rid}-symbols.{extension}'
+          volatile = {symbols, 'SHA256SUMS'} if rid == 'win-x64' else set()
+          for name in sorted(expected - volatile):
               if hashlib.sha256((Path('candidate-a') / name).read_bytes()).digest() != hashlib.sha256((Path('candidate-b') / name).read_bytes()).digest():
                   raise SystemExit(f'{name}: duplicate build differs')
+          if volatile:
+              def pinned(side):
+                  lines = (Path(side) / 'SHA256SUMS').read_text().splitlines()
+                  return [line for line in lines if not line.endswith(symbols)]
+              if pinned('candidate-a') != pinned('candidate-b') or len(pinned('candidate-a')) != len(expected) - 2:
+                  raise SystemExit('SHA256SUMS: duplicate build differs outside the symbols entry')
           Path('verified').mkdir()
           for name in sorted(expected - {'SHA256SUMS'}):
               shutil.copyfile(Path('candidate-a') / name, Path('verified') / name)

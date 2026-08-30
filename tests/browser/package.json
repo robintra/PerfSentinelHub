@@ -1,0 +1,13 @@
+{
+  "name": "perf-sentinel-hub-browser",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright demo suite that captures the Hub launcher screens",
+  "scripts": {
+    "demo": "rm -rf demo-videos && playwright test --config playwright.demo.config.ts && bash demo/build-gif.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^24.12.2"
+  }
+}

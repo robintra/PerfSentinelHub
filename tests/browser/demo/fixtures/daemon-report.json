@@ -1,0 +1,578 @@
+{
+  "analysis": {
+    "duration_ms": 0,
+    "events_processed": 84,
+    "traces_analyzed": 11
+  },
+  "findings": [
+    {
+      "type": "n_plus_one_sql",
+      "severity": "critical",
+      "trace_id": "trace-demo-nplus-sql",
+      "service": "order-svc",
+      "source_endpoint": "POST /api/orders/42/submit",
+      "pattern": {
+        "template": "SELECT * FROM order_item WHERE order_id = ?",
+        "occurrences": 10,
+        "window_ms": 450,
+        "distinct_params": 10,
+        "span_duration_us_p50": 800,
+        "span_duration_us_p99": 900,
+        "span_duration_cv_x1000": 45
+      },
+      "suggestion": "Use `WHERE ... IN (?)` to batch 10 queries into one",
+      "first_timestamp": "2025-07-10T14:32:01.000Z",
+      "last_timestamp": "2025-07-10T14:32:01.450Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 9,
+        "io_intensity_score": 7.5,
+        "io_intensity_band": "high"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "OrderItemRepository.findByOrderId",
+        "filepath": "order-service/src/main/java/com/example/order/repository/OrderItemRepository.java",
+        "lineno": 42,
+        "namespace": "com.example.order.repository"
+      },
+      "signature": "n_plus_one_sql:order-svc:POST__api_orders_42_submit:c69d2f3ae7f5c6cdb2c6762367852ec7"
+    },
+    {
+      "type": "n_plus_one_http",
+      "severity": "warning",
+      "trace_id": "trace-demo-nplus-http",
+      "service": "order-svc",
+      "source_endpoint": "POST /api/orders/42/submit",
+      "pattern": {
+        "template": "GET user-svc/api/users/{id}",
+        "occurrences": 5,
+        "window_ms": 200,
+        "distinct_params": 5,
+        "span_duration_us_p50": 12000,
+        "span_duration_us_p99": 14000,
+        "span_duration_cv_x1000": 88
+      },
+      "suggestion": "Use a batch endpoint with `?ids=...` to batch 5 calls into one",
+      "first_timestamp": "2025-07-10T14:32:02.000Z",
+      "last_timestamp": "2025-07-10T14:32:02.200Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 4,
+        "io_intensity_score": 7.5,
+        "io_intensity_band": "high"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "UserClient.fetchUser",
+        "filepath": "order-service/src/main/java/com/example/order/client/UserClient.java",
+        "lineno": 87,
+        "namespace": "com.example.order.client"
+      },
+      "suggested_fix": {
+        "pattern": "n_plus_one_http",
+        "framework": "java_generic",
+        "recommendation": "Coalesce the calls into a batch endpoint, or cache the per-request results with `Spring`'s `@Cacheable` using a request-scoped cache.",
+        "reference_url": "https://docs.spring.io/spring-framework/reference/integration/cache.html"
+      },
+      "signature": "n_plus_one_http:order-svc:POST__api_orders_42_submit:cd80e7e97cf84255958943efe281962e"
+    },
+    {
+      "type": "n_plus_one_messaging",
+      "severity": "warning",
+      "trace_id": "trace-demo-messaging",
+      "service": "notify-svc",
+      "source_endpoint": "POST /api/orders/42/confirm",
+      "pattern": {
+        "template": "kafka order.events",
+        "occurrences": 6,
+        "window_ms": 150,
+        "distinct_params": 1,
+        "span_duration_us_p50": 2640,
+        "span_duration_us_p99": 3000,
+        "span_duration_cv_x1000": 76
+      },
+      "suggestion": "Send 6 messages as one batch instead of one publish per item",
+      "first_timestamp": "2025-07-10T14:32:20.100Z",
+      "last_timestamp": "2025-07-10T14:32:20.250Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 5,
+        "io_intensity_score": 6.0,
+        "io_intensity_band": "high"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "publishItem",
+        "filepath": "src/main/java/com/shop/notify/OrderEventPublisher.java",
+        "lineno": 64,
+        "namespace": "com.shop.notify.OrderEventPublisher"
+      },
+      "suggested_fix": {
+        "pattern": "n_plus_one_messaging",
+        "framework": "kafka",
+        "recommendation": "Let the producer batch: publish the records without calling `flush()` or blocking on each `send()` future, and tune `linger.ms` / `batch.size` so records to the same partition coalesce into one broker request.",
+        "reference_url": "https://docs.confluent.io/platform/current/installation/configuration/producer-configs.html"
+      },
+      "signature": "n_plus_one_messaging:notify-svc:POST__api_orders_42_confirm:f3b67952aac8de2a1a28e878ae6d46f5"
+    },
+    {
+      "type": "redundant_sql",
+      "severity": "info",
+      "trace_id": "trace-demo-redundant-sql",
+      "service": "cache-svc",
+      "source_endpoint": "GET /api/settings",
+      "pattern": {
+        "template": "SELECT * FROM settings WHERE key = ?",
+        "occurrences": 3,
+        "window_ms": 100,
+        "distinct_params": 1
+      },
+      "suggestion": "Identical operation executed 3 times: cache result or deduplicate",
+      "first_timestamp": "2025-07-10T14:32:03.000Z",
+      "last_timestamp": "2025-07-10T14:32:03.100Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 2,
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "SettingsRepository.findByKey",
+        "filepath": "cache-service/src/main/java/com/example/cache/repository/SettingsRepository.java",
+        "lineno": 31,
+        "namespace": "com.example.cache.repository"
+      },
+      "suggested_fix": {
+        "pattern": "redundant_sql",
+        "framework": "java_generic",
+        "recommendation": "Add a service-level cache (`Caffeine`, `Spring Cache`) or deduplicate the query within the request scope.",
+        "reference_url": "https://docs.spring.io/spring-framework/reference/integration/cache.html"
+      },
+      "signature": "redundant_sql:cache-svc:GET__api_settings:fc69ff1576a432e7dbd051866296ceaa"
+    },
+    {
+      "type": "redundant_http",
+      "severity": "info",
+      "trace_id": "trace-demo-redundant-http",
+      "service": "profile-svc",
+      "source_endpoint": "GET /api/profile/me",
+      "pattern": {
+        "template": "GET auth-svc/api/token/validate",
+        "occurrences": 3,
+        "window_ms": 100,
+        "distinct_params": 1
+      },
+      "suggestion": "Identical operation executed 3 times: cache result or deduplicate",
+      "first_timestamp": "2025-07-10T14:32:04.000Z",
+      "last_timestamp": "2025-07-10T14:32:04.100Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 2,
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "AuthClient.validateToken",
+        "filepath": "profile-service/src/main/java/com/example/profile/client/AuthClient.java",
+        "lineno": 64,
+        "namespace": "com.example.profile.client"
+      },
+      "suggested_fix": {
+        "pattern": "redundant_http",
+        "framework": "java_generic",
+        "recommendation": "Wrap the HTTP client in a request-scoped memoization layer (`Caffeine`, a `HashMap` on a request-scoped bean, or `Spring`'s `@Cacheable` with a request-scoped key) so identical calls return the cached response within the request.",
+        "reference_url": "https://github.com/ben-manes/caffeine"
+      },
+      "signature": "redundant_http:profile-svc:GET__api_profile_me:e167b77a3ea5f1ae4be4329f9c53d628"
+    },
+    {
+      "type": "slow_sql",
+      "severity": "warning",
+      "trace_id": "trace-demo-slow-sql",
+      "service": "reports-svc",
+      "source_endpoint": "GET /api/reports/monthly",
+      "pattern": {
+        "template": "SELECT * FROM reports WHERE month = ?",
+        "occurrences": 3,
+        "window_ms": 1600,
+        "distinct_params": 3,
+        "span_duration_us_p50": 720000,
+        "span_duration_us_p99": 750000,
+        "span_duration_cv_x1000": 40
+      },
+      "suggestion": "Consider adding an index or optimizing query",
+      "first_timestamp": "2025-07-10T14:32:05.000Z",
+      "last_timestamp": "2025-07-10T14:32:06.600Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 0,
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "ReportRepository.aggregateMonthly",
+        "filepath": "reports-service/src/main/java/com/example/reports/repository/ReportRepository.java",
+        "lineno": 128,
+        "namespace": "com.example.reports.repository"
+      },
+      "suggested_fix": {
+        "pattern": "slow_sql",
+        "framework": "java_generic",
+        "recommendation": "Profile with `EXPLAIN ANALYZE`. Add an index on the columns used in `WHERE` + `ORDER BY` when selectivity justifies it. If the plan is dominated by a nested loop on a large outer, rewrite to push the selective predicate first.",
+        "reference_url": "https://www.postgresql.org/docs/current/using-explain.html"
+      },
+      "signature": "slow_sql:reports-svc:GET__api_reports_monthly:a4b5db4724748c9affb0e10d1321ebca"
+    },
+    {
+      "type": "slow_http",
+      "severity": "warning",
+      "trace_id": "trace-demo-slow-http",
+      "service": "reports-svc",
+      "source_endpoint": "GET /api/reports/quarterly",
+      "pattern": {
+        "template": "GET analytics-svc/api/reports/quarterly/{id}",
+        "occurrences": 3,
+        "window_ms": 1700,
+        "distinct_params": 3,
+        "span_duration_us_p50": 780000,
+        "span_duration_us_p99": 820000,
+        "span_duration_cv_x1000": 65
+      },
+      "suggestion": "Consider caching or optimizing endpoint",
+      "first_timestamp": "2025-07-10T14:32:08.000Z",
+      "last_timestamp": "2025-07-10T14:32:09.700Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 0,
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      "confidence": "local_batch",
+      "code_location": {
+        "function": "BillingClient.fetchInvoices",
+        "filepath": "reports-service/src/main/java/com/example/reports/client/BillingClient.java",
+        "lineno": 95,
+        "namespace": "com.example.reports.client"
+      },
+      "suggested_fix": {
+        "pattern": "slow_http",
+        "framework": "java_generic",
+        "recommendation": "Profile the upstream's own `slow_sql` / `slow_http` findings first (the latency is usually upstream-side). On the client, wrap the call in a `Resilience4j` circuit breaker with a tight timeout, and cache the response when staleness tolerance allows.",
+        "reference_url": "https://resilience4j.readme.io/docs/circuitbreaker"
+      },
+      "signature": "slow_http:reports-svc:GET__api_reports_quarterly:159443f16f97c995c7d4c085220f4572"
+    },
+    {
+      "type": "excessive_fanout",
+      "severity": "warning",
+      "trace_id": "trace-demo-fanout",
+      "service": "checkout-svc",
+      "source_endpoint": "POST /api/checkout/confirm",
+      "pattern": {
+        "template": "SELECT ?",
+        "occurrences": 21,
+        "window_ms": 20,
+        "distinct_params": 21
+      },
+      "suggestion": "Parent span has 21 children (threshold: 20). Consider batching child operations to reduce fanout.",
+      "first_timestamp": "2025-07-10T14:32:11.010Z",
+      "last_timestamp": "2025-07-10T14:32:11.030Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 0,
+        "io_intensity_score": 22.0,
+        "io_intensity_band": "critical"
+      },
+      "confidence": "local_batch",
+      "signature": "excessive_fanout:checkout-svc:POST__api_checkout_confirm:66cbb3a40d4bbd150b75825ad291a654"
+    },
+    {
+      "type": "chatty_service",
+      "severity": "warning",
+      "trace_id": "trace-demo-chatty",
+      "service": "gateway-svc",
+      "source_endpoint": "GET /api/dashboard/home",
+      "pattern": {
+        "template": "GET /api/dashboard/home",
+        "occurrences": 16,
+        "window_ms": 300,
+        "distinct_params": 16
+      },
+      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET event-svc/api/events/upcoming x1, GET trade-svc/api/trades/pending x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
+      "first_timestamp": "2025-07-10T14:32:12.000Z",
+      "last_timestamp": "2025-07-10T14:32:12.300Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 0,
+        "io_intensity_score": 16.0,
+        "io_intensity_band": "critical"
+      },
+      "confidence": "local_batch",
+      "signature": "chatty_service:gateway-svc:GET__api_dashboard_home:dc7922ae7d890d0820ea0258e62b0063"
+    },
+    {
+      "type": "pool_saturation",
+      "severity": "warning",
+      "trace_id": "trace-demo-pool",
+      "service": "orders-svc",
+      "source_endpoint": "POST /api/orders/bulk",
+      "pattern": {
+        "template": "orders-svc",
+        "occurrences": 10,
+        "window_ms": 0,
+        "distinct_params": 10
+      },
+      "suggestion": "Potential connection pool saturation: service orders-svc has 10 concurrent SQL spans within 0ms window. Consider increasing the connection pool size, optimizing long-running queries or using connection pool metrics (db.client.connection.pool.*) for precise monitoring",
+      "first_timestamp": "2025-07-10T14:32:13.000Z",
+      "last_timestamp": "2025-07-10T14:32:13.000Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 0,
+        "io_intensity_score": 10.0,
+        "io_intensity_band": "critical"
+      },
+      "confidence": "local_batch",
+      "signature": "pool_saturation:orders-svc:POST__api_orders_bulk:225de5d9d670bf7f6506ce486e60029e"
+    },
+    {
+      "type": "serialized_calls",
+      "severity": "info",
+      "trace_id": "trace-demo-serialized",
+      "service": "dashboard-svc",
+      "source_endpoint": "GET /api/dashboard",
+      "pattern": {
+        "template": "GET /api/dashboard",
+        "occurrences": 3,
+        "window_ms": 180,
+        "distinct_params": 3
+      },
+      "suggestion": "3 sequential independent calls could potentially be parallelized: GET user-svc/api/users/{id} (80ms) -> GET order-svc/api/orders/{id} (85ms) -> GET notification-svc/api/notifications/{id} (75ms). Total sequential: 240ms, potential parallel: ~85ms. If these calls are independent, consider executing them in parallel (e.g., tokio::join!, CompletableFuture.allOf(), Task.WhenAll())",
+      "first_timestamp": "2025-07-10T14:32:14.000Z",
+      "last_timestamp": "2025-07-10T14:32:14.180Z",
+      "green_impact": {
+        "estimated_extra_io_ops": 0,
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      "confidence": "local_batch",
+      "signature": "serialized_calls:dashboard-svc:GET__api_dashboard:93aed6727189a479070abc5dcf787e3b"
+    }
+  ],
+  "green_summary": {
+    "total_io_ops": 84,
+    "avoidable_io_ops": 22,
+    "total_sql_io_ops": 33,
+    "avoidable_sql_io_ops": 11,
+    "total_messaging_io_ops": 6,
+    "avoidable_messaging_io_ops": 5,
+    "io_waste_ratio": 0.2619047619047619,
+    "io_waste_ratio_band": "moderate",
+    "top_offenders": [
+      {
+        "endpoint": "POST /api/checkout/confirm",
+        "service": "checkout-svc",
+        "io_intensity_score": 22.0,
+        "io_intensity_band": "critical"
+      },
+      {
+        "endpoint": "GET /api/dashboard/home",
+        "service": "gateway-svc",
+        "io_intensity_score": 16.0,
+        "io_intensity_band": "critical"
+      },
+      {
+        "endpoint": "POST /api/orders/bulk",
+        "service": "orders-svc",
+        "io_intensity_score": 10.0,
+        "io_intensity_band": "critical"
+      },
+      {
+        "endpoint": "POST /api/orders/42/submit",
+        "service": "order-svc",
+        "io_intensity_score": 7.5,
+        "io_intensity_band": "high"
+      },
+      {
+        "endpoint": "POST /api/orders/42/confirm",
+        "service": "notify-svc",
+        "io_intensity_score": 6.0,
+        "io_intensity_band": "high"
+      },
+      {
+        "endpoint": "GET /api/settings",
+        "service": "cache-svc",
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      {
+        "endpoint": "GET /api/dashboard",
+        "service": "dashboard-svc",
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      {
+        "endpoint": "GET /api/profile/me",
+        "service": "profile-svc",
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      {
+        "endpoint": "GET /api/reports/monthly",
+        "service": "reports-svc",
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      },
+      {
+        "endpoint": "GET /api/reports/quarterly",
+        "service": "reports-svc",
+        "io_intensity_score": 3.0,
+        "io_intensity_band": "moderate"
+      }
+    ],
+    "co2": {
+      "total": {
+        "low": 0.0055,
+        "mid": 0.011,
+        "high": 0.022,
+        "model": "io_proxy_v1",
+        "methodology": "sci_v1_numerator+transport"
+      },
+      "avoidable": {
+        "low": 0.0,
+        "mid": 0.0,
+        "high": 0.0,
+        "model": "io_proxy_v1",
+        "methodology": "sci_v1_operational_ratio"
+      },
+      "operational_gco2": 0.0,
+      "embodied_gco2": 0.011,
+      "sci_per_trace": {
+        "low": 0.0005,
+        "mid": 0.001,
+        "high": 0.002,
+        "model": "io_proxy_v1",
+        "methodology": "sci_v1_intensity"
+      },
+      "functional_unit": "trace"
+    },
+    "regions": [
+      {
+        "status": "unresolved",
+        "region": "unknown",
+        "grid_intensity_gco2_kwh": 0.0,
+        "pue": 0.0,
+        "io_ops": 84,
+        "co2_gco2": 0.0,
+        "intensity_source": "annual"
+      }
+    ],
+    "scoring_config": {
+      "api_version": "v4",
+      "emission_factor_type": "lifecycle",
+      "temporal_granularity": "hourly",
+      "electricity_maps": false,
+      "embodied_per_request_gco2": 0.001,
+      "network_energy_per_byte_kwh": 4e-11,
+      "per_operation_coefficients": true,
+      "use_hourly_profiles": true
+    },
+    "energy_kwh": 0.0,
+    "energy_model": ""
+  },
+  "quality_gate": {
+    "passed": false,
+    "rules": [
+      {
+        "rule": "n_plus_one_sql_critical_max",
+        "threshold": 0.0,
+        "actual": 1.0,
+        "passed": false
+      },
+      {
+        "rule": "n_plus_one_http_warning_max",
+        "threshold": 3.0,
+        "actual": 1.0,
+        "passed": true
+      },
+      {
+        "rule": "n_plus_one_messaging_warning_max",
+        "threshold": 3.0,
+        "actual": 1.0,
+        "passed": true
+      },
+      {
+        "rule": "io_waste_ratio_max",
+        "threshold": 0.3,
+        "actual": 0.2619047619047619,
+        "passed": true
+      }
+    ]
+  },
+  "per_endpoint_io_ops": [
+    {
+      "service": "cache-svc",
+      "endpoint": "GET /api/settings",
+      "io_ops": 3
+    },
+    {
+      "service": "checkout-svc",
+      "endpoint": "POST /api/checkout/confirm",
+      "io_ops": 22
+    },
+    {
+      "service": "dashboard-svc",
+      "endpoint": "GET /api/dashboard",
+      "io_ops": 3
+    },
+    {
+      "service": "gateway-svc",
+      "endpoint": "GET /api/dashboard/home",
+      "io_ops": 16
+    },
+    {
+      "service": "notify-svc",
+      "endpoint": "POST /api/orders/42/confirm",
+      "io_ops": 6
+    },
+    {
+      "service": "order-svc",
+      "endpoint": "POST /api/orders/42/submit",
+      "io_ops": 15
+    },
+    {
+      "service": "orders-svc",
+      "endpoint": "POST /api/orders/bulk",
+      "io_ops": 10
+    },
+    {
+      "service": "profile-svc",
+      "endpoint": "GET /api/profile/me",
+      "io_ops": 3
+    },
+    {
+      "service": "reports-svc",
+      "endpoint": "GET /api/reports/monthly",
+      "io_ops": 3
+    },
+    {
+      "service": "reports-svc",
+      "endpoint": "GET /api/reports/quarterly",
+      "io_ops": 3
+    }
+  ],
+  "binary_version": "0.17.0",
+  "detection_config": {
+    "n_plus_one_threshold": 5,
+    "window_ms": 500,
+    "slow_threshold_ms": 500,
+    "slow_min_occurrences": 3,
+    "max_fanout": 20,
+    "chatty_service_min_calls": 15,
+    "pool_saturation_concurrent_threshold": 10,
+    "serialized_min_sequential": 3,
+    "sanitizer_aware_classification": "auto"
+  },
+  "warnings": [
+    "ingest queue is undersized for the observed span rate"
+  ],
+  "warning_details": [
+    {
+      "kind": "tuning",
+      "message": "ingest queue is undersized for the observed span rate"
+    }
+  ]
+}

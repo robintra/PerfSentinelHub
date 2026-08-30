@@ -85,11 +85,11 @@ Labels sit in a `#0D0A14` chip with `rx=8`, text about 30.
 
 **The dash carries meaning, and it is the easiest thing to lose:**
 
-- **Solid** — a flow that is always on.
-- **Dashed, green, with a 25% to 100% opacity gradient along its length** — an
+- **Solid**: a flow that is always on.
+- **Dashed, green, with a 25% to 100% opacity gradient along its length**: an
   on-demand pull. Dash pattern `20 20`, width 10.
-- **Dashed border** — a human, not a system.
-- **Dashed circle** — a zone boundary, or a decorative orbit.
+- **Dashed border**: a human, not a system.
+- **Dashed circle**: a zone boundary, or a decorative orbit.
 
 ## What to draw
 

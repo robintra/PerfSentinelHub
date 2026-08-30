@@ -4,6 +4,15 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Changed
+
+- The image carries the perf-sentinel 0.17.0 engine instead of 0.16.0. That release fixes
+  `tempo` and `jaeger-query` dropping the spans they had already correlated, which are the two
+  subcommands a run against a trace backend invokes, so such a report now carries span trees
+  where 0.1.0 rendered none. It also bounds the cross-trace correlator's refused-pair set, which
+  could OOM a daemon on a wide topology. The engine's own defaults are unchanged between the two
+  versions, so the table `GET /api/sources/{sourceId}/daemon` compares against still holds.
+
 ### Fixed
 
 - `image.repository` defaults to `ghcr.io/robintra/perf-sentinel-hub` rather than the bare name

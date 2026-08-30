@@ -161,6 +161,26 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
+    /// How many runs sit in each status the table currently holds. Retention
+    /// deletes rows, so these are current counts and never monotonic totals.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, int>> CountRunsByStatusAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT status, COUNT(*) FROM analysis_runs GROUP BY status;";
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            counts[reader.GetString(0)] = reader.GetInt32(1);
+        }
+
+        return counts;
+    }
+
+    /// <summary>
     /// Marks every run left running by a previous process as interrupted. The
     /// Hub never replays one on its own: a silent retry would fire a second
     /// heavy query at a backend nobody asked to query twice.

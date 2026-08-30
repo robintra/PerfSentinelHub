@@ -64,6 +64,14 @@ public static class AnalysisStatuses
     public const string Failed = "failed";
     public const string Interrupted = "interrupted";
     public const string Expired = "expired";
+
+    /// <summary>
+    /// Every status, so a reader can emit a series for each one. A gauge that
+    /// vanishes when it reaches zero reads as a scrape failure rather than as
+    /// "nothing is in that state".
+    /// </summary>
+    public static readonly string[] All =
+        [Pending, Running, Succeeded, Failed, Interrupted, Expired];
 }
 
 /// <summary>

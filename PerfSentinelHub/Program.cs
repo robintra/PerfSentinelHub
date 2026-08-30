@@ -102,6 +102,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapHubApi();
 app.MapAnalysisApi();
+app.MapMetrics();
 
 await app.RunAsync();
 return 0;

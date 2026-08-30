@@ -28,12 +28,7 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            var workers = services.Where(descriptor =>
-                descriptor.ServiceType == typeof(IHostedService) &&
-                descriptor.ImplementationType is { } type &&
-                (type == typeof(PollWorker) || type == typeof(RetentionWorker))).ToArray();
-            foreach (var worker in workers)
-                services.Remove(worker);
+            RemoveBackgroundWorkers(services);
 
             services.PostConfigure<HubOptions>(options =>
             {
@@ -64,4 +59,20 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
         File.Delete($"{_databasePath}-shm");
         File.Delete($"{_databasePath}-wal");
     }
+
+    /// <summary>
+    /// Drops the polling and retention workers so a test observes only what it
+    /// writes itself. Both run within milliseconds of startup, so leaving them in
+    /// makes any assertion on <c>source_state</c> a race against the first poll.
+    /// </summary>
+    internal static void RemoveBackgroundWorkers(IServiceCollection services)
+    {
+        var workers = services.Where(descriptor =>
+            descriptor.ServiceType == typeof(IHostedService) &&
+            descriptor.ImplementationType is { } type &&
+            (type == typeof(PollWorker) || type == typeof(RetentionWorker))).ToArray();
+        foreach (var worker in workers)
+            services.Remove(worker);
+    }
+
 }

@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -18,6 +20,8 @@ public sealed class MetricsEndpointTests : IDisposable
     {
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
+            {
+                HubApplicationFactory.RemoveBackgroundWorkers(services);
                 services.PostConfigure<HubOptions>(options =>
                 {
                     options.DatabasePath = _databasePath;
@@ -41,7 +45,8 @@ public sealed class MetricsEndpointTests : IDisposable
                             BaseUrl = new Uri("http://127.0.0.1:3")
                         }
                     ];
-                })));
+                });
+            }));
         _client = _factory.CreateClient();
     }
 
@@ -143,16 +148,43 @@ public sealed class MetricsEndpointTests : IDisposable
         Assert.DoesNotContain("perf_sentinel_hub_source_last_success_seconds{", body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task An_unreachable_daemon_reports_a_duration_and_loses_its_reachability()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = _factory.Services.GetRequiredService<HubDatabase>();
+        var failedAt = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds();
+        await database.MarkSourceFailureAsync("checkout", failedAt, "network_error", cancellationToken);
+
+        var body = await ScrapeAsync(cancellationToken);
+        Assert.Contains("perf_sentinel_hub_source_reachable{source=\"checkout\"} 0", body, StringComparison.Ordinal);
+
+        // Seconds, not milliseconds: five minutes has to read as roughly 300,
+        // which is what a duration threshold is written against.
+        var seconds = Sample(body, "perf_sentinel_hub_source_unreachable_seconds{source=\"checkout\"}");
+        Assert.InRange(seconds, 290, 360);
+    }
+
+    [Fact]
+    public async Task The_queue_depth_sample_matches_the_pending_run_count()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(
+            Sample(body, "perf_sentinel_hub_analysis_runs{status=\"pending\"}"),
+            Sample(body, "perf_sentinel_hub_analysis_queue_depth"));
+    }
+
+    private static double Sample(string body, string series)
+    {
+        var line = body.Split('\n').Single(l => l.StartsWith(series + " ", StringComparison.Ordinal));
+        return double.Parse(line[(series.Length + 1)..], CultureInfo.InvariantCulture);
+    }
+
     public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
-        SqliteConnectionCleanup();
-    }
-
-    private void SqliteConnectionCleanup()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { "", "-wal", "-shm" })
         {
             var path = _databasePath + suffix;

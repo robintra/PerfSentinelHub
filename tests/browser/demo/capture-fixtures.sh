@@ -65,7 +65,8 @@ stored = [{"finding": f,
 (out / "daemon-findings.json").write_text(json.dumps(stored, indent=2) + "\n")
 
 base = json.loads((work / "status.json").read_text())
-busy = base | {"uptime_seconds": 864_000, "active_traces": 912, "max_active_traces": 1000,
+# 888_120 s is 10 d 6 h 42 m: a round uptime would hide the units the gauge shows.
+busy = base | {"uptime_seconds": 888_120, "active_traces": 912, "max_active_traces": 1000,
                "analysis_queue_depth": 41, "analysis_queue_capacity": 1024,
                "stored_findings": len(stored), "max_retained_findings": 10_000}
 # One minor behind the Hub's own engine, on purpose: a fleet where every daemon
@@ -75,7 +76,8 @@ busy = base | {"uptime_seconds": 864_000, "active_traces": 912, "max_active_trac
 major, minor, *_ = (base["version"].split(".") + ["0", "0"])[:3]
 behind = f"{major}.{max(int(minor) - 1, 0)}.0"
 calm = base | {"version": behind,
-               "uptime_seconds": 259_200, "active_traces": 128, "max_active_traces": 1000,
+               # 263_220 s is 3 d 1 h 7 m.
+               "uptime_seconds": 263_220, "active_traces": 128, "max_active_traces": 1000,
                "analysis_queue_depth": 2, "analysis_queue_capacity": 1024,
                "stored_findings": 4, "max_retained_findings": 10_000}
 (out / "daemon-status-busy.json").write_text(json.dumps(busy, indent=2) + "\n")

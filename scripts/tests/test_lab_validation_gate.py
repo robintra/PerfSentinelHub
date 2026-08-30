@@ -10,7 +10,7 @@ operator relies on before tagging.
 import subprocess
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -27,11 +27,12 @@ def run(version, ledger=None):
 
 
 def ledger_with(*lines):
-    handle = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
-    handle.write("# test ledger\n")
-    for line in lines:
-        handle.write(line + "\n")
-    handle.close()
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".txt", delete=False, encoding="utf-8"
+    ) as handle:
+        handle.write("# test ledger\n")
+        for line in lines:
+            handle.write(line + "\n")
     return Path(handle.name)
 
 
@@ -43,7 +44,7 @@ def utc_today():
     """The ledger's dates are UTC on both sides, the recorder writes `date -u`
     and the gate reads `date -u`. Local time drifts a day ahead of it for a
     couple of hours a night, which the gate rightly refuses as a future date."""
-    return datetime.now(timezone.utc).date()
+    return datetime.now(UTC).date()
 
 
 class LabValidationGate(unittest.TestCase):

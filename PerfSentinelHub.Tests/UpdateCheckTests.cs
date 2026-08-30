@@ -43,7 +43,10 @@ public sealed class UpdateCheckTests
         [
             new() { Interval = TimeSpan.FromMinutes(1) },
             new() { EngineEndpoint = new Uri("http://api.github.com/x") },
-            new() { EngineEndpoint = new Uri("https://user:pass@api.github.com/x") },
+            // Userinfo without a password: the validator refuses any of it, and a
+            // literal user:pass here is a credential shape every secret scanner
+            // is right to stop on.
+            new() { EngineEndpoint = new Uri("https://someone@api.github.com/x") },
             new() { HubEndpoint = new Uri("https://api.github.com/x?token=secret") },
             new() { HubEndpoint = new Uri("https://api.github.com/x#frag") }
         ];

@@ -512,7 +512,15 @@ jobs:
           tar -xzf tools/gitleaks.tar.gz -C tools gitleaks
           tar -xzf tools/trufflehog.tar.gz -C tools trufflehog
           tools/gitleaks dir --no-banner --redact "$GITHUB_WORKSPACE/candidate"
-          tools/trufflehog filesystem --no-update --fail "$GITHUB_WORKSPACE/candidate"
+          # Lob's test keys are `test_` and thirty-five more characters, which is
+          # every Python test name of exactly forty characters this repository
+          # writes, and TruffleHog reports the match as a verified key. One such
+          # name exists today, under scripts/tests. Renaming it fixes that one
+          # name and leaves the next one to be discovered by a red pull request,
+          # so the detector goes rather than the name. Nothing here talks to Lob,
+          # a postal mail API, so dropping it costs no coverage this repository
+          # could use.
+          tools/trufflehog filesystem --no-update --fail --exclude-detectors=lob "$GITHUB_WORKSPACE/candidate"
 
   action-pins:
     name: Action pin validation

@@ -3,7 +3,7 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "identity": null,
       "engine_version": "0.17.0",
       "latest_engine_version": null,

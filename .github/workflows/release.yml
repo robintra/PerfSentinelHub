@@ -391,7 +391,7 @@ jobs:
           path: native
       - name: Create the SPDX output directory
         run: mkdir -p sbom
-      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           file: native/perf-sentinel-hub-${{ needs.metadata.outputs.version }}-${{ matrix.suffix }}
           format: spdx-json
@@ -503,7 +503,7 @@ jobs:
           severity: HIGH,CRITICAL
           cache: false
           skip-setup-trivy: true
-      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: oci-archive:release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.oci.tar
           format: spdx-json
@@ -574,7 +574,7 @@ jobs:
           helm package chart-b --destination dist-b
           cmp "dist-a/perf-sentinel-hub-$VERSION.tgz" "dist-b/perf-sentinel-hub-$VERSION.tgz"
           cp "dist-a/perf-sentinel-hub-$VERSION.tgz" release/
-      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           file: release/perf-sentinel-hub-${{ needs.metadata.outputs.version }}.tgz
           format: spdx-json

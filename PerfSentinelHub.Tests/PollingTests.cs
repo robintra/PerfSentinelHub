@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,6 +17,19 @@ public sealed class PollingTests : IDisposable
         Path.GetTempPath(),
         $"perf-sentinel-hub-poll-{Guid.NewGuid():N}.db");
 
+    private static string FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "Fixtures",
+        "daemon-findings-0.11.2.json");
+
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+        File.Delete($"{_databasePath}-shm");
+        File.Delete($"{_databasePath}-wal");
+    }
+
     [Fact]
     public async Task Poll_uses_the_daemon_contract_and_persists_success()
     {
@@ -23,7 +38,8 @@ public sealed class PollingTests : IDisposable
         var requests = new List<(string Path, string? Auth)>();
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
-            requests.Add(($"{context.Request.Path}{context.Request.QueryString}", context.Request.Headers.Authorization));
+            requests.Add(
+                ($"{context.Request.Path}{context.Request.QueryString}", context.Request.Headers.Authorization));
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsJsonAsync(new { version = "0.11.2" }, cancellationToken);
             else if (context.Request.Path == "/api/findings")
@@ -71,9 +87,9 @@ public sealed class PollingTests : IDisposable
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT producer_version, unreachable_since_ms, last_error_code
-            FROM source_state WHERE source_id = 'prod';
-            """;
+                              SELECT producer_version, unreachable_since_ms, last_error_code
+                              FROM source_state WHERE source_id = 'prod';
+                              """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.Equal("0.11.2", reader.GetString(0));
@@ -85,11 +101,11 @@ public sealed class PollingTests : IDisposable
     public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var fixture = System.Text.Json.JsonDocument.Parse(await File.ReadAllBytesAsync(
+        using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
             FixturePath,
             cancellationToken));
         var finding = fixture.RootElement[0].GetRawText();
-        var payload = System.Text.Encoding.UTF8.GetBytes(
+        var payload = Encoding.UTF8.GetBytes(
             $"[{string.Join(',', Enumerable.Repeat(finding, 1000))}]");
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
@@ -144,6 +160,7 @@ public sealed class PollingTests : IDisposable
                     await Task.Delay(Timeout.InfiniteTimeSpan, context.RequestAborted);
                     return;
             }
+
             if (context.Request.Path == "/api/status")
             {
                 await context.Response.WriteAsync(
@@ -151,6 +168,7 @@ public sealed class PollingTests : IDisposable
                     cancellationToken);
                 return;
             }
+
             if (mode == "large")
             {
                 var oversized = new byte[16 * 1024 * 1024 + 1];
@@ -158,6 +176,7 @@ public sealed class PollingTests : IDisposable
                 await context.Response.Body.WriteAsync(oversized, cancellationToken);
                 return;
             }
+
             await context.Response.WriteAsync("{}", cancellationToken);
         }, cancellationToken);
         var options = new HubOptions
@@ -213,6 +232,7 @@ public sealed class PollingTests : IDisposable
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 return;
             }
+
             if (context.Request.Path == "/api/status")
                 await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
             else if (context.Request.Path == "/api/findings")
@@ -242,26 +262,12 @@ public sealed class PollingTests : IDisposable
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT unreachable_since_ms, last_error_code
-            FROM source_state WHERE source_id = 'recovering';
-            """;
+                              SELECT unreachable_since_ms, last_error_code
+                              FROM source_state WHERE source_id = 'recovering';
+                              """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.True(reader.IsDBNull(0));
         Assert.True(reader.IsDBNull(1));
     }
-
-    public void Dispose()
-    {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
-        File.Delete($"{_databasePath}-shm");
-        File.Delete($"{_databasePath}-wal");
-    }
-
-    private static string FixturePath => Path.Combine(
-        AppContext.BaseDirectory,
-        "Fixtures",
-        "daemon-findings-0.11.2.json");
-
 }

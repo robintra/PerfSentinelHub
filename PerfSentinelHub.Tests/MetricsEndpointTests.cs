@@ -11,11 +11,12 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class MetricsEndpointTests : IDisposable
 {
+    private readonly HttpClient _client;
+
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(), $"perf-sentinel-hub-metrics-{Guid.NewGuid():N}.db");
 
     private readonly WebApplicationFactory<Program> _factory;
-    private readonly HttpClient _client;
 
     public MetricsEndpointTests()
     {
@@ -51,6 +52,18 @@ public sealed class MetricsEndpointTests : IDisposable
         _client = _factory.CreateClient();
     }
 
+    public void Dispose()
+    {
+        _client.Dispose();
+        _factory.Dispose();
+        SqliteConnection.ClearAllPools();
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+        {
+            var path = _databasePath + suffix;
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
     private async Task<string> ScrapeAsync(CancellationToken cancellationToken)
     {
         using var response = await _client.GetAsync("/metrics", cancellationToken);
@@ -64,14 +77,14 @@ public sealed class MetricsEndpointTests : IDisposable
     {
         var body = await ScrapeAsync(TestContext.Current.CancellationToken);
         foreach (var family in new[]
-        {
-            "perf_sentinel_hub_build_info",
-            "perf_sentinel_hub_source_reachable",
-            "perf_sentinel_hub_source_unreachable_seconds",
-            "perf_sentinel_hub_source_last_success_seconds",
-            "perf_sentinel_hub_analysis_queue_depth",
-            "perf_sentinel_hub_analysis_runs"
-        })
+                 {
+                     "perf_sentinel_hub_build_info",
+                     "perf_sentinel_hub_source_reachable",
+                     "perf_sentinel_hub_source_unreachable_seconds",
+                     "perf_sentinel_hub_source_last_success_seconds",
+                     "perf_sentinel_hub_analysis_queue_depth",
+                     "perf_sentinel_hub_analysis_runs"
+                 })
         {
             Assert.Contains($"# HELP {family} ", body, StringComparison.Ordinal);
             Assert.Contains($"# TYPE {family} gauge", body, StringComparison.Ordinal);
@@ -132,14 +145,17 @@ public sealed class MetricsEndpointTests : IDisposable
         var options = new HubOptions
         {
             DatabasePath = "/tmp/unused.db",
-            Sources = [new SourceOptions
-            {
-                Id = id,
-                Name = "n",
-                Environment = "e",
-                Kind = SourceKinds.Daemon,
-                BaseUrl = new Uri("http://127.0.0.1:1")
-            }]
+            Sources =
+            [
+                new SourceOptions
+                {
+                    Id = id,
+                    Name = "n",
+                    Environment = "e",
+                    Kind = SourceKinds.Daemon,
+                    BaseUrl = new Uri("http://127.0.0.1:1")
+                }
+            ]
         };
 
         var result = new HubOptionsValidator().Validate(null, options);
@@ -153,9 +169,8 @@ public sealed class MetricsEndpointTests : IDisposable
         // A gauge that vanishes at zero reads as a scrape failure rather than as
         // "nothing is in that state".
         foreach (var status in AnalysisStatuses.All)
-        {
-            Assert.Contains($"perf_sentinel_hub_analysis_runs{{status=\"{status}\"}} 0", body, StringComparison.Ordinal);
-        }
+            Assert.Contains($"perf_sentinel_hub_analysis_runs{{status=\"{status}\"}} 0", body,
+                StringComparison.Ordinal);
     }
 
     [Fact]
@@ -200,13 +215,11 @@ public sealed class MetricsEndpointTests : IDisposable
         // A series that only appears on the first failure reads as a scrape gap,
         // and an alert cannot tell the two apart.
         foreach (var reason in new[]
-                 { "bad_request", "unauthorized", "gate_full", "write_timeout", "too_large" })
-        {
+                     { "bad_request", "unauthorized", "gate_full", "write_timeout", "too_large" })
             Assert.Contains(
                 $"perf_sentinel_hub_import_rejected_total{{reason=\"{reason}\"}} 0",
                 body,
                 StringComparison.Ordinal);
-        }
     }
 
     [Fact]
@@ -262,20 +275,5 @@ public sealed class MetricsEndpointTests : IDisposable
     {
         var line = body.Split('\n').Single(l => l.StartsWith(series + " ", StringComparison.Ordinal));
         return double.Parse(line[(series.Length + 1)..], CultureInfo.InvariantCulture);
-    }
-
-    public void Dispose()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-        SqliteConnection.ClearAllPools();
-        foreach (var suffix in new[] { "", "-wal", "-shm" })
-        {
-            var path = _databasePath + suffix;
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
     }
 }

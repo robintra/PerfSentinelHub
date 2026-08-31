@@ -3,10 +3,10 @@ using PerfSentinelHub.Collection;
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-/// How a daemon reads at a glance. The daemon writes its own recommendations,
-/// from counters the Hub never sees, so nothing here produces one: the only
-/// thing derived is whether a gauge crossed the line the daemon's own advisor
-/// uses, which it publishes a value and a cap for but never a ratio.
+///     How a daemon reads at a glance. The daemon writes its own recommendations,
+///     from counters the Hub never sees, so nothing here produces one: the only
+///     thing derived is whether a gauge crossed the line the daemon's own advisor
+///     uses, which it publishes a value and a cap for but never a ratio.
 /// </summary>
 public static class DaemonView
 {
@@ -21,10 +21,13 @@ public static class DaemonView
     public const string Unknown = "unknown";
     public const string Ok = "ok";
 
-    public static DaemonGauges Read(DaemonStatus status) => new(
-        Gauge(status.ActiveTraces, status.MaxActiveTraces),
-        Gauge(status.AnalysisQueueDepth, status.AnalysisQueueCapacity),
-        Gauge(status.StoredFindings, status.MaxRetainedFindings));
+    public static DaemonGauges Read(DaemonStatus status)
+    {
+        return new DaemonGauges(
+            Gauge(status.ActiveTraces, status.MaxActiveTraces),
+            Gauge(status.AnalysisQueueDepth, status.AnalysisQueueCapacity),
+            Gauge(status.StoredFindings, status.MaxRetainedFindings));
+    }
 
     public static string Classify(DaemonStatus? status, int warningCount, bool hintsKnown)
     {
@@ -61,9 +64,9 @@ public static class DaemonView
 }
 
 /// <summary>
-/// One figure against the cap it runs into. Pct is null when either side is
-/// unknown, which keeps the ratio out of the state rules instead of letting a
-/// missing cap read as room to spare.
+///     One figure against the cap it runs into. Pct is null when either side is
+///     unknown, which keeps the ratio out of the state rules instead of letting a
+///     missing cap read as room to spare.
 /// </summary>
 public sealed record DaemonGauge(long? Value, long? Capacity, double? Pct, bool AtCapacity);
 

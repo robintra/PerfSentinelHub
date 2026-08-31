@@ -5,16 +5,14 @@ using PerfSentinelHub.Collection;
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-/// Writes a daemon's own account of itself on the wire.
-///
-/// The three configuration sections are re-emitted verbatim rather than
-/// modelled: the allowlist behind them is the daemon's work, not the Hub's, and
-/// a model here would silently drop every field a later engine minor adds.
-///
-/// Going through a Utf8JsonWriter is also what keeps this off HubJsonContext.
-/// Returning a record from the endpoint instead would route serialization back
-/// through the ASP.NET options and need a [JsonSerializable] entry, whose
-/// absence fails at runtime under AOT publish only and never under dotnet run.
+///     Writes a daemon's own account of itself on the wire.
+///     The three configuration sections are re-emitted verbatim rather than
+///     modelled: the allowlist behind them is the daemon's work, not the Hub's, and
+///     a model here would silently drop every field a later engine minor adds.
+///     Going through a Utf8JsonWriter is also what keeps this off HubJsonContext.
+///     Returning a record from the endpoint instead would route serialization back
+///     through the ASP.NET options and need a [JsonSerializable] entry, whose
+///     absence fails at runtime under AOT publish only and never under dotnet run.
 /// </summary>
 public static class DaemonViewWriter
 {
@@ -70,10 +68,10 @@ public static class DaemonViewWriter
     }
 
     /// <summary>
-    /// The status-only refresh body: the gauges and nothing that cannot change
-    /// without a restart. No state either, deliberately: state folds in the
-    /// daemon's hints, which a light read does not carry, so the page derives
-    /// it from these gauges plus the hints of its last full read.
+    ///     The status-only refresh body: the gauges and nothing that cannot change
+    ///     without a restart. No state either, deliberately: state folds in the
+    ///     daemon's hints, which a light read does not carry, so the page derives
+    ///     it from these gauges plus the hints of its last full read.
     /// </summary>
     public static async Task WriteLightAsync(
         HttpResponse response,
@@ -121,11 +119,11 @@ public static class DaemonViewWriter
     }
 
     /// <summary>
-    /// Every string that reaches this method was already validated by a parse
-    /// upstream: the endpoint's shape checks for the config, GetRawText of a
-    /// parsed element for the sections, and the defaults a test pins. So it is
-    /// written with the writer's own single validation pass and no second
-    /// document, which is what a 5-second refresh cadence asks for.
+    ///     Every string that reaches this method was already validated by a parse
+    ///     upstream: the endpoint's shape checks for the config, GetRawText of a
+    ///     parsed element for the sections, and the defaults a test pins. So it is
+    ///     written with the writer's own single validation pass and no second
+    ///     document, which is what a 5-second refresh cadence asks for.
     /// </summary>
     private static void WriteRawOrNull(Utf8JsonWriter writer, string name, string? json)
     {
@@ -136,15 +134,13 @@ public static class DaemonViewWriter
         }
 
         writer.WritePropertyName(name);
-        writer.WriteRawValue(json, skipInputValidation: false);
+        writer.WriteRawValue(json);
     }
-
-
 }
 
 /// <summary>
-/// What one daemon reported, already classified. The configuration sections
-/// stay as raw JSON text: they are relayed, never read by the Hub.
+///     What one daemon reported, already classified. The configuration sections
+///     stay as raw JSON text: they are relayed, never read by the Hub.
 /// </summary>
 public sealed record DaemonViewData(
     string SourceId,

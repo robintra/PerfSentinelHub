@@ -5,13 +5,21 @@ using PerfSentinelHub.Configuration;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// What the operator asked for, in the shape the launcher submits it. The
-/// engine's own exclusions are enforced here rather than discovered as a
-/// non-zero exit: a trace ID resolves to one trace so no window applies to it,
-/// and a relative window conflicts with an absolute one.
+///     What the operator asked for, in the shape the launcher submits it. The
+///     engine's own exclusions are enforced here rather than discovered as a
+///     non-zero exit: a trace ID resolves to one trace so no window applies to it,
+///     and a relative window conflicts with an absolute one.
 /// </summary>
 public sealed record AnalysisRequest
 {
+    private const int MaxServiceLength = 256;
+    private const int MaxTraceIdLength = 64;
+    public const string AuthTokenVariable = "PERF_SENTINEL_SOURCE_TOKEN";
+
+    private const int DefaultMaxTraces = 100;
+
+    private static readonly JsonElement EmptyObject = ParseEmptyObject();
+
     // What the operator asked for, read only by the checks and the argument
     // builder below. Nothing outside needs a field of the request: callers take
     // the whole thing and ask it for a command line.
@@ -23,19 +31,11 @@ public sealed record AnalysisRequest
     private int? MaxTraces { get; init; }
 
     /// <summary>
-    /// Thresholds the operator moved for this run. Never set on a daemon: a
-    /// daemon detects with its own configuration and the Hub only reads what it
-    /// already found, so a threshold sent here would change nothing.
+    ///     Thresholds the operator moved for this run. Never set on a daemon: a
+    ///     daemon detects with its own configuration and the Hub only reads what it
+    ///     already found, so a threshold sent here would change nothing.
     /// </summary>
     public DetectionOverrides Detection { get; private init; } = new();
-
-    private const int MaxServiceLength = 256;
-    private const int MaxTraceIdLength = 64;
-    public const string AuthTokenVariable = "PERF_SENTINEL_SOURCE_TOKEN";
-
-    private const int DefaultMaxTraces = 100;
-
-    private static readonly JsonElement EmptyObject = ParseEmptyObject();
 
     /// <summary>Clone detaches the element, so the document's pooled buffer goes back.</summary>
     private static JsonElement ParseEmptyObject()
@@ -45,8 +45,8 @@ public sealed record AnalysisRequest
     }
 
     /// <summary>
-    /// Parses and validates a submitted request against the source it targets.
-    /// Returns null and an operator-facing reason when the pair cannot run.
+    ///     Parses and validates a submitted request against the source it targets.
+    ///     Returns null and an operator-facing reason when the pair cannot run.
     /// </summary>
     public static AnalysisRequest? TryParse(
         JsonElement payload,
@@ -90,15 +90,15 @@ public sealed record AnalysisRequest
     }
 
     /// <summary>
-    /// The engine arguments this request becomes, for the subcommand matching
-    /// the source kind. Never called for a daemon: a snapshot is an HTTP read.
+    ///     The engine arguments this request becomes, for the subcommand matching
+    ///     the source kind. Never called for a daemon: a snapshot is an HTTP read.
     /// </summary>
     public IReadOnlyList<string> ToEngineArguments(SourceOptions source, string? configPath)
     {
         var arguments = new List<string>
         {
             source.EngineSubcommand
-                ?? throw new InvalidOperationException("A daemon is read over HTTP, never queried by the engine."),
+            ?? throw new InvalidOperationException("A daemon is read over HTTP, never queried by the engine."),
             "--endpoint",
             source.EndpointArgument,
             "--format",
@@ -147,18 +147,20 @@ public sealed record AnalysisRequest
         return arguments;
     }
 
-    private static string? ValidateDaemon(AnalysisRequest request) =>
-        request.Detection.IsEmpty &&
-        request.Service is null &&
-        request.TraceId is null &&
-        request.Lookback is null &&
-        request.FromMs is null &&
-        request.ToMs is null &&
-        request.MaxTraces is null
+    private static string? ValidateDaemon(AnalysisRequest request)
+    {
+        return request.Detection.IsEmpty &&
+               request.Service is null &&
+               request.TraceId is null &&
+               request.Lookback is null &&
+               request.FromMs is null &&
+               request.ToMs is null &&
+               request.MaxTraces is null
             ? null
             // A daemon snapshot is whatever it holds in memory right now.
             // Asking for a window would be a request the source cannot answer.
             : "A daemon snapshot takes no parameters, and detects with its own configuration.";
+    }
 
     private static string? ValidateBackend(AnalysisRequest request, AnalysisOptions analysis, long nowMs)
     {
@@ -203,6 +205,7 @@ public sealed record AnalysisRequest
                 ? null
                 : "A lookback is a number followed by d, h, m or s, for example 90m.";
         }
+
         if (request.FromMs is not { } fromMs || request.ToMs is not { } toMs)
             return "An absolute window needs both from_ms and to_ms.";
         if (fromMs >= toMs)
@@ -210,40 +213,52 @@ public sealed record AnalysisRequest
         return toMs > nowMs ? "The window's end cannot be in the future." : null;
     }
 
-    private static string? ValidateMaxTraces(AnalysisRequest request, AnalysisOptions analysis) =>
-        request.MaxTraces is not { } maxTraces || (maxTraces >= 1 && maxTraces <= analysis.MaxTracesCap)
+    private static string? ValidateMaxTraces(AnalysisRequest request, AnalysisOptions analysis)
+    {
+        return request.MaxTraces is not { } maxTraces || (maxTraces >= 1 && maxTraces <= analysis.MaxTracesCap)
             ? null
             : $"max_traces must be between 1 and {analysis.MaxTracesCap}.";
+    }
 
-    private static bool IsLookback(string value) =>
-        value.Length is >= 2 and <= 8 &&
-        value[^1] is 'd' or 'h' or 'm' or 's' &&
-        value[..^1].All(char.IsAsciiDigit) &&
-        value[..^1].TrimStart('0').Length > 0;
+    private static bool IsLookback(string value)
+    {
+        return value.Length is >= 2 and <= 8 &&
+               value[^1] is 'd' or 'h' or 'm' or 's' &&
+               value[..^1].All(char.IsAsciiDigit) &&
+               value[..^1].TrimStart('0').Length > 0;
+    }
 
-    private static string ToIso8601(long epochMs) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(epochMs)
+    private static string ToIso8601(long epochMs)
+    {
+        return DateTimeOffset.FromUnixTimeMilliseconds(epochMs)
             .UtcDateTime
             .ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+    }
 
-    private static string? ReadString(JsonElement payload, string name) =>
-        payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+    private static string? ReadString(JsonElement payload, string name)
+    {
+        return payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+    }
 
     // TryGetInt64 throws on a non-number element rather than returning false,
     // so the kind check is load-bearing, not defensive.
-    private static long? ReadLong(JsonElement payload, string name) =>
-        payload.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.Number &&
-        value.TryGetInt64(out var parsed)
+    private static long? ReadLong(JsonElement payload, string name)
+    {
+        return payload.TryGetProperty(name, out var value) &&
+               value.ValueKind == JsonValueKind.Number &&
+               value.TryGetInt64(out var parsed)
             ? parsed
             : null;
+    }
 
-    private static int? ReadInt(JsonElement payload, string name) =>
-        payload.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.Number &&
-        value.TryGetInt32(out var parsed)
+    private static int? ReadInt(JsonElement payload, string name)
+    {
+        return payload.TryGetProperty(name, out var value) &&
+               value.ValueKind == JsonValueKind.Number &&
+               value.TryGetInt32(out var parsed)
             ? parsed
             : null;
+    }
 }

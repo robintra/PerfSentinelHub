@@ -11,6 +11,11 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
 
     private readonly HttpClient _client = factory.CreateClient();
 
+    private static string FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "Fixtures",
+        "daemon-findings-0.11.2.json");
+
     [Fact]
     public async Task Findings_filters_and_preserves_opaque_fields_with_additive_metadata()
     {
@@ -147,7 +152,8 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             FindingType = "slow_sql",
             TraceId = "other-trace",
             EnvelopeJson = original.EnvelopeJson
-                .Replace("blocking_wait:rider-smoke:checkout:slow-path", "slow_sql:other:query", StringComparison.Ordinal)
+                .Replace("blocking_wait:rider-smoke:checkout:slow-path", "slow_sql:other:query",
+                    StringComparison.Ordinal)
                 .Replace("rider-trace-file-line", "other-trace", StringComparison.Ordinal)
                 .Replace("\"type\": \"blocking_wait\"", "\"type\": \"slow_sql\"", StringComparison.Ordinal)
                 .Replace("\"service\": \"rider-smoke\"", "\"service\": \"other\"", StringComparison.Ordinal)
@@ -158,9 +164,4 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             3000,
             cancellationToken);
     }
-
-    private static string FixturePath => Path.Combine(
-        AppContext.BaseDirectory,
-        "Fixtures",
-        "daemon-findings-0.11.2.json");
 }

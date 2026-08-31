@@ -1,16 +1,17 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Collection;
 
 /// <summary>
-/// What a daemon says about itself right now. Version stays mandatory, it is
-/// what the poller records as the producer version, so a body without one is
-/// still an InvalidStatusException. The gauges are optional: a capacity is null
-/// when the field is missing or zero, because a capacity of zero is not a
-/// capacity but an unknown.
+///     What a daemon says about itself right now. Version stays mandatory, it is
+///     what the poller records as the producer version, so a body without one is
+///     still an InvalidStatusException. The gauges are optional: a capacity is null
+///     when the field is missing or zero, because a capacity of zero is not a
+///     capacity but an unknown.
 /// </summary>
 public sealed record DaemonStatus(
     string Version,
@@ -53,9 +54,9 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     }
 
     /// <summary>
-    /// The effective [daemon] section. Null when the daemon answers 404: the
-    /// endpoint only exists with `[daemon] api_enabled = true`, and both cases
-    /// are "nothing to show" rather than a failure.
+    ///     The effective [daemon] section. Null when the daemon answers 404: the
+    ///     endpoint only exists with `[daemon] api_enabled = true`, and both cases
+    ///     are "nothing to show" rather than a failure.
     /// </summary>
     public async Task<byte[]?> FetchConfigAsync(
         SourceOptions source,
@@ -71,44 +72,57 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         }
     }
 
-    private static DaemonStatus ReadStatus(JsonElement root, string version) => new(
-        version,
-        ReadGauge(root, "uptime_seconds"),
-        ReadGauge(root, "active_traces"),
-        ReadCapacity(root, "max_active_traces"),
-        ReadDepth(root, "analysis_queue_depth"),
-        ReadCapacity(root, "analysis_queue_capacity"),
-        ReadGauge(root, "stored_findings"),
-        ReadCapacity(root, "max_retained_findings"));
+    private static DaemonStatus ReadStatus(JsonElement root, string version)
+    {
+        return new DaemonStatus(
+            version,
+            ReadGauge(root, "uptime_seconds"),
+            ReadGauge(root, "active_traces"),
+            ReadCapacity(root, "max_active_traces"),
+            ReadDepth(root, "analysis_queue_depth"),
+            ReadCapacity(root, "analysis_queue_capacity"),
+            ReadGauge(root, "stored_findings"),
+            ReadCapacity(root, "max_retained_findings"));
+    }
 
-    private static long? ReadGauge(JsonElement root, string name) =>
-        Api.JsonRead.ReadLong(root, name);
+    private static long? ReadGauge(JsonElement root, string name)
+    {
+        return JsonRead.ReadLong(root, name);
+    }
 
     // Normalised here rather than at every reader: a capacity of zero and an
     // absent one are the same question, and only one of them has to be asked.
-    private static long? ReadCapacity(JsonElement root, string name) =>
-        ReadGauge(root, name) is { } capacity and > 0 ? capacity : null;
+    private static long? ReadCapacity(JsonElement root, string name)
+    {
+        return ReadGauge(root, name) is { } capacity and > 0 ? capacity : null;
+    }
 
     // The queue depth travels as a signed Prometheus gauge and can dip below
     // zero between a pop and its decrement.
-    private static long? ReadDepth(JsonElement root, string name) =>
-        ReadGauge(root, name) is { } depth ? Math.Max(0, depth) : null;
+    private static long? ReadDepth(JsonElement root, string name)
+    {
+        return ReadGauge(root, name) is { } depth ? Math.Max(0, depth) : null;
+    }
 
     /// <summary>
-    /// The daemon's own rendered report, whatever it holds in memory right
-    /// now. Carries its own timeout: an export is heavier than a status read,
-    /// and reporting a slow daemon as unreachable would name the wrong owner.
+    ///     The daemon's own rendered report, whatever it holds in memory right
+    ///     now. Carries its own timeout: an export is heavier than a status read,
+    ///     and reporting a slow daemon as unreachable would name the wrong owner.
     /// </summary>
     public Task<byte[]> FetchReportSnapshotAsync(
         SourceOptions source,
         TimeSpan timeout,
-        CancellationToken cancellationToken) =>
-        SendAsync(source, "api/export/report", cancellationToken, timeout);
+        CancellationToken cancellationToken)
+    {
+        return SendAsync(source, "api/export/report", cancellationToken, timeout);
+    }
 
     public Task<byte[]> FetchFindingsAsync(
         SourceOptions source,
-        CancellationToken cancellationToken) =>
-        SendAsync(source, $"api/findings?limit={FindingsLimit}&include_acked=true", cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        return SendAsync(source, $"api/findings?limit={FindingsLimit}&include_acked=true", cancellationToken);
+    }
 
     private async Task<byte[]> SendAsync(
         SourceOptions source,
@@ -145,6 +159,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
                     throw new ResponseTooLargeException();
                 await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
             }
+
             return output.ToArray();
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -172,7 +187,12 @@ public sealed class ResponseTooLargeException()
 
 public sealed class InvalidStatusException : IOException
 {
-    public InvalidStatusException() : base("The daemon status response is invalid.") { }
+    public InvalidStatusException() : base("The daemon status response is invalid.")
+    {
+    }
+
     public InvalidStatusException(Exception innerException)
-        : base("The daemon status response is invalid.", innerException) { }
+        : base("The daemon status response is invalid.", innerException)
+    {
+    }
 }

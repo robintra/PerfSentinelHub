@@ -37,14 +37,17 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
                 // factory, so it carries no ImplementationType for the filter
                 // above to match, and one flag stops it before its first request.
                 options.UpdateCheck = new UpdateCheckOptions { Enabled = false };
-                options.Sources = [new SourceOptions
-                {
-                    Id = "test",
-                    Name = "Test",
-                    Environment = "test",
-                    BaseUrl = new Uri("http://127.0.0.1:1"),
-                    ImportApiKey = "0123456789abcdef0123456789abcdef" // gitleaks:allow -- synthetic test credential
-                }];
+                options.Sources =
+                [
+                    new SourceOptions
+                    {
+                        Id = "test",
+                        Name = "Test",
+                        Environment = "test",
+                        BaseUrl = new Uri("http://127.0.0.1:1"),
+                        ImportApiKey = "0123456789abcdef0123456789abcdef" // gitleaks:allow -- synthetic test credential
+                    }
+                ];
             });
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
@@ -61,9 +64,9 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    /// Drops the polling and retention workers so a test observes only what it
-    /// writes itself. Both run within milliseconds of startup, so leaving them in
-    /// makes any assertion on <c>source_state</c> a race against the first poll.
+    ///     Drops the polling and retention workers so a test observes only what it
+    ///     writes itself. Both run within milliseconds of startup, so leaving them in
+    ///     makes any assertion on <c>source_state</c> a race against the first poll.
     /// </summary>
     internal static void RemoveBackgroundWorkers(IServiceCollection services)
     {
@@ -74,5 +77,4 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
         foreach (var worker in workers)
             services.Remove(worker);
     }
-
 }

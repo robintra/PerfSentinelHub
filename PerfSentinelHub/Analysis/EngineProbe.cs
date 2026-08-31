@@ -5,10 +5,10 @@ using PerfSentinelHub.Configuration;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// Reads the version of the perf-sentinel binary the Hub runs, and whether it
-/// takes `--daemon-url`, once, at startup and before the listener opens. A
-/// missing or unusable binary leaves the version null and the Hub starts
-/// anyway: collection and the read API do not depend on it.
+///     Reads the version of the perf-sentinel binary the Hub runs, and whether it
+///     takes `--daemon-url`, once, at startup and before the listener opens. A
+///     missing or unusable binary leaves the version null and the Hub starts
+///     anyway: collection and the read API do not depend on it.
 /// </summary>
 public sealed partial class EngineProbe(
     IOptions<HubOptions> options,
@@ -34,11 +34,11 @@ public sealed partial class EngineProbe(
     public string? Version { get; private set; }
 
     /// <summary>
-    /// Whether this binary's `report` accepts `--daemon-url`, which is what
-    /// makes a daemon's report live rather than a photograph. False until
-    /// probed, and false whenever the probe could not answer: the cost of
-    /// being wrong that way is a static report, where being wrong the other
-    /// way is a run that renders nothing.
+    ///     Whether this binary's `report` accepts `--daemon-url`, which is what
+    ///     makes a daemon's report live rather than a photograph. False until
+    ///     probed, and false whenever the probe could not answer: the cost of
+    ///     being wrong that way is a static report, where being wrong the other
+    ///     way is a run that renders nothing.
     /// </summary>
     public bool SupportsDaemonUrl { get; private set; }
 
@@ -83,7 +83,10 @@ public sealed partial class EngineProbe(
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
 
     private static async Task<string?> RunVersionAsync(
         string path,
@@ -96,9 +99,9 @@ public sealed partial class EngineProbe(
     }
 
     /// <summary>
-    /// Asks the binary itself rather than inferring it from the version: two
-    /// binaries of the same version differ here if they were built with
-    /// different features.
+    ///     Asks the binary itself rather than inferring it from the version: two
+    ///     binaries of the same version differ here if they were built with
+    ///     different features.
     /// </summary>
     private static async Task<bool> ReadsDaemonUrlAsync(
         string path,

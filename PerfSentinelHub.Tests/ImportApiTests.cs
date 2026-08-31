@@ -12,6 +12,12 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
     private const string ApiKey = "0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
     private readonly HttpClient _client = factory.CreateClient();
 
+
+    private static string FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "Fixtures",
+        "daemon-findings-0.11.2.json");
+
     [Theory]
     [InlineData(null)]
     [InlineData("wrong-key")]
@@ -99,7 +105,7 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
             Assert.Equal("1", response.Headers.RetryAfter?.Delta?.TotalSeconds.ToString(CultureInfo.InvariantCulture) ??
-                response.Headers.GetValues("Retry-After").Single());
+                              response.Headers.GetValues("Retry-After").Single());
         }
         finally
         {
@@ -121,9 +127,9 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
         await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT unreachable_since_ms, last_error_code, producer_version
-            FROM source_state WHERE source_id = 'test';
-            """;
+                              SELECT unreachable_since_ms, last_error_code, producer_version
+                              FROM source_state WHERE source_id = 'test';
+                              """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.False(reader.IsDBNull(0));
@@ -147,8 +153,8 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
                 $"{signaturePrefix}-{index}",
                 StringComparison.Ordinal));
         var payload = $$"""
-            {"producer_version":"0.11.2","findings":[{{string.Join(',', findings)}}]}
-            """;
+                        {"producer_version":"0.11.2","findings":[{{string.Join(',', findings)}}]}
+                        """;
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/import/findings?source_id=test")
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -157,10 +163,4 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
             request.Headers.Add("X-API-Key", apiKey);
         return request;
     }
-
-
-    private static string FixturePath => Path.Combine(
-        AppContext.BaseDirectory,
-        "Fixtures",
-        "daemon-findings-0.11.2.json");
 }

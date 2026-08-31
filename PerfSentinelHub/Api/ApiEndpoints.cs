@@ -38,8 +38,10 @@ public static partial class ApiEndpoints
                     (int)analysis.Timeout.TotalSeconds,
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded),
-                [.. DetectionOverrides.Schema
-                    .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))]);
+                [
+                    .. DetectionOverrides.Schema
+                        .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))
+                ]);
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
@@ -57,28 +59,31 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         var states = await database.QuerySourceStatesAsync(cancellationToken);
-        return [.. options.Value.Sources.Select(source =>
-        {
-            states.TryGetValue(source.Id, out var state);
-            return new SourceResponse(
-                source.Id,
-                source.Name,
-                source.Environment,
-                source.Kind,
-                source.RetentionHours,
-                // A source that has never failed is reachable, including one
-                // that has never been observed at all: the Hub has no evidence
-                // against it, and a trace backend is never polled.
-                state?.UnreachableSinceMs is null,
-                state?.LastAttemptMs,
-                state?.LastSuccessMs,
-                state?.UnreachableSinceMs,
-                state?.ProducerVersion,
-                state?.LastErrorCode,
-                source.EndpointArgument,
-                source.EngineSubcommand,
-                source.AuthHeaderName);
-        })];
+        return
+        [
+            .. options.Value.Sources.Select(source =>
+            {
+                states.TryGetValue(source.Id, out var state);
+                return new SourceResponse(
+                    source.Id,
+                    source.Name,
+                    source.Environment,
+                    source.Kind,
+                    source.RetentionHours,
+                    // A source that has never failed is reachable, including one
+                    // that has never been observed at all: the Hub has no evidence
+                    // against it, and a trace backend is never polled.
+                    state?.UnreachableSinceMs is null,
+                    state?.LastAttemptMs,
+                    state?.LastSuccessMs,
+                    state?.UnreachableSinceMs,
+                    state?.ProducerVersion,
+                    state?.LastErrorCode,
+                    source.EndpointArgument,
+                    source.EngineSubcommand,
+                    source.AuthHeaderName);
+            })
+        ];
     }
 
     private static async Task<IResult> ImportFindingsAsync(
@@ -229,8 +234,10 @@ public static partial class ApiEndpoints
         return true;
     }
 
-    private static string? ReadOptional(HttpRequest request, string name) =>
-        request.Query.TryGetValue(name, out var value) ? value[0] : null;
+    private static string? ReadOptional(HttpRequest request, string name)
+    {
+        return request.Query.TryGetValue(name, out var value) ? value[0] : null;
+    }
 
     private static bool HasValidUtf8(string? rawQuery)
     {
@@ -240,11 +247,11 @@ public static partial class ApiEndpoints
         var bytes = new List<byte>(rawQuery.Length);
         var index = 0;
         while (index < rawQuery.Length)
-        {
             if (rawQuery[index] == '%')
             {
                 if (index + 2 >= rawQuery.Length ||
-                    !byte.TryParse(rawQuery.AsSpan(index + 1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+                    !byte.TryParse(rawQuery.AsSpan(index + 1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture,
+                        out var value))
                     return false;
                 bytes.Add(value);
                 index += 3;
@@ -254,7 +261,6 @@ public static partial class ApiEndpoints
                 bytes.AddRange(Encoding.UTF8.GetBytes(rawQuery[index].ToString()));
                 index++;
             }
-        }
 
         try
         {

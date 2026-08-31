@@ -114,7 +114,10 @@ public sealed class ConfigurationTests
     [Fact]
     public void Import_key_is_trimmed_like_the_daemon_trims_its_key_file()
     {
-        var source = ValidSource() with { ImportApiKey = "0123456789abcdef0123456789abcdef\n" }; // gitleaks:allow -- synthetic test credential
+        var source = ValidSource() with
+        {
+            ImportApiKey = "0123456789abcdef0123456789abcdef\n"
+        }; // gitleaks:allow -- synthetic test credential
         var options = ValidOptions() with { Sources = [source] };
 
         Assert.Equal("0123456789abcdef0123456789abcdef", source.ImportApiKey);
@@ -228,29 +231,38 @@ public sealed class ConfigurationTests
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
             {
                 options.DatabasePath = Path.Combine(Path.GetTempPath(), $"hub-{Guid.NewGuid():N}.db");
-                options.Sources = [new SourceOptions
-                {
-                    Id = "prod",
-                    Name = "Production",
-                    Environment = "prod",
-                    BaseUrl = new Uri("file:///tmp/x")
-                }];
+                options.Sources =
+                [
+                    new SourceOptions
+                    {
+                        Id = "prod",
+                        Name = "Production",
+                        Environment = "prod",
+                        BaseUrl = new Uri("file:///tmp/x")
+                    }
+                ];
             })));
 
         Assert.Throws<OptionsValidationException>(factory.CreateClient);
     }
 
-    internal static HubOptions ValidOptions() => new()
+    internal static HubOptions ValidOptions()
     {
-        DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db"),
-        Sources = [ValidSource()]
-    };
+        return new HubOptions
+        {
+            DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db"),
+            Sources = [ValidSource()]
+        };
+    }
 
-    private static SourceOptions ValidSource() => new()
+    private static SourceOptions ValidSource()
     {
-        Id = "prod",
-        Name = "Production",
-        Environment = "prod",
-        BaseUrl = new Uri("https://daemon.example")
-    };
+        return new SourceOptions
+        {
+            Id = "prod",
+            Name = "Production",
+            Environment = "prod",
+            BaseUrl = new Uri("https://daemon.example")
+        };
+    }
 }

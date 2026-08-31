@@ -20,8 +20,8 @@ public sealed record StatusResponse(
     IReadOnlyList<DetectionKnob> DetectionKnobs);
 
 /// <summary>
-/// What a run costs, reported rather than assumed: the launcher shows these
-/// four figures next to the button instead of guessing them.
+///     What a run costs, reported rather than assumed: the launcher shows these
+///     four figures next to the button instead of guessing them.
 /// </summary>
 public sealed record StatusLimits(
     int MaxTracesCap,
@@ -32,9 +32,9 @@ public sealed record StatusLimits(
 public sealed record DetectionKnob(string Name, int Min, int Max, int Default);
 
 /// <summary>
-/// A configured source joined to its last known collection state. The
-/// timestamps are null for a source that has never been observed, so the
-/// launcher can say "never polled" instead of showing the epoch.
+///     A configured source joined to its last known collection state. The
+///     timestamps are null for a source that has never been observed, so the
+///     launcher can say "never polled" instead of showing the epoch.
 /// </summary>
 public sealed record SourceResponse(
     string Id,

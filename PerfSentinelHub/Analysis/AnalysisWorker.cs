@@ -7,9 +7,9 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// Drains the run queue. Nothing here retries: a run the service lost is
-/// reported as interrupted and waits for a human, because a silent replay
-/// would fire a second heavy query at a backend nobody asked to query twice.
+///     Drains the run queue. Nothing here retries: a run the service lost is
+///     reported as interrupted and waits for a human, because a silent replay
+///     would fire a second heavy query at a backend nobody asked to query twice.
 /// </summary>
 public sealed partial class AnalysisWorker(
     HubDatabase database,
@@ -21,6 +21,7 @@ public sealed partial class AnalysisWorker(
     // Polled rather than signalled. A queue this shallow does not earn a
     // wake-up channel, and polling survives a restart with no state to rebuild.
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(1);
+
     // A report's lifetime is counted down in the interface, so the sweep has
     // to be finer than the lifetime itself or a dead link keeps answering.
     private static readonly TimeSpan ExpirySweepInterval = TimeSpan.FromMinutes(1);
@@ -49,7 +50,6 @@ public sealed partial class AnalysisWorker(
     private async Task DrainAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
-        {
             try
             {
                 if (!await TryRunOneAsync(cancellationToken))
@@ -66,13 +66,12 @@ public sealed partial class AnalysisWorker(
                 LogDrainFailed(logger, exception);
                 await Task.Delay(IdleDelay, timeProvider, CancellationToken.None);
             }
-        }
     }
 
     /// <summary>
-    /// Deletes the reports whose lifetime ran out and marks their runs expired.
-    /// The row itself stays, holding its parameters: the most common next
-    /// action is to run the same thing again.
+    ///     Deletes the reports whose lifetime ran out and marks their runs expired.
+    ///     The row itself stays, holding its parameters: the most common next
+    ///     action is to run the same thing again.
     /// </summary>
     private async Task SweepExpiredReportsAsync(CancellationToken cancellationToken)
     {

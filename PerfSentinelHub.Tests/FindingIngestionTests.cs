@@ -1,7 +1,9 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -13,6 +15,19 @@ public sealed class FindingIngestionTests : IDisposable
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-ingestion-{Guid.NewGuid():N}.db");
+
+    private static string FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "Fixtures",
+        "daemon-findings-0.11.2.json");
+
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+        File.Delete($"{_databasePath}-shm");
+        File.Delete($"{_databasePath}-wal");
+    }
 
     [Fact]
     public async Task Parser_preserves_the_opaque_envelope_and_indexes_required_fields()
@@ -131,7 +146,7 @@ public sealed class FindingIngestionTests : IDisposable
         // A seconds-unit bug: the same instant, a thousand times smaller.
         var seconds = fixture.RootElement[0].GetRawText()
             .Replace("1786183200000", "1786183200", StringComparison.Ordinal);
-        var payload = System.Text.Encoding.UTF8.GetBytes($"[{seconds}]");
+        var payload = Encoding.UTF8.GetBytes($"[{seconds}]");
 
         var batch = FindingParser.Parse(payload);
 
@@ -146,7 +161,7 @@ public sealed class FindingIngestionTests : IDisposable
             FixturePath,
             TestContext.Current.CancellationToken));
         var valid = fixture.RootElement[0].GetRawText();
-        var payload = System.Text.Encoding.UTF8.GetBytes($"[{valid},{{\"finding\":{{}}}},{valid}]");
+        var payload = Encoding.UTF8.GetBytes($"[{valid},{{\"finding\":{{}}}},{valid}]");
 
         var batch = FindingParser.Parse(payload);
 
@@ -164,11 +179,12 @@ public sealed class FindingIngestionTests : IDisposable
         await using (var trigger = connection.CreateCommand())
         {
             trigger.CommandText = """
-                CREATE TRIGGER fail_finding_source BEFORE INSERT ON finding_sources
-                BEGIN SELECT RAISE(ABORT, 'test rollback'); END;
-                """;
+                                  CREATE TRIGGER fail_finding_source BEFORE INSERT ON finding_sources
+                                  BEGIN SELECT RAISE(ABORT, 'test rollback'); END;
+                                  """;
             await trigger.ExecuteNonQueryAsync(cancellationToken);
         }
+
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
 
         await Assert.ThrowsAsync<SqliteException>(() => database.UpsertBatchAsync(
@@ -259,7 +275,7 @@ public sealed class FindingIngestionTests : IDisposable
         await database.UpsertBatchAsync(source, new ParsedBatch([third], 0), 3000, cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
-            new Api.FindingQuery(null, null, null, 100), cancellationToken);
+            new FindingQuery(null, null, null, 100), cancellationToken);
 
         // v2 replaced v1, so only v3 keeps a live predecessor chain of 2.
         var successor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
@@ -269,9 +285,9 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     /// <summary>
-    /// CREATE TABLE IF NOT EXISTS is a no-op on an existing table, so a
-    /// database written before the denormalization must be upgraded in
-    /// place rather than left with the old three-column lineage table.
+    ///     CREATE TABLE IF NOT EXISTS is a no-op on an existing table, so a
+    ///     database written before the denormalization must be upgraded in
+    ///     place rather than left with the old three-column lineage table.
     /// </summary>
     [Fact]
     public async Task Initialize_adds_the_lineage_columns_to_a_pre_denormalization_database()
@@ -282,16 +298,16 @@ public sealed class FindingIngestionTests : IDisposable
             await seed.OpenAsync(cancellationToken);
             await using var create = seed.CreateCommand();
             create.CommandText = """
-                CREATE TABLE finding_lineage (
-                  successor_signature TEXT NOT NULL,
-                  predecessor_signature TEXT NOT NULL,
-                  predecessor_first_seen_ms INTEGER NOT NULL,
-                  linked_at_ms INTEGER NOT NULL,
-                  method TEXT NOT NULL,
-                  PRIMARY KEY(successor_signature, predecessor_signature)
-                );
-                INSERT INTO finding_lineage VALUES ('v2', 'v1', 1000, 2000, 'endpoint_template');
-                """;
+                                 CREATE TABLE finding_lineage (
+                                   successor_signature TEXT NOT NULL,
+                                   predecessor_signature TEXT NOT NULL,
+                                   predecessor_first_seen_ms INTEGER NOT NULL,
+                                   linked_at_ms INTEGER NOT NULL,
+                                   method TEXT NOT NULL,
+                                   PRIMARY KEY(successor_signature, predecessor_signature)
+                                 );
+                                 INSERT INTO finding_lineage VALUES ('v2', 'v1', 1000, 2000, 'endpoint_template');
+                                 """;
             await create.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -313,17 +329,17 @@ public sealed class FindingIngestionTests : IDisposable
         // accept the insert the production path issues.
         await using var insert = connection.CreateCommand();
         insert.CommandText = """
-            INSERT INTO finding_lineage(
-              successor_signature, predecessor_signature, predecessor_first_seen_ms,
-              origin_first_seen_ms, depth, linked_at_ms, method)
-            VALUES ('v3', 'v2', 2000, 1000, 2, 3000, 'endpoint_template');
-            """;
+                             INSERT INTO finding_lineage(
+                               successor_signature, predecessor_signature, predecessor_first_seen_ms,
+                               origin_first_seen_ms, depth, linked_at_ms, method)
+                             VALUES ('v3', 'v2', 2000, 1000, 2, 3000, 'endpoint_template');
+                             """;
         Assert.Equal(1, await insert.ExecuteNonQueryAsync(cancellationToken));
     }
 
     /// <summary>
-    /// The chain's origin is denormalized at link time, so purging the
-    /// intermediate hop must not shorten the surviving finding's lineage.
+    ///     The chain's origin is denormalized at link time, so purging the
+    ///     intermediate hop must not shorten the surviving finding's lineage.
     /// </summary>
     [Fact]
     public async Task Lineage_survives_the_purge_of_an_intermediate_hop()
@@ -352,7 +368,7 @@ public sealed class FindingIngestionTests : IDisposable
         await database.PurgeAsync(2500, 0, cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
-            new Api.FindingQuery(null, null, null, 100), cancellationToken);
+            new FindingQuery(null, null, null, 100), cancellationToken);
         var survivor = Assert.Single(rows, row => row.Signature == "blocking_wait:rider-smoke:checkout:v3");
         Assert.NotNull(survivor.Lineage);
         Assert.Equal(2, survivor.Lineage.Predecessors);
@@ -360,9 +376,9 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     /// <summary>
-    /// A heartbeat from a source that never carried the finding proves
-    /// nothing about the source that did: the status must stay
-    /// not_observed while the witnessing source is silent.
+    ///     A heartbeat from a source that never carried the finding proves
+    ///     nothing about the source that did: the status must stay
+    ///     not_observed while the witnessing source is silent.
     /// </summary>
     [Fact]
     public async Task Status_ignores_heartbeats_from_sources_that_never_saw_the_finding()
@@ -394,7 +410,7 @@ public sealed class FindingIngestionTests : IDisposable
             cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
-            new Api.FindingQuery(null, null, null, 100), cancellationToken);
+            new FindingQuery(null, null, null, 100), cancellationToken);
         Assert.Equal(
             "not_observed",
             Assert.Single(rows, row => row.Signature == batch.Findings[0].Signature).Status);
@@ -411,7 +427,7 @@ public sealed class FindingIngestionTests : IDisposable
         await database.InitializeAsync(cancellationToken);
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
         var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
-        var query = new Api.FindingQuery(null, null, null, 100);
+        var query = new FindingQuery(null, null, null, 100);
 
         var seededAt = clock.GetUtcNow().ToUnixTimeMilliseconds();
         await database.UpsertBatchAsync(source, batch, seededAt, cancellationToken);
@@ -478,18 +494,21 @@ public sealed class FindingIngestionTests : IDisposable
             cancellationToken);
 
         var active = await database.QueryFindingsAsync(
-            new Api.FindingQuery(null, null, null, 1, Status: "active"), cancellationToken);
+            new FindingQuery(null, null, null, 1, Status: "active"), cancellationToken);
         Assert.Equal("blocking_wait:rider-smoke:checkout:fresh", Assert.Single(active).Signature);
 
         var resolved = await database.QueryFindingsAsync(
-            new Api.FindingQuery(null, null, null, 1, Status: "likely_resolved"),
+            new FindingQuery(null, null, null, 1, Status: "likely_resolved"),
             cancellationToken);
         Assert.Equal(batch.Findings[0].Signature, Assert.Single(resolved).Signature);
     }
 
-    private HubDatabase CreateDatabase() => new(
-        Options.Create(new HubOptions { DatabasePath = _databasePath }),
-        TimeProvider.System);
+    private HubDatabase CreateDatabase()
+    {
+        return new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+    }
 
     private static async Task<long> ScalarAsync(
         SqliteConnection connection,
@@ -510,17 +529,4 @@ public sealed class FindingIngestionTests : IDisposable
         command.CommandText = sql;
         return (string)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
-
-    public void Dispose()
-    {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
-        File.Delete($"{_databasePath}-shm");
-        File.Delete($"{_databasePath}-wal");
-    }
-
-    private static string FixturePath => Path.Combine(
-        AppContext.BaseDirectory,
-        "Fixtures",
-        "daemon-findings-0.11.2.json");
 }

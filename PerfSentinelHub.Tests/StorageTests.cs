@@ -24,15 +24,17 @@ public sealed class StorageTests
         var names = new List<string>();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
-            """;
+                              SELECT name FROM sqlite_master
+                              WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
+                              """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             names.Add(reader.GetString(0));
         Assert.Equal(
-            ["analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_sources", "findings",
-                "schema_migrations", "source_imports", "source_state"],
+            [
+                "analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_sources", "findings",
+                "schema_migrations", "source_imports", "source_state"
+            ],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);
     }
@@ -50,9 +52,9 @@ public sealed class StorageTests
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                INSERT INTO source_state(source_id, last_attempt_ms)
-                VALUES ('production', 1234);
-                """;
+                                  INSERT INTO source_state(source_id, last_attempt_ms)
+                                  VALUES ('production', 1234);
+                                  """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -87,9 +89,9 @@ public sealed class StorageTests
         Assert.Equal(0L, (long)(await command.ExecuteScalarAsync(cancellationToken))!);
 
         command.CommandText = """
-            SELECT producer_version FROM finding_sources
-            WHERE source_id = 'push-only' AND signature = 'signature';
-            """;
+                              SELECT producer_version FROM finding_sources
+                              WHERE source_id = 'push-only' AND signature = 'signature';
+                              """;
         Assert.Equal("0.11.3", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
@@ -108,19 +110,19 @@ public sealed class StorageTests
         await using (var seed = connection.CreateCommand())
         {
             seed.CommandText = """
-                INSERT INTO findings(
-                  signature, finding_json, service, finding_type, severity, endpoint,
-                  template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
-                  max_confidence, max_confidence_rank)
-                VALUES ('successor', '{}', 'order-service', 'n_plus_one_sql', 'warning',
-                  'GET /orders', 'hash-b', 'trace', 500, 900, 'daemon_staging', 2);
-                INSERT INTO finding_lineage(
-                  successor_signature, predecessor_signature, predecessor_first_seen_ms,
-                  origin_first_seen_ms, depth, linked_at_ms, method)
-                VALUES ('successor', 'predecessor', 100, 100, 1, 500, 'endpoint_template');
-                ALTER TABLE finding_lineage DROP COLUMN origin_first_seen_ms;
-                ALTER TABLE finding_lineage DROP COLUMN depth;
-                """;
+                               INSERT INTO findings(
+                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                 max_confidence, max_confidence_rank)
+                               VALUES ('successor', '{}', 'order-service', 'n_plus_one_sql', 'warning',
+                                 'GET /orders', 'hash-b', 'trace', 500, 900, 'daemon_staging', 2);
+                               INSERT INTO finding_lineage(
+                                 successor_signature, predecessor_signature, predecessor_first_seen_ms,
+                                 origin_first_seen_ms, depth, linked_at_ms, method)
+                               VALUES ('successor', 'predecessor', 100, 100, 1, 500, 'endpoint_template');
+                               ALTER TABLE finding_lineage DROP COLUMN origin_first_seen_ms;
+                               ALTER TABLE finding_lineage DROP COLUMN depth;
+                               """;
             await seed.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -137,9 +139,9 @@ public sealed class StorageTests
         await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
         read.CommandText = """
-            SELECT origin_first_seen_ms, depth FROM finding_lineage
-            WHERE successor_signature = 'successor';
-            """;
+                           SELECT origin_first_seen_ms, depth FROM finding_lineage
+                           WHERE successor_signature = 'successor';
+                           """;
         await using var reader = await read.ExecuteReaderAsync(cancellationToken);
         Assert.True(await reader.ReadAsync(cancellationToken));
         // Backfilled from the only date the old row carried, not left at the
@@ -151,6 +153,10 @@ public sealed class StorageTests
 
     private sealed class TestDatabase : IDisposable
     {
+        public readonly HubDatabase Database;
+
+        public readonly string DatabasePath;
+
         private TestDatabase(string path)
         {
             DatabasePath = path;
@@ -159,20 +165,20 @@ public sealed class StorageTests
                 TimeProvider.System);
         }
 
-        public readonly string DatabasePath;
-        public readonly HubDatabase Database;
-
-        public static TestDatabase Create(string? path = null) => new(
-            path ?? Path.Combine(
-                Path.GetTempPath(),
-                $"perf-sentinel-hub-{Guid.NewGuid():N}.db"));
-
         public void Dispose()
         {
             SqliteConnection.ClearAllPools();
             File.Delete(DatabasePath);
             File.Delete($"{DatabasePath}-shm");
             File.Delete($"{DatabasePath}-wal");
+        }
+
+        public static TestDatabase Create(string? path = null)
+        {
+            return new TestDatabase(
+                path ?? Path.Combine(
+                    Path.GetTempPath(),
+                    $"perf-sentinel-hub-{Guid.NewGuid():N}.db"));
         }
     }
 }

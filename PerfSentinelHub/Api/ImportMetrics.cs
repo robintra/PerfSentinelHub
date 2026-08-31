@@ -1,9 +1,9 @@
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-/// Why an import was refused. A closed set: these become Prometheus label
-/// values, and a label fed from anything a caller controls is how a /metrics
-/// endpoint dies of cardinality.
+///     Why an import was refused. A closed set: these become Prometheus label
+///     values, and a label fed from anything a caller controls is how a /metrics
+///     endpoint dies of cardinality.
 /// </summary>
 public enum ImportRejection
 {
@@ -20,27 +20,29 @@ public enum ImportRejection
     WriteTimeout,
 
     /// <summary>Body over the size limit, or more findings than one batch accepts.</summary>
-    TooLarge,
+    TooLarge
 }
 
 /// <summary>
-/// Counts refused imports, in process. Deliberately not in SQLite: a refusal
-/// happens on the paths that could not take the write lock, so recording it
-/// would need the very lock that failed. The count resets on restart, which is
-/// what a Prometheus counter is allowed to do.
+///     Counts refused imports, in process. Deliberately not in SQLite: a refusal
+///     happens on the paths that could not take the write lock, so recording it
+///     would need the very lock that failed. The count resets on restart, which is
+///     what a Prometheus counter is allowed to do.
 /// </summary>
 public sealed class ImportMetrics
 {
     private static readonly ImportRejection[] Reasons = Enum.GetValues<ImportRejection>();
     private readonly long[] _counts = new long[Reasons.Length];
 
-    public void Rejected(ImportRejection reason) =>
+    public void Rejected(ImportRejection reason)
+    {
         Interlocked.Increment(ref _counts[(int)reason]);
+    }
 
     /// <summary>
-    /// Every reason with its count, including the zeros. A series that appears
-    /// only once a failure has happened reads as a scrape gap rather than as a
-    /// healthy zero, and an alert on it cannot distinguish the two.
+    ///     Every reason with its count, including the zeros. A series that appears
+    ///     only once a failure has happened reads as a scrape gap rather than as a
+    ///     healthy zero, and an alert on it cannot distinguish the two.
     /// </summary>
     public IEnumerable<(string Reason, long Count)> Snapshot()
     {
@@ -48,23 +50,26 @@ public sealed class ImportMetrics
             yield return (Label(reason), Interlocked.Read(ref _counts[(int)reason]));
     }
 
-    private static string Label(ImportRejection reason) => reason switch
+    private static string Label(ImportRejection reason)
     {
-        ImportRejection.BadRequest => "bad_request",
-        ImportRejection.Unauthorized => "unauthorized",
-        ImportRejection.GateFull => "gate_full",
-        ImportRejection.WriteTimeout => "write_timeout",
-        ImportRejection.TooLarge => "too_large",
-        // No catch-all: a reason added without a label here must fail the build
-        // rather than publish refusals under a name that says nothing.
-        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
-    };
+        return reason switch
+        {
+            ImportRejection.BadRequest => "bad_request",
+            ImportRejection.Unauthorized => "unauthorized",
+            ImportRejection.GateFull => "gate_full",
+            ImportRejection.WriteTimeout => "write_timeout",
+            ImportRejection.TooLarge => "too_large",
+            // No catch-all: a reason added without a label here must fail the build
+            // rather than publish refusals under a name that says nothing.
+            _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null)
+        };
+    }
 }
 
 /// <summary>
-/// The import endpoint's admission control: the concurrency gate that decides
-/// whether a request runs at all, and the counter that records every refusal.
-/// One parameter rather than two because a refusal always touches both.
+///     The import endpoint's admission control: the concurrency gate that decides
+///     whether a request runs at all, and the counter that records every refusal.
+///     One parameter rather than two because a refusal always touches both.
 /// </summary>
 public sealed record ImportAdmission(ImportGate Gate, ImportMetrics Metrics)
 {

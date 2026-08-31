@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Storage;
@@ -5,9 +6,9 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-/// Writes runs on the wire. `request` and `result` are stored as JSON text and
-/// are re-emitted verbatim rather than round-tripped through a model: their
-/// shape varies with the source kind and belongs to the launcher's contract.
+///     Writes runs on the wire. `request` and `result` are stored as JSON text and
+///     are re-emitted verbatim rather than round-tripped through a model: their
+///     shape varies with the source kind and belongs to the launcher's contract.
 /// </summary>
 public static partial class AnalysisRunWriter
 {
@@ -41,9 +42,9 @@ public static partial class AnalysisRunWriter
     }
 
     /// <summary>
-    /// The stored form of a run's result. Written by hand so the wire names
-    /// stay snake_case without threading a serializer policy through the
-    /// source-generated context.
+    ///     The stored form of a run's result. Written by hand so the wire names
+    ///     stay snake_case without threading a serializer policy through the
+    ///     source-generated context.
     /// </summary>
     public static string SerializeSummary(ReportSummary summary)
     {
@@ -69,11 +70,12 @@ public static partial class AnalysisRunWriter
                 writer.WriteString("message", warning.Message);
                 writer.WriteEndObject();
             }
+
             writer.WriteEndArray();
             writer.WriteEndObject();
         }
 
-        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     private static void WriteRun(Utf8JsonWriter writer, AnalysisRun run, ILogger logger)
@@ -98,9 +100,9 @@ public static partial class AnalysisRunWriter
     }
 
     /// <summary>
-    /// Stored text is parsed before the property name is written: a throw after
-    /// the writer has started would abort a body already partly flushed, and
-    /// the client would see a truncated array behind a 200.
+    ///     Stored text is parsed before the property name is written: a throw after
+    ///     the writer has started would abort a body already partly flushed, and
+    ///     the client would see a truncated array behind a 200.
     /// </summary>
     private static void WriteRawOrNull(
         Utf8JsonWriter writer,
@@ -143,6 +145,4 @@ public static partial class AnalysisRunWriter
         Exception exception,
         string runId,
         string column);
-
-
 }

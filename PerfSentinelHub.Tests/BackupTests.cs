@@ -9,13 +9,22 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class BackupTests : IDisposable
 {
+    private readonly string _backupPath = Path.Combine(
+        Path.GetTempPath(),
+        $"perf-sentinel-hub-backup-copy-{Guid.NewGuid():N}.db");
+
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-backup-{Guid.NewGuid():N}.db");
 
-    private readonly string _backupPath = Path.Combine(
-        Path.GetTempPath(),
-        $"perf-sentinel-hub-backup-copy-{Guid.NewGuid():N}.db");
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+        File.Delete($"{_databasePath}-shm");
+        File.Delete($"{_databasePath}-wal");
+        File.Delete(_backupPath);
+    }
 
     [Fact]
     public async Task Backup_produces_an_openable_copy_with_the_same_findings()
@@ -90,14 +99,5 @@ public sealed class BackupTests : IDisposable
             batch,
             1786190000000,
             cancellationToken);
-    }
-
-    public void Dispose()
-    {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
-        File.Delete($"{_databasePath}-shm");
-        File.Delete($"{_databasePath}-wal");
-        File.Delete(_backupPath);
     }
 }

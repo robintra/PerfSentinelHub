@@ -5,10 +5,10 @@ using PerfSentinelHub.Configuration;
 namespace PerfSentinelHub.Tests;
 
 /// <summary>
-/// examples/appsettings.reference.json calls itself the inventory. These tests
-/// are what make that true: .NET ignores an unrecognised configuration key in
-/// silence, so a setting the reference forgets is a setting nobody discovers
-/// until they read the source.
+///     examples/appsettings.reference.json calls itself the inventory. These tests
+///     are what make that true: .NET ignores an unrecognised configuration key in
+///     silence, so a setting the reference forgets is a setting nobody discovers
+///     until they read the source.
 /// </summary>
 public sealed class ReferenceConfigurationTests
 {
@@ -71,8 +71,8 @@ public sealed class ReferenceConfigurationTests
     }
 
     /// <summary>
-    /// The settings type behind a property, or null when the property is a leaf
-    /// the reference only has to name.
+    ///     The settings type behind a property, or null when the property is a leaf
+    ///     the reference only has to name.
     /// </summary>
     private static Type? Nested(Type type)
     {

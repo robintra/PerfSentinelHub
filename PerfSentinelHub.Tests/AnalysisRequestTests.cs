@@ -114,8 +114,10 @@ public sealed class AnalysisRequestTests
 
         var arguments = request!.ToEngineArguments(Source(SourceKinds.Tempo), null);
 
-        Assert.Equal(["tempo", "--endpoint", "http://tempo.example:3200", "--format", "json",
-            "--trace-id", "abc123def456"], arguments);
+        Assert.Equal([
+            "tempo", "--endpoint", "http://tempo.example:3200", "--format", "json",
+            "--trace-id", "abc123def456"
+        ], arguments);
     }
 
     [Theory]
@@ -153,10 +155,10 @@ public sealed class AnalysisRequestTests
         var trace = Parse("""{"trace_id":"abc123def456"}""", SourceKinds.Tempo, out _);
 
         foreach (var arguments in new[]
-        {
-            service!.ToEngineArguments(source, null),
-            trace!.ToEngineArguments(source, null)
-        })
+                 {
+                     service!.ToEngineArguments(source, null),
+                     trace!.ToEngineArguments(source, null)
+                 })
         {
             var flag = arguments.ToList().IndexOf("--auth-header-env");
             Assert.True(flag >= 0);
@@ -190,8 +192,8 @@ public sealed class AnalysisRequestTests
     public void A_detection_override_becomes_a_config_the_engine_is_pointed_at()
     {
         var request = Parse("""
-            {"service":"orders","lookback":"1h","detection":{"n_plus_one_min_occurrences":13}}
-            """, SourceKinds.Tempo, out var error);
+                            {"service":"orders","lookback":"1h","detection":{"n_plus_one_min_occurrences":13}}
+                            """, SourceKinds.Tempo, out var error);
 
         Assert.Null(error);
         Assert.Equal("[detection]\nn_plus_one_min_occurrences = 13\n", request!.Detection.ToToml());
@@ -205,8 +207,8 @@ public sealed class AnalysisRequestTests
         // Writing it out would make the run card claim a departure from the
         // standard configuration where there is none.
         var request = Parse("""
-            {"service":"orders","lookback":"1h","detection":{"n_plus_one_min_occurrences":5}}
-            """, SourceKinds.Tempo, out _);
+                            {"service":"orders","lookback":"1h","detection":{"n_plus_one_min_occurrences":5}}
+                            """, SourceKinds.Tempo, out _);
 
         Assert.True(request!.Detection.IsEmpty);
     }
@@ -237,12 +239,15 @@ public sealed class AnalysisRequestTests
             error);
     }
 
-    private static SourceOptions Source(string kind) => new()
+    private static SourceOptions Source(string kind)
     {
-        Id = "target",
-        Name = "Target",
-        Environment = "production",
-        Kind = kind,
-        BaseUrl = new Uri("http://tempo.example:3200")
-    };
+        return new SourceOptions
+        {
+            Id = "target",
+            Name = "Target",
+            Environment = "production",
+            Kind = kind,
+            BaseUrl = new Uri("http://tempo.example:3200")
+        };
+    }
 }

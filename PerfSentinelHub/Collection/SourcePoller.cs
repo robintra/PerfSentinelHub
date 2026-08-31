@@ -68,16 +68,19 @@ public sealed partial class SourcePoller(
     }
 
     // Shared with the daemon view: one classification for both readers.
-    internal static string ErrorCode(Exception exception) => exception switch
+    internal static string ErrorCode(Exception exception)
     {
-        DaemonTimeoutException => "timeout",
-        ResponseTooLargeException => "response_too_large",
-        InvalidStatusException => "invalid_status",
-        InvalidDataException => "invalid_findings",
-        SqliteException => "storage_error",
-        HttpRequestException httpException => httpException.StatusCode is null ? "network_error" : "http_error",
-        _ => "network_error"
-    };
+        return exception switch
+        {
+            DaemonTimeoutException => "timeout",
+            ResponseTooLargeException => "response_too_large",
+            InvalidStatusException => "invalid_status",
+            InvalidDataException => "invalid_findings",
+            SqliteException => "storage_error",
+            HttpRequestException httpException => httpException.StatusCode is null ? "network_error" : "http_error",
+            _ => "network_error"
+        };
+    }
 
     [LoggerMessage(
         1101,

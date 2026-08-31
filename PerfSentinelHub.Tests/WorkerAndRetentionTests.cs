@@ -16,12 +16,27 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Path.GetTempPath(),
         $"perf-sentinel-hub-retention-{Guid.NewGuid():N}.db");
 
+    private static string UnwritablePath => Path.Combine(
+        Path.GetTempPath(),
+        $"perf-sentinel-hub-missing-{Guid.NewGuid():N}",
+        "hub.db");
+
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+        File.Delete($"{_databasePath}-shm");
+        File.Delete($"{_databasePath}-wal");
+    }
+
     [Theory]
     [InlineData(1, 0.0, 800)]
     [InlineData(1, 1.0, 1200)]
     [InlineData(10, 0.5, 300000)]
-    public void Backoff_is_jittered_and_capped(int failures, double sample, int expectedMs) =>
+    public void Backoff_is_jittered_and_capped(int failures, double sample, int expectedMs)
+    {
         Assert.Equal(TimeSpan.FromMilliseconds(expectedMs), Backoff.Delay(failures, sample));
+    }
 
     [Fact]
     public async Task Purge_uses_last_seen_for_findings_sources_heartbeats_and_state()
@@ -35,20 +50,20 @@ public sealed class WorkerAndRetentionTests : IDisposable
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                INSERT INTO findings VALUES
-                  ('old','{}','svc','type','warning','/old','h',NULL,100,500,'local_batch',1),
-                  ('recent','{}','svc','type','warning','/recent','h',NULL,1200,1500,'local_batch',1),
-                  ('seen-again','{}','svc','type','warning','/again','h',NULL,100,1500,'local_batch',1);
-                INSERT INTO endpoint_heartbeats VALUES
-                  ('a','svc','/old',500),
-                  ('a','svc','/recent',1500);
-                INSERT INTO finding_sources VALUES
-                  ('seen-again','stale','Stale','staging','0.11.2',100,500),
-                  ('seen-again','fresh','Fresh','production','0.11.2',100,1500);
-                INSERT INTO source_state(source_id, last_attempt_ms) VALUES
-                  ('retired',500),
-                  ('active',1500);
-                """;
+                                  INSERT INTO findings VALUES
+                                    ('old','{}','svc','type','warning','/old','h',NULL,100,500,'local_batch',1),
+                                    ('recent','{}','svc','type','warning','/recent','h',NULL,1200,1500,'local_batch',1),
+                                    ('seen-again','{}','svc','type','warning','/again','h',NULL,100,1500,'local_batch',1);
+                                  INSERT INTO endpoint_heartbeats VALUES
+                                    ('a','svc','/old',500),
+                                    ('a','svc','/recent',1500);
+                                  INSERT INTO finding_sources VALUES
+                                    ('seen-again','stale','Stale','staging','0.11.2',100,500),
+                                    ('seen-again','fresh','Fresh','production','0.11.2',100,1500);
+                                  INSERT INTO source_state(source_id, last_attempt_ms) VALUES
+                                    ('retired',500),
+                                    ('active',1500);
+                                  """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -68,13 +83,16 @@ public sealed class WorkerAndRetentionTests : IDisposable
         var options = Options.Create(new HubOptions
         {
             DatabasePath = UnwritablePath,
-            Sources = [new SourceOptions
-            {
-                Id = "unreachable",
-                Name = "Unreachable",
-                Environment = "test",
-                BaseUrl = new Uri("http://127.0.0.1:1")
-            }]
+            Sources =
+            [
+                new SourceOptions
+                {
+                    Id = "unreachable",
+                    Name = "Unreachable",
+                    Environment = "test",
+                    BaseUrl = new Uri("http://127.0.0.1:1")
+                }
+            ]
         });
         var clock = new FakeTimeProvider();
         var logger = new ListLogger<PollWorker>();
@@ -100,14 +118,17 @@ public sealed class WorkerAndRetentionTests : IDisposable
         var options = Options.Create(new HubOptions
         {
             DatabasePath = UnwritablePath,
-            Sources = [new SourceOptions
-            {
-                Id = "victoria",
-                Name = "Victoria Traces",
-                Environment = "test",
-                Kind = SourceKinds.JaegerQuery,
-                BaseUrl = new Uri("http://127.0.0.1:1")
-            }]
+            Sources =
+            [
+                new SourceOptions
+                {
+                    Id = "victoria",
+                    Name = "Victoria Traces",
+                    Environment = "test",
+                    Kind = SourceKinds.JaegerQuery,
+                    BaseUrl = new Uri("http://127.0.0.1:1")
+                }
+            ]
         });
         var clock = new FakeTimeProvider();
         var poller = new SourcePoller(
@@ -144,11 +165,6 @@ public sealed class WorkerAndRetentionTests : IDisposable
         await StopQuietlyAsync(worker, cancellationToken);
     }
 
-    private static string UnwritablePath => Path.Combine(
-        Path.GetTempPath(),
-        $"perf-sentinel-hub-missing-{Guid.NewGuid():N}",
-        "hub.db");
-
     private static async Task WaitForAsync(Func<bool> condition)
     {
         for (var attempt = 0; attempt < 500 && !condition(); attempt++)
@@ -183,16 +199,16 @@ public sealed class WorkerAndRetentionTests : IDisposable
             // finished_at_ms is the 11th column; a queued run has none, which is
             // why the purge falls back to created_at_ms rather than skipping it.
             command.CommandText = """
-                INSERT INTO analysis_runs
-                  (id,status,source_id,source_name,environment,kind,request_json,
-                   requested_by,created_at_ms,started_at_ms,finished_at_ms)
-                VALUES
-                  ('old-done','succeeded','a','A','prod','daemon','{}','u',100,100,500),
-                  ('fresh-done','succeeded','a','A','prod','daemon','{}','u',1200,1200,1500),
-                  ('old-expired','expired','a','A','prod','daemon','{}','u',100,100,500),
-                  ('ancient-pending','pending','a','A','prod','daemon','{}','u',1,NULL,NULL),
-                  ('ancient-running','running','a','A','prod','daemon','{}','u',1,1,NULL);
-                """;
+                                  INSERT INTO analysis_runs
+                                    (id,status,source_id,source_name,environment,kind,request_json,
+                                     requested_by,created_at_ms,started_at_ms,finished_at_ms)
+                                  VALUES
+                                    ('old-done','succeeded','a','A','prod','daemon','{}','u',100,100,500),
+                                    ('fresh-done','succeeded','a','A','prod','daemon','{}','u',1200,1200,1500),
+                                    ('old-expired','expired','a','A','prod','daemon','{}','u',100,100,500),
+                                    ('ancient-pending','pending','a','A','prod','daemon','{}','u',1,NULL,NULL),
+                                    ('ancient-running','running','a','A','prod','daemon','{}','u',1,1,NULL);
+                                  """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -227,13 +243,5 @@ public sealed class WorkerAndRetentionTests : IDisposable
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {table};";
         return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
-    }
-
-    public void Dispose()
-    {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
-        File.Delete($"{_databasePath}-shm");
-        File.Delete($"{_databasePath}-wal");
     }
 }

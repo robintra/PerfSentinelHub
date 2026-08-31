@@ -18,6 +18,14 @@ public sealed class EngineProbeTests : IDisposable
         Path.GetTempPath(),
         $"perf-sentinel-hub-probe-{Guid.NewGuid():N}");
 
+    public void Dispose()
+    {
+        foreach (var script in _scripts)
+            File.Delete(script);
+        if (Directory.Exists(_workspace))
+            Directory.Delete(_workspace, true);
+    }
+
     [Fact]
     public async Task No_configured_binary_leaves_the_version_unknown()
     {
@@ -100,16 +108,9 @@ public sealed class EngineProbeTests : IDisposable
         Assert.Null(probe.Version);
     }
 
-    public void Dispose()
+    private EngineProbe Probe(string? binaryPath)
     {
-        foreach (var script in _scripts)
-            File.Delete(script);
-        if (Directory.Exists(_workspace))
-            Directory.Delete(_workspace, recursive: true);
-    }
-
-    private EngineProbe Probe(string? binaryPath) =>
-        new(
+        return new EngineProbe(
             Options.Create(new HubOptions
             {
                 Analysis = new AnalysisOptions
@@ -121,6 +122,7 @@ public sealed class EngineProbeTests : IDisposable
                 }
             }),
             NullLogger<EngineProbe>.Instance);
+    }
 
     private string WriteScript(string body)
     {

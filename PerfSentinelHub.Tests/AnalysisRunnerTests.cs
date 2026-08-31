@@ -17,29 +17,35 @@ public sealed class AnalysisRunnerTests : IDisposable
 {
     private const long Now = 1_787_839_140_000;
 
+    private const string ReportJson = """
+                                      {
+                                        "analysis": {"traces_analyzed": 12},
+                                        "findings": [
+                                          {"severity": "critical"}, {"severity": "warning"},
+                                          {"severity": "warning"}, {"severity": "info"}
+                                        ],
+                                        "quality_gate": {"passed": false},
+                                        "binary_version": "0.16.0",
+                                        "warning_details": [
+                                          {"kind": "snapshot_scope", "message": "Findings capped at 4 of 118 retained"}
+                                        ]
+                                      }
+                                      """;
+
     private readonly string _workspace = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-runner-{Guid.NewGuid():N}");
 
-    private const string ReportJson = """
-        {
-          "analysis": {"traces_analyzed": 12},
-          "findings": [
-            {"severity": "critical"}, {"severity": "warning"},
-            {"severity": "warning"}, {"severity": "info"}
-          ],
-          "quality_gate": {"passed": false},
-          "binary_version": "0.16.0",
-          "warning_details": [
-            {"kind": "snapshot_scope", "message": "Findings capped at 4 of 118 retained"}
-          ]
-        }
-        """;
+    public void Dispose()
+    {
+        if (Directory.Exists(_workspace))
+            Directory.Delete(_workspace, true);
+    }
 
     [Fact]
     public async Task A_backend_run_queries_then_renders_and_summarises()
     {
-        var runner = Runner(StubEngine(ReportJson, exitCode: 0));
+        var runner = Runner(StubEngine(ReportJson, 0));
 
         var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
@@ -67,7 +73,7 @@ public sealed class AnalysisRunnerTests : IDisposable
     [Fact]
     public async Task The_render_always_caps_embedded_traces_so_no_finding_is_dropped()
     {
-        var runner = Runner(StubEngine(ReportJson, exitCode: 0));
+        var runner = Runner(StubEngine(ReportJson, 0));
 
         await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
@@ -121,7 +127,7 @@ public sealed class AnalysisRunnerTests : IDisposable
             await context.Response.WriteAsync(ReportJson, cancellationToken);
         }, cancellationToken);
         var options = RunnerOptions(StubEngine(
-            ReportJson, exitCode: 0, help: "      --daemon-url <URL>  live mode"));
+            ReportJson, 0, help: "      --daemon-url <URL>  live mode"));
         var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
         await probe.StartAsync(cancellationToken);
         var runner = new AnalysisRunner(
@@ -162,7 +168,7 @@ public sealed class AnalysisRunnerTests : IDisposable
         }, cancellationToken);
         // Same run, same source, a binary whose help names no such flag.
         var options = RunnerOptions(StubEngine(
-            ReportJson, exitCode: 0, help: "      --output <FILE>  where to write"));
+            ReportJson, 0, help: "      --output <FILE>  where to write"));
         var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
         await probe.StartAsync(cancellationToken);
         var runner = new AnalysisRunner(
@@ -196,7 +202,7 @@ public sealed class AnalysisRunnerTests : IDisposable
     {
         var runner = Runner(StubEngine(
             """{"analysis": {"traces_analyzed": 0}, "findings": [], "quality_gate": {"passed": true}}""",
-            exitCode: 0));
+            0));
 
         var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
@@ -216,7 +222,7 @@ public sealed class AnalysisRunnerTests : IDisposable
     [InlineData("Error fetching traces from Tempo: request timed out", AnalysisErrorCodes.Timeout)]
     public async Task A_refused_query_names_an_owner_without_leaking_stderr(string stderr, string expected)
     {
-        var runner = Runner(StubEngine(ReportJson, exitCode: 1, standardError: stderr));
+        var runner = Runner(StubEngine(ReportJson, 1, stderr));
 
         var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
@@ -228,7 +234,7 @@ public sealed class AnalysisRunnerTests : IDisposable
     [Fact]
     public async Task Output_that_is_not_a_report_fails_rather_than_rendering_nothing()
     {
-        var runner = Runner(StubEngine("not json at all", exitCode: 0));
+        var runner = Runner(StubEngine("not json at all", 0));
 
         var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
@@ -239,7 +245,7 @@ public sealed class AnalysisRunnerTests : IDisposable
     [Fact]
     public async Task A_run_past_the_ceiling_is_killed_and_reported_as_a_timeout()
     {
-        var runner = Runner(StubEngine(ReportJson, exitCode: 0, sleepSeconds: 30), TimeSpan.FromSeconds(1));
+        var runner = Runner(StubEngine(ReportJson, 0, sleepSeconds: 30), TimeSpan.FromSeconds(1));
 
         var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
@@ -249,21 +255,16 @@ public sealed class AnalysisRunnerTests : IDisposable
     [Fact]
     public async Task No_engine_binary_is_an_internal_failure_rather_than_a_crash()
     {
-        var runner = Runner(binaryPath: null);
+        var runner = Runner(null);
 
         var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
 
         Assert.Equal(AnalysisErrorCodes.Internal, outcome.ErrorCode);
     }
 
-    public void Dispose()
+    private IOptions<HubOptions> RunnerOptions(string? binaryPath, TimeSpan? timeout = null)
     {
-        if (Directory.Exists(_workspace))
-            Directory.Delete(_workspace, recursive: true);
-    }
-
-    private IOptions<HubOptions> RunnerOptions(string? binaryPath, TimeSpan? timeout = null) =>
-        Options.Create(new HubOptions
+        return Options.Create(new HubOptions
         {
             Analysis = new AnalysisOptions
             {
@@ -272,6 +273,7 @@ public sealed class AnalysisRunnerTests : IDisposable
                 Timeout = timeout ?? TimeSpan.FromSeconds(30)
             }
         });
+    }
 
     private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null)
     {
@@ -286,9 +288,9 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     /// <summary>
-    /// A stub perf-sentinel: answers the query subcommand with the given JSON
-    /// and writes an HTML file for `report --output`, which is the two-step
-    /// shape the real binary imposes.
+    ///     A stub perf-sentinel: answers the query subcommand with the given JSON
+    ///     and writes an HTML file for `report --output`, which is the two-step
+    ///     shape the real binary imposes.
     /// </summary>
     private string StubEngine(
         string reportJson,
@@ -300,45 +302,54 @@ public sealed class AnalysisRunnerTests : IDisposable
         Directory.CreateDirectory(_workspace);
         var path = Path.Combine(_workspace, "perf-sentinel");
         File.WriteAllText(path, $"""
-            #!/bin/sh
-            if [ "$1" = "report" ] && [ "$2" = "--help" ]; then
-              printf '%s' {Quote(help)}
-              exit 0
-            fi
-            if [ "$1" = "report" ]; then
-              echo "$@" > render-args.txt
-              while [ $# -gt 0 ]; do
-                if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
-                shift
-              done
-              exit 0
-            fi
-            [ {sleepSeconds} -gt 0 ] && sleep {sleepSeconds}
-            printf '%s' {Quote(standardError)} >&2
-            printf '%s' {Quote(reportJson)}
-            exit {exitCode}
+                                 #!/bin/sh
+                                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then
+                                   printf '%s' {Quote(help)}
+                                   exit 0
+                                 fi
+                                 if [ "$1" = "report" ]; then
+                                   echo "$@" > render-args.txt
+                                   while [ $# -gt 0 ]; do
+                                     if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
+                                     shift
+                                   done
+                                   exit 0
+                                 fi
+                                 [ {sleepSeconds} -gt 0 ] && sleep {sleepSeconds}
+                                 printf '%s' {Quote(standardError)} >&2
+                                 printf '%s' {Quote(reportJson)}
+                                 exit {exitCode}
 
-            """);
+                                 """);
         File.SetUnixFileMode(
             path,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
     }
 
-    private static string Quote(string value) => $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
-
-    private static AnalysisRun Run() => new(
-        "run-1", AnalysisStatuses.Running, "target", "Target", "production",
-        SourceKinds.Tempo, "{}", "operator@example.internal", Now, Now, null, null, null, null, null);
-
-    private static SourceOptions Source() => new()
+    private static string Quote(string value)
     {
-        Id = "target",
-        Name = "Target",
-        Environment = "production",
-        Kind = SourceKinds.Tempo,
-        BaseUrl = new Uri("http://tempo.example:3200")
-    };
+        return $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
+    }
+
+    private static AnalysisRun Run()
+    {
+        return new AnalysisRun(
+            "run-1", AnalysisStatuses.Running, "target", "Target", "production",
+            SourceKinds.Tempo, "{}", "operator@example.internal", Now, Now, null, null, null, null, null);
+    }
+
+    private static SourceOptions Source()
+    {
+        return new SourceOptions
+        {
+            Id = "target",
+            Name = "Target",
+            Environment = "production",
+            Kind = SourceKinds.Tempo,
+            BaseUrl = new Uri("http://tempo.example:3200")
+        };
+    }
 
     private static AnalysisRequest Request()
     {

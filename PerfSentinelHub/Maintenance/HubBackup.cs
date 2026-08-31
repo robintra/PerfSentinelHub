@@ -3,8 +3,8 @@ using Microsoft.Data.Sqlite;
 namespace PerfSentinelHub.Maintenance;
 
 /// <summary>
-/// Copies the SQLite database into a fresh file with VACUUM INTO. Safe against
-/// a live Hub: WAL allows this read-only snapshot next to the single writer.
+///     Copies the SQLite database into a fresh file with VACUUM INTO. Safe against
+///     a live Hub: WAL allows this read-only snapshot next to the single writer.
 /// </summary>
 public static class HubBackup
 {

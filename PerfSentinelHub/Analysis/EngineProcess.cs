@@ -3,9 +3,9 @@ using System.Diagnostics;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// Outcome of one engine invocation. <see cref="StandardError"/> is kept for
-/// classification only and never reaches a response: ARCH 6.6 bounds what the
-/// UI may show to a vocabulary of error codes.
+///     Outcome of one engine invocation. <see cref="StandardError" /> is kept for
+///     classification only and never reaches a response: ARCH 6.6 bounds what the
+///     UI may show to a vocabulary of error codes.
 /// </summary>
 public sealed record EngineResult(int ExitCode, byte[] StandardOutput, string StandardError)
 {
@@ -20,10 +20,10 @@ public static class EngineProcess
     private const int CopyBufferSize = 81_920;
 
     /// <summary>
-    /// Runs the engine and captures its output, killing the whole process tree
-    /// when the caller's token trips. Throws <see cref="OperationCanceledException"/>
-    /// on cancellation and <see cref="EngineOutputTooLargeException"/> past
-    /// <paramref name="maxOutputBytes"/>.
+    ///     Runs the engine and captures its output, killing the whole process tree
+    ///     when the caller's token trips. Throws <see cref="OperationCanceledException" />
+    ///     on cancellation and <see cref="EngineOutputTooLargeException" /> past
+    ///     <paramref name="maxOutputBytes" />.
     /// </summary>
     public static async Task<EngineResult> RunAsync(
         string binaryPath,
@@ -54,7 +54,7 @@ public static class EngineProcess
             startInfo.Environment[name] = value;
 
         using var process = Process.Start(startInfo)
-            ?? throw new IOException($"The engine at {binaryPath} did not start.");
+                            ?? throw new IOException($"The engine at {binaryPath} did not start.");
         try
         {
             // Both streams are drained concurrently: a process that fills the
@@ -93,15 +93,17 @@ public static class EngineProcess
         }
     }
 
-    private static string Truncate(string value) =>
-        value.Length <= MaxStandardErrorChars ? value : value[..MaxStandardErrorChars];
+    private static string Truncate(string value)
+    {
+        return value.Length <= MaxStandardErrorChars ? value : value[..MaxStandardErrorChars];
+    }
 
     private static void KillQuietly(Process process)
     {
         try
         {
             if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
+                process.Kill(true);
         }
         catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException)
         {

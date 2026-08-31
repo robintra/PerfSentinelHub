@@ -13,6 +13,14 @@ public sealed class AnalysisStorageTests : IDisposable
         Path.GetTempPath(),
         $"perf-sentinel-hub-runs-{Guid.NewGuid():N}.db");
 
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+        File.Delete($"{_databasePath}-shm");
+        File.Delete($"{_databasePath}-wal");
+    }
+
     [Fact]
     public async Task A_claimed_run_is_taken_once_and_the_oldest_goes_first()
     {
@@ -74,14 +82,6 @@ public sealed class AnalysisStorageTests : IDisposable
         Assert.Equal(3, (await database.ListRunsAsync(50, cancellationToken)).Count);
     }
 
-    public void Dispose()
-    {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
-        File.Delete($"{_databasePath}-shm");
-        File.Delete($"{_databasePath}-wal");
-    }
-
     private async Task<HubDatabase> OpenAsync(CancellationToken cancellationToken)
     {
         var database = new HubDatabase(
@@ -103,8 +103,11 @@ public sealed class AnalysisStorageTests : IDisposable
             id, status, Now, expiresAtMs, "0.16.0", null, """{"empty":false}""", cancellationToken);
     }
 
-    private static AnalysisRun Run(string id, long createdAtMs) => new(
-        id, AnalysisStatuses.Pending, "prod-tempo", "Tempo, production", "production",
-        SourceKinds.Tempo, """{"service":"orders","lookback":"1h"}""",
-        "operator@example.internal", createdAtMs, null, null, null, null, null, null);
+    private static AnalysisRun Run(string id, long createdAtMs)
+    {
+        return new AnalysisRun(
+            id, AnalysisStatuses.Pending, "prod-tempo", "Tempo, production", "production",
+            SourceKinds.Tempo, """{"service":"orders","lookback":"1h"}""",
+            "operator@example.internal", createdAtMs, null, null, null, null, null, null);
+    }
 }

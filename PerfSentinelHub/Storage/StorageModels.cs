@@ -22,17 +22,17 @@ public sealed record StoredFinding(
     List<FindingSourceObservation> Sources)
 {
     /// <summary>
-    /// Chain back to the finding this one mutated from, attached after the
-    /// main query when a lineage link exists. Null for a finding with no
-    /// recorded predecessor.
+    ///     Chain back to the finding this one mutated from, attached after the
+    ///     main query when a lineage link exists. Null for a finding with no
+    ///     recorded predecessor.
     /// </summary>
     public LineageInfo? Lineage { get; set; }
 }
 
 /// <summary>
-/// Flattened view of a finding's mutation chain: the earliest predecessor
-/// birth (surviving the predecessors' retention purge, since it is copied
-/// at link time) and how many hops the chain holds.
+///     Flattened view of a finding's mutation chain: the earliest predecessor
+///     birth (surviving the predecessors' retention purge, since it is copied
+///     at link time) and how many hops the chain holds.
 /// </summary>
 public sealed record LineageInfo(long OriginalFirstSeenMs, int Predecessors);
 
@@ -45,9 +45,9 @@ public sealed record FindingSourceObservation(
     long? UnreachableSinceMs);
 
 /// <summary>
-/// Last known collection state for one configured source. Every field is
-/// nullable because a source that has never been polled, and a push-only
-/// source before its first import, both have no row at all.
+///     Last known collection state for one configured source. Every field is
+///     nullable because a source that has never been polled, and a push-only
+///     source before its first import, both have no row at all.
 /// </summary>
 public sealed record SourceState(
     long? LastAttemptMs,
@@ -66,19 +66,19 @@ public static class AnalysisStatuses
     public const string Expired = "expired";
 
     /// <summary>
-    /// Every status, so a reader can emit a series for each one. A gauge that
-    /// vanishes when it reaches zero reads as a scrape failure rather than as
-    /// "nothing is in that state".
+    ///     Every status, so a reader can emit a series for each one. A gauge that
+    ///     vanishes when it reaches zero reads as a scrape failure rather than as
+    ///     "nothing is in that state".
     /// </summary>
     public static readonly string[] All =
         [Pending, Running, Succeeded, Failed, Interrupted, Expired];
 }
 
 /// <summary>
-/// One analysis run. The source's name, environment and kind are copied at
-/// submission because a run outlives the configuration entry it came from.
-/// `RequestJson` and `ResultJson` stay opaque here: their shape is the
-/// launcher's contract and varies with the source kind.
+///     One analysis run. The source's name, environment and kind are copied at
+///     submission because a run outlives the configuration entry it came from.
+///     `RequestJson` and `ResultJson` stay opaque here: their shape is the
+///     launcher's contract and varies with the source kind.
 /// </summary>
 public sealed record AnalysisRun(
     string Id,

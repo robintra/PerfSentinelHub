@@ -5,14 +5,13 @@ using PerfSentinelHub.Configuration;
 namespace PerfSentinelHub.Collection;
 
 /// <summary>
-/// Asks GitHub what the newest published release of each product is, so the
-/// Hub can say that what it is running may no longer be current.
-///
-/// This is the Hub's only outbound destination that is not a configured source,
-/// which is why it has its own configuration section, its own endpoints and a
-/// single key that turns it off. Nothing here blocks or fails a request: a
-/// version that was never read stays null, and the front end shows nothing
-/// rather than guessing.
+///     Asks GitHub what the newest published release of each product is, so the
+///     Hub can say that what it is running may no longer be current.
+///     This is the Hub's only outbound destination that is not a configured source,
+///     which is why it has its own configuration section, its own endpoints and a
+///     single key that turns it off. Nothing here blocks or fails a request: a
+///     version that was never read stays null, and the front end shows nothing
+///     rather than guessing.
 /// </summary>
 public sealed partial class UpdateChecker(
     IHttpClientFactory clients,
@@ -57,8 +56,7 @@ public sealed partial class UpdateChecker(
             if (engine is not null) Volatile.Write(ref _latestEngineVersion, engine);
             var hub = await ReadAsync(_settings.HubEndpoint, "hub", stoppingToken);
             if (hub is not null) Volatile.Write(ref _latestHubVersion, hub);
-        }
-        while (await SafeWaitAsync(timer, stoppingToken));
+        } while (await SafeWaitAsync(timer, stoppingToken));
     }
 
     private static async Task<bool> SafeWaitAsync(PeriodicTimer timer, CancellationToken stoppingToken)
@@ -74,9 +72,9 @@ public sealed partial class UpdateChecker(
     }
 
     /// <summary>
-    /// The tag of the newest release, with its leading "v" removed, or null.
-    /// Null covers every failure alike, including a repository that has never
-    /// published a release, which answers 404 and is not a fault.
+    ///     The tag of the newest release, with its leading "v" removed, or null.
+    ///     Null covers every failure alike, including a repository that has never
+    ///     published a release, which answers 404 and is not a fault.
     /// </summary>
     private async Task<string?> ReadAsync(Uri endpoint, string what, CancellationToken stoppingToken)
     {
@@ -122,6 +120,7 @@ public sealed partial class UpdateChecker(
                     LogTooLarge(logger, what);
                     return null;
                 }
+
                 await limited.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
             }
 
@@ -149,8 +148,8 @@ public sealed partial class UpdateChecker(
     }
 
     /// <summary>
-    /// A tag as a bare version, or null when it is not one. The same shape the
-    /// launcher requires before it builds a release URL out of a version.
+    ///     A tag as a bare version, or null when it is not one. The same shape the
+    ///     launcher requires before it builds a release URL out of a version.
     /// </summary>
     public static string? Normalize(string? tag)
     {

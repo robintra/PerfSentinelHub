@@ -5,16 +5,14 @@ using System.Text.Json;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// Detection thresholds an operator chose to override for one run.
-///
-/// These decide what the engine calls a problem, not how large the report is.
-/// Raising one does not compress anything: it stops the detector from looking.
-/// Every override is recorded on the run so two reports produced with different
-/// thresholds are never silently compared.
-///
-/// Bounds mirror the engine's own validator (config/validate.rs
-/// validate_detection_params). Upper bounds are the Hub's: the engine leaves
-/// most of them open, and a value in the billions is a typo, not a setting.
+///     Detection thresholds an operator chose to override for one run.
+///     These decide what the engine calls a problem, not how large the report is.
+///     Raising one does not compress anything: it stops the detector from looking.
+///     Every override is recorded on the run so two reports produced with different
+///     thresholds are never silently compared.
+///     Bounds mirror the engine's own validator (config/validate.rs
+///     validate_detection_params). Upper bounds are the Hub's: the engine leaves
+///     most of them open, and a value in the billions is a typo, not a setting.
 /// </summary>
 public sealed record DetectionOverrides
 {
@@ -47,9 +45,9 @@ public sealed record DetectionOverrides
     public static IEnumerable<(string Name, int Min, int Max, int Default)> Schema => Knobs;
 
     /// <summary>
-    /// Reads the overrides an operator submitted. A value equal to the engine's
-    /// default is dropped rather than written out, so a run only records what
-    /// actually departs from the standard configuration.
+    ///     Reads the overrides an operator submitted. A value equal to the engine's
+    ///     default is dropped rather than written out, so a run only records what
+    ///     actually departs from the standard configuration.
     /// </summary>
     public static DetectionOverrides? TryParse(JsonElement payload, out string? error)
     {
@@ -93,9 +91,9 @@ public sealed record DetectionOverrides
     }
 
     /// <summary>
-    /// The `[detection]` section to hand the engine through `-c`. Only the
-    /// overridden keys appear, so every other threshold keeps the engine's own
-    /// documented default rather than one this file froze.
+    ///     The `[detection]` section to hand the engine through `-c`. Only the
+    ///     overridden keys appear, so every other threshold keeps the engine's own
+    ///     documented default rather than one this file froze.
     /// </summary>
     public string ToToml()
     {

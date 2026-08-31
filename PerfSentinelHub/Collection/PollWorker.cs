@@ -25,6 +25,7 @@ public sealed partial class PollWorker(
                 continue;
             tasks.Add(RunSourceAsync(source, concurrency, stoppingToken));
         }
+
         await Task.WhenAll(tasks);
     }
 
@@ -48,6 +49,7 @@ public sealed partial class PollWorker(
                 {
                     concurrency.Release();
                 }
+
                 failures = 0;
                 delay = _options.PollInterval;
             }

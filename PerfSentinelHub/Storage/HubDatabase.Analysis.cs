@@ -5,15 +5,15 @@ namespace PerfSentinelHub.Storage;
 public sealed partial class HubDatabase
 {
     private const string RunColumns = """
-        id, status, source_id, source_name, environment, kind, request_json,
-        requested_by, created_at_ms, started_at_ms, finished_at_ms,
-        expires_at_ms, producer_version, error_code, result_json
-        """;
+                                      id, status, source_id, source_name, environment, kind, request_json,
+                                      requested_by, created_at_ms, started_at_ms, finished_at_ms,
+                                      expires_at_ms, producer_version, error_code, result_json
+                                      """;
 
     /// <summary>
-    /// Returns false when the write gate stays held past its wait, so a
-    /// submission answers 503 instead of hanging behind a long purge, matching
-    /// what the import path already does.
+    ///     Returns false when the write gate stays held past its wait, so a
+    ///     submission answers 503 instead of hanging behind a long purge, matching
+    ///     what the import path already does.
     /// </summary>
     public async Task<bool> TryInsertRunAsync(AnalysisRun run, CancellationToken cancellationToken)
     {
@@ -24,11 +24,11 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = $"""
-                INSERT INTO analysis_runs({RunColumns})
-                VALUES ($id, $status, $source_id, $source_name, $environment, $kind,
-                        $request_json, $requested_by, $created_at_ms, NULL, NULL,
-                        NULL, NULL, NULL, NULL);
-                """;
+                                   INSERT INTO analysis_runs({RunColumns})
+                                   VALUES ($id, $status, $source_id, $source_name, $environment, $kind,
+                                           $request_json, $requested_by, $created_at_ms, NULL, NULL,
+                                           NULL, NULL, NULL, NULL);
+                                   """;
             command.Parameters.AddWithValue("$id", run.Id);
             command.Parameters.AddWithValue("$status", run.Status);
             command.Parameters.AddWithValue(SourceIdParameter, run.SourceId);
@@ -48,9 +48,9 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    /// Moves the oldest pending run to running and returns it, or null when
-    /// nothing is queued. The write gate serialises this against every other
-    /// writer, so two workers cannot claim the same row.
+    ///     Moves the oldest pending run to running and returns it, or null when
+    ///     nothing is queued. The write gate serialises this against every other
+    ///     writer, so two workers cannot claim the same row.
     /// </summary>
     public async Task<AnalysisRun?> TryClaimNextRunAsync(long startedAtMs, CancellationToken cancellationToken)
     {
@@ -60,15 +60,15 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = $"""
-                UPDATE analysis_runs
-                SET status = '{AnalysisStatuses.Running}', started_at_ms = $started_at_ms
-                WHERE id = (
-                  SELECT id FROM analysis_runs
-                  WHERE status = '{AnalysisStatuses.Pending}'
-                  ORDER BY created_at_ms ASC, id ASC
-                  LIMIT 1)
-                RETURNING {RunColumns};
-                """;
+                                   UPDATE analysis_runs
+                                   SET status = '{AnalysisStatuses.Running}', started_at_ms = $started_at_ms
+                                   WHERE id = (
+                                     SELECT id FROM analysis_runs
+                                     WHERE status = '{AnalysisStatuses.Pending}'
+                                     ORDER BY created_at_ms ASC, id ASC
+                                     LIMIT 1)
+                                   RETURNING {RunColumns};
+                                   """;
             command.Parameters.AddWithValue("$started_at_ms", startedAtMs);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             return await reader.ReadAsync(cancellationToken) ? ReadRun(reader) : null;
@@ -98,15 +98,15 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = """
-                UPDATE analysis_runs
-                SET status = $status,
-                    finished_at_ms = $finished_at_ms,
-                    expires_at_ms = $expires_at_ms,
-                    producer_version = $producer_version,
-                    error_code = $error_code,
-                    result_json = $result_json
-                WHERE id = $id;
-                """;
+                                  UPDATE analysis_runs
+                                  SET status = $status,
+                                      finished_at_ms = $finished_at_ms,
+                                      expires_at_ms = $expires_at_ms,
+                                      producer_version = $producer_version,
+                                      error_code = $error_code,
+                                      result_json = $result_json
+                                  WHERE id = $id;
+                                  """;
             command.Parameters.AddWithValue("$id", id);
             command.Parameters.AddWithValue("$status", status);
             command.Parameters.AddWithValue("$finished_at_ms", finishedAtMs);
@@ -128,10 +128,10 @@ public sealed partial class HubDatabase
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT {RunColumns} FROM analysis_runs
-            ORDER BY created_at_ms DESC, id ASC
-            LIMIT $limit;
-            """;
+                               SELECT {RunColumns} FROM analysis_runs
+                               ORDER BY created_at_ms DESC, id ASC
+                               LIMIT $limit;
+                               """;
         command.Parameters.AddWithValue("$limit", limit);
 
         var runs = new List<AnalysisRun>();
@@ -157,12 +157,12 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText =
             $"SELECT COUNT(*) FROM analysis_runs WHERE status = '{AnalysisStatuses.Pending}';";
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), provider: null);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), null);
     }
 
     /// <summary>
-    /// How many runs sit in each status the table currently holds. Retention
-    /// deletes rows, so these are current counts and never monotonic totals.
+    ///     How many runs sit in each status the table currently holds. Retention
+    ///     deletes rows, so these are current counts and never monotonic totals.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, int>> CountRunsByStatusAsync(
         CancellationToken cancellationToken)
@@ -172,18 +172,15 @@ public sealed partial class HubDatabase
         command.CommandText = "SELECT status, COUNT(*) FROM analysis_runs GROUP BY status;";
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            counts[reader.GetString(0)] = reader.GetInt32(1);
-        }
+        while (await reader.ReadAsync(cancellationToken)) counts[reader.GetString(0)] = reader.GetInt32(1);
 
         return counts;
     }
 
     /// <summary>
-    /// Marks every run left running by a previous process as interrupted. The
-    /// Hub never replays one on its own: a silent retry would fire a second
-    /// heavy query at a backend nobody asked to query twice.
+    ///     Marks every run left running by a previous process as interrupted. The
+    ///     Hub never replays one on its own: a silent retry would fire a second
+    ///     heavy query at a backend nobody asked to query twice.
     /// </summary>
     public async Task<int> InterruptRunningRunsAsync(long finishedAtMs, CancellationToken cancellationToken)
     {
@@ -193,10 +190,10 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = $"""
-                UPDATE analysis_runs
-                SET status = '{AnalysisStatuses.Interrupted}', finished_at_ms = $finished_at_ms
-                WHERE status IN ('{AnalysisStatuses.Running}', '{AnalysisStatuses.Pending}');
-                """;
+                                   UPDATE analysis_runs
+                                   SET status = '{AnalysisStatuses.Interrupted}', finished_at_ms = $finished_at_ms
+                                   WHERE status IN ('{AnalysisStatuses.Running}', '{AnalysisStatuses.Pending}');
+                                   """;
             command.Parameters.AddWithValue("$finished_at_ms", finishedAtMs);
             return await command.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -207,10 +204,10 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    /// Expires succeeded runs whose report is past its lifetime and returns
-    /// their ids so the caller can delete the files. The row stays, holding
-    /// its parameters: the most common next action is to run the same thing
-    /// again.
+    ///     Expires succeeded runs whose report is past its lifetime and returns
+    ///     their ids so the caller can delete the files. The row stays, holding
+    ///     its parameters: the most common next action is to run the same thing
+    ///     again.
     /// </summary>
     public async Task<IReadOnlyList<string>> ExpireRunsAsync(long nowMs, CancellationToken cancellationToken)
     {
@@ -220,13 +217,13 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = $"""
-                UPDATE analysis_runs
-                SET status = '{AnalysisStatuses.Expired}'
-                WHERE status = '{AnalysisStatuses.Succeeded}'
-                  AND expires_at_ms IS NOT NULL
-                  AND expires_at_ms <= $now_ms
-                RETURNING id;
-                """;
+                                   UPDATE analysis_runs
+                                   SET status = '{AnalysisStatuses.Expired}'
+                                   WHERE status = '{AnalysisStatuses.Succeeded}'
+                                     AND expires_at_ms IS NOT NULL
+                                     AND expires_at_ms <= $now_ms
+                                   RETURNING id;
+                                   """;
             command.Parameters.AddWithValue("$now_ms", nowMs);
 
             var ids = new List<string>();
@@ -241,20 +238,23 @@ public sealed partial class HubDatabase
         }
     }
 
-    private static AnalysisRun ReadRun(SqliteDataReader reader) => new(
-        reader.GetString(0),
-        reader.GetString(1),
-        reader.GetString(2),
-        reader.GetString(3),
-        reader.GetString(4),
-        reader.GetString(5),
-        reader.GetString(6),
-        reader.GetString(7),
-        reader.GetInt64(8),
-        reader.IsDBNull(9) ? null : reader.GetInt64(9),
-        reader.IsDBNull(10) ? null : reader.GetInt64(10),
-        reader.IsDBNull(11) ? null : reader.GetInt64(11),
-        reader.IsDBNull(12) ? null : reader.GetString(12),
-        reader.IsDBNull(13) ? null : reader.GetString(13),
-        reader.IsDBNull(14) ? null : reader.GetString(14));
+    private static AnalysisRun ReadRun(SqliteDataReader reader)
+    {
+        return new AnalysisRun(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetString(7),
+            reader.GetInt64(8),
+            reader.IsDBNull(9) ? null : reader.GetInt64(9),
+            reader.IsDBNull(10) ? null : reader.GetInt64(10),
+            reader.IsDBNull(11) ? null : reader.GetInt64(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            reader.IsDBNull(14) ? null : reader.GetString(14));
+    }
 }

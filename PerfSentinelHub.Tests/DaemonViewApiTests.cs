@@ -13,38 +13,38 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
     : IClassFixture<HubApplicationFactory>
 {
     private const string Status = """
-        {"version":"0.16.0","uptime_seconds":864000,"active_traces":900,
-         "max_active_traces":1000,"analysis_queue_depth":3,"analysis_queue_capacity":256,
-         "stored_findings":40,"max_retained_findings":10000}
-        """;
+                                  {"version":"0.16.0","uptime_seconds":864000,"active_traces":900,
+                                   "max_active_traces":1000,"analysis_queue_depth":3,"analysis_queue_capacity":256,
+                                   "stored_findings":40,"max_retained_findings":10000}
+                                  """;
 
     // Every key a daemon publishes, so the defaults-coverage test actually
     // exercises the whole section rather than a sample of it.
     private const string Config = """
-        {"listen_addr":"0.0.0.0","listen_port":4318,"listen_port_grpc":4317,
-         "json_socket":"/tmp/perf-sentinel.sock","max_active_traces":1000,
-         "trace_ttl_ms":30000,"sampling_rate":0.5,"max_events_per_trace":1000,
-         "max_payload_size":16777216,"environment":"production",
-         "max_retained_findings":10000,"max_export_findings":1000,
-         "max_retained_traces":50,"ingest_queue_capacity":1024,
-         "analysis_queue_capacity":1024,"memory_high_water_pct":0,
-         "api_enabled":true,"tls_configured":true,"ack_enabled":true,
-         "ack_api_key_set":true,"cors_allowed_origins":[],
-         "archive_configured":false,"correlation_enabled":true,
-         "correlation_window_ms":600000,"correlation_lag_threshold_ms":5000,
-         "correlation_min_co_occurrences":5,"correlation_min_confidence":0.7,
-         "correlation_max_tracked_pairs":10000}
-        """;
+                                  {"listen_addr":"0.0.0.0","listen_port":4318,"listen_port_grpc":4317,
+                                   "json_socket":"/tmp/perf-sentinel.sock","max_active_traces":1000,
+                                   "trace_ttl_ms":30000,"sampling_rate":0.5,"max_events_per_trace":1000,
+                                   "max_payload_size":16777216,"environment":"production",
+                                   "max_retained_findings":10000,"max_export_findings":1000,
+                                   "max_retained_traces":50,"ingest_queue_capacity":1024,
+                                   "analysis_queue_capacity":1024,"memory_high_water_pct":0,
+                                   "api_enabled":true,"tls_configured":true,"ack_enabled":true,
+                                   "ack_api_key_set":true,"cors_allowed_origins":[],
+                                   "archive_configured":false,"correlation_enabled":true,
+                                   "correlation_window_ms":600000,"correlation_lag_threshold_ms":5000,
+                                   "correlation_min_co_occurrences":5,"correlation_min_confidence":0.7,
+                                   "correlation_max_tracked_pairs":10000}
+                                  """;
 
     private const string Report = """
-        {"binary_version":"0.16.0",
-         "detection_config":{"n_plus_one_threshold":5,"window_ms":500,
-           "slow_threshold_ms":500,"slow_min_occurrences":3,"max_fanout":20,
-           "chatty_service_min_calls":15,"pool_saturation_concurrent_threshold":10,
-           "serialized_min_sequential":3,"sanitizer_aware_classification":"auto"},
-         "green_summary":{"energy_model":"measured","scoring_config":{"api_version":"1.0"}},
-         "warning_details":[{"kind":"tuning","message":"ingest queue is undersized"}]}
-        """;
+                                  {"binary_version":"0.16.0",
+                                   "detection_config":{"n_plus_one_threshold":5,"window_ms":500,
+                                     "slow_threshold_ms":500,"slow_min_occurrences":3,"max_fanout":20,
+                                     "chatty_service_min_calls":15,"pool_saturation_concurrent_threshold":10,
+                                     "serialized_min_sequential":3,"sanitizer_aware_classification":"auto"},
+                                   "green_summary":{"energy_model":"measured","scoring_config":{"api_version":"1.0"}},
+                                   "warning_details":[{"kind":"tuning","message":"ingest queue is undersized"}]}
+                                  """;
 
     [Fact]
     public async Task A_daemon_view_relays_its_settings_and_its_gauges()
@@ -132,8 +132,7 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
     [Fact]
     public async Task A_daemon_that_does_not_answer_fabricates_no_state()
     {
-        var (view, _) = await ReadViewAsync(
-            context => Respond(context, HttpStatusCode.InternalServerError, "no"));
+        var (view, _) = await ReadViewAsync(context => Respond(context, HttpStatusCode.InternalServerError, "no"));
 
         Assert.Equal("unreachable", view.GetProperty("state").GetString());
         Assert.Equal("http_error", view.GetProperty("error_code").GetString());
@@ -224,7 +223,7 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Sources =
                 [
-                    ..options.Sources,
+                    .. options.Sources,
                     new SourceOptions
                     {
                         Id = "backend",
@@ -256,13 +255,16 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private static Task Answering(HttpContext context) => context.Request.Path.Value switch
+    private static Task Answering(HttpContext context)
     {
-        "/api/status" => Respond(context, HttpStatusCode.OK, Status),
-        "/api/config" => Respond(context, HttpStatusCode.OK, Config),
-        "/api/export/report" => Respond(context, HttpStatusCode.OK, Report),
-        _ => Respond(context, HttpStatusCode.NotFound, "{}")
-    };
+        return context.Request.Path.Value switch
+        {
+            "/api/status" => Respond(context, HttpStatusCode.OK, Status),
+            "/api/config" => Respond(context, HttpStatusCode.OK, Config),
+            "/api/export/report" => Respond(context, HttpStatusCode.OK, Report),
+            _ => Respond(context, HttpStatusCode.NotFound, "{}")
+        };
+    }
 
     private static async Task Respond(HttpContext context, HttpStatusCode statusCode, string body)
     {
@@ -321,12 +323,13 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
         }
     }
 
-    private WebApplicationFactory<Program> Scoped(Uri baseUrl, string? headerName, string? headerValue) =>
-        factory.WithWebHostBuilder(builder =>
+    private WebApplicationFactory<Program> Scoped(Uri baseUrl, string? headerName, string? headerValue)
+    {
+        return factory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Sources =
                 [
-                    ..options.Sources,
+                    .. options.Sources,
                     new SourceOptions
                     {
                         Id = "probe",
@@ -338,4 +341,5 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
                         AuthHeaderValue = headerValue
                     }
                 ])));
+    }
 }

@@ -8,11 +8,24 @@ internal sealed class ListLogger<T> : ILogger<T>
 
     public IReadOnlyList<string> Messages
     {
-        get { lock (_messages) return [.. _messages]; }
+        get
+        {
+            lock (_messages)
+            {
+                return [.. _messages];
+            }
+        }
     }
 
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-    public bool IsEnabled(LogLevel logLevel) => true;
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+    {
+        return null;
+    }
+
+    public bool IsEnabled(LogLevel logLevel)
+    {
+        return true;
+    }
 
     public void Log<TState>(
         LogLevel logLevel,
@@ -22,6 +35,8 @@ internal sealed class ListLogger<T> : ILogger<T>
         Func<TState, Exception?, string> formatter)
     {
         lock (_messages)
+        {
             _messages.Add(formatter(state, exception));
+        }
     }
 }

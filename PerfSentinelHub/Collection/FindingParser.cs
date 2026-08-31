@@ -28,6 +28,10 @@ public sealed record ParsedFinding(
 // ReSharper disable ConvertIfStatementToReturnStatement
 public static class FindingParser
 {
+    // Unix-ms sanity floor (2001-09-09). Rejects seconds-unit bugs and
+    // pre-epoch garbage that would poison the irreversible MIN(first_seen_ms).
+    private const long MinPlausibleEpochMs = 1_000_000_000_000;
+
     public static ParsedBatch Parse(ReadOnlyMemory<byte> payload)
     {
         JsonDocument document;
@@ -86,12 +90,10 @@ public static class FindingParser
         var findings = new List<ParsedFinding>();
         var rejected = 0;
         foreach (var envelope in root.EnumerateArray())
-        {
             if (TryParse(envelope, out var finding))
                 findings.Add(finding);
             else
                 rejected++;
-        }
 
         return new ParsedBatch(findings, rejected);
     }
@@ -133,10 +135,6 @@ public static class FindingParser
         return true;
     }
 
-    // Unix-ms sanity floor (2001-09-09). Rejects seconds-unit bugs and
-    // pre-epoch garbage that would poison the irreversible MIN(first_seen_ms).
-    private const long MinPlausibleEpochMs = 1_000_000_000_000;
-
     private static long? TryEpochMs(JsonElement element, string propertyName)
     {
         return element.TryGetProperty(propertyName, out var property) &&
@@ -156,14 +154,17 @@ public static class FindingParser
         return value.Length > 0;
     }
 
-    private static int ConfidenceRank(string confidence) => confidence switch
+    private static int ConfidenceRank(string confidence)
     {
-        "daemon_production" => 4,
-        "daemon_staging" => 3,
-        "ci_batch" => 2,
-        "local_batch" => 1,
-        _ => 0
-    };
+        return confidence switch
+        {
+            "daemon_production" => 4,
+            "daemon_staging" => 3,
+            "ci_batch" => 2,
+            "local_batch" => 1,
+            _ => 0
+        };
+    }
 }
 // ReSharper restore ConvertIfStatementToReturnStatement
 // ReSharper restore ConvertIfStatementToSwitchStatement

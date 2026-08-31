@@ -17,12 +17,13 @@ namespace PerfSentinelHub.Tests;
 [SupportedOSPlatform("macos")]
 public sealed class AnalysisApiTests : IDisposable
 {
+    private readonly HttpClient _client;
+
+    private readonly WebApplicationFactory<Program> _factory;
+
     private readonly string _workspace = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-analysis-{Guid.NewGuid():N}");
-
-    private readonly WebApplicationFactory<Program> _factory;
-    private readonly HttpClient _client;
 
     public AnalysisApiTests()
     {
@@ -61,14 +62,23 @@ public sealed class AnalysisApiTests : IDisposable
         _client = _factory.CreateClient();
     }
 
+    public void Dispose()
+    {
+        _client.Dispose();
+        _factory.Dispose();
+        SqliteConnection.ClearAllPools();
+        if (Directory.Exists(_workspace))
+            Directory.Delete(_workspace, true);
+    }
+
     [Fact]
     public async Task A_submitted_run_is_executed_and_its_report_is_served_from_the_same_origin()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
         using var submission = await SubmitAsync("""
-            {"source_id":"prod-tempo","request":{"service":"order-service","lookback":"1h","max_traces":100}}
-            """, cancellationToken);
+                                                 {"source_id":"prod-tempo","request":{"service":"order-service","lookback":"1h","max_traces":100}}
+                                                 """, cancellationToken);
         Assert.Equal(HttpStatusCode.Accepted, submission.StatusCode);
         var id = (await submission.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
             .GetProperty("id").GetString()!;
@@ -155,15 +165,6 @@ public sealed class AnalysisApiTests : IDisposable
         Assert.Equal(168, listed.EnumerateArray().Single().GetProperty("retention_hours").GetInt32());
     }
 
-    public void Dispose()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-        SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_workspace))
-            Directory.Delete(_workspace, recursive: true);
-    }
-
     private async Task<HttpResponseMessage> SubmitAsync(string body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analyses");
@@ -190,23 +191,23 @@ public sealed class AnalysisApiTests : IDisposable
     {
         var path = Path.Combine(_workspace, "perf-sentinel");
         File.WriteAllText(path, """
-            #!/bin/sh
-            if [ "$1" = "--version" ]; then echo "perf-sentinel 0.16.0"; exit 0; fi
-            if [ "$1" = "report" ]; then
-              while [ $# -gt 0 ]; do
-                if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
-                shift
-              done
-              exit 0
-            fi
-            cat <<'JSON'
-            {"analysis":{"traces_analyzed":42},
-             "findings":[{"severity":"critical"},{"severity":"warning"},{"severity":"info"}],
-             "quality_gate":{"passed":false},
-             "binary_version":"0.16.0"}
-            JSON
+                                #!/bin/sh
+                                if [ "$1" = "--version" ]; then echo "perf-sentinel 0.16.0"; exit 0; fi
+                                if [ "$1" = "report" ]; then
+                                  while [ $# -gt 0 ]; do
+                                    if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
+                                    shift
+                                  done
+                                  exit 0
+                                fi
+                                cat <<'JSON'
+                                {"analysis":{"traces_analyzed":42},
+                                 "findings":[{"severity":"critical"},{"severity":"warning"},{"severity":"info"}],
+                                 "quality_gate":{"passed":false},
+                                 "binary_version":"0.16.0"}
+                                JSON
 
-            """);
+                                """);
         File.SetUnixFileMode(
             path,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

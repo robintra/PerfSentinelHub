@@ -8,9 +8,9 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-/// The bounded vocabulary a run may report. Raw stderr never leaves the
-/// process, so this is all the operator gets, and every code needs one
-/// actionable sentence in the interface.
+///     The bounded vocabulary a run may report. Raw stderr never leaves the
+///     process, so this is all the operator gets, and every code needs one
+///     actionable sentence in the interface.
 /// </summary>
 public static class AnalysisErrorCodes
 {
@@ -31,9 +31,9 @@ public sealed record RunOutcome(
     ReportSummary? Summary);
 
 /// <summary>
-/// Executes one run: obtain the engine's report JSON, then render it to a
-/// self-contained HTML file. Two steps, because the query subcommands emit
-/// text, JSON or SARIF and only `report` writes HTML.
+///     Executes one run: obtain the engine's report JSON, then render it to a
+///     self-contained HTML file. Two steps, because the query subcommands emit
+///     text, JSON or SARIF and only `report` writes HTML.
 /// </summary>
 public sealed partial class AnalysisRunner(
     DaemonClient daemonClient,
@@ -48,16 +48,21 @@ public sealed partial class AnalysisRunner(
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
 
-    public string ReportPath(string runId) =>
-        Path.Combine(_analysis.ReportDirectory, $"{runId}.html");
+    public string ReportPath(string runId)
+    {
+        return Path.Combine(_analysis.ReportDirectory, $"{runId}.html");
+    }
 
     /// <summary>Removes a report whose lifetime ran out. Missing is fine.</summary>
-    public void DeleteReport(string runId) => TryDelete(ReportPath(runId));
+    public void DeleteReport(string runId)
+    {
+        TryDelete(ReportPath(runId));
+    }
 
     /// <summary>
-    /// Deletes scratch input files a previous process left behind. The finally
-    /// in RenderAsync cannot run when the container is killed, and nothing else
-    /// ever removes them: report expiry only knows about the .html.
+    ///     Deletes scratch input files a previous process left behind. The finally
+    ///     in RenderAsync cannot run when the container is killed, and nothing else
+    ///     ever removes them: report expiry only knows about the .html.
     /// </summary>
     public int SweepScratchFiles()
     {
@@ -126,9 +131,9 @@ public sealed partial class AnalysisRunner(
     }
 
     /// <summary>
-    /// Writes the run's own `[detection]` section, or returns null when the
-    /// operator changed nothing. Handed to both subprocesses through `-c`, so
-    /// the query and the render agree on what counts as a problem.
+    ///     Writes the run's own `[detection]` section, or returns null when the
+    ///     operator changed nothing. Handed to both subprocesses through `-c`, so
+    ///     the query and the render agree on what counts as a problem.
     /// </summary>
     private string? WriteRunConfig(string runId, AnalysisRequest request)
     {
@@ -142,8 +147,8 @@ public sealed partial class AnalysisRunner(
     }
 
     /// <summary>
-    /// Returns the engine's report JSON, or null when the engine refused. The
-    /// stderr it wrote is used to name an owner and is never returned.
+    ///     Returns the engine's report JSON, or null when the engine refused. The
+    ///     stderr it wrote is used to name an owner and is never returned.
     /// </summary>
     private async Task<byte[]?> QueryBackendAsync(
         AnalysisRequest request,
@@ -171,17 +176,19 @@ public sealed partial class AnalysisRunner(
     }
 
     /// <summary>
-    /// The URL a daemon-source report can go live against, or null. Three ways
-    /// to get null, and all three render a static report rather than fail a
-    /// run: a source that is not a daemon, a daemon reached through a
-    /// path-based ingress (the engine takes an origin and rejects path, query,
-    /// userinfo and trailing slash at parse), and an engine binary built
-    /// without its `daemon` feature, which does not know the flag at all.
+    ///     The URL a daemon-source report can go live against, or null. Three ways
+    ///     to get null, and all three render a static report rather than fail a
+    ///     run: a source that is not a daemon, a daemon reached through a
+    ///     path-based ingress (the engine takes an origin and rejects path, query,
+    ///     userinfo and trailing slash at parse), and an engine binary built
+    ///     without its `daemon` feature, which does not know the flag at all.
     /// </summary>
-    public static string? LiveDaemonUrl(SourceOptions source, bool engineTakesTheFlag) =>
-        engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.BaseUrl!.AbsolutePath == "/"
+    public static string? LiveDaemonUrl(SourceOptions source, bool engineTakesTheFlag)
+    {
+        return engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.BaseUrl!.AbsolutePath == "/"
             ? source.EndpointArgument
             : null;
+    }
 
     private async Task<bool> RenderAsync(
         string runId,
@@ -263,33 +270,41 @@ public sealed partial class AnalysisRunner(
     }
 
 
-    private static RunOutcome Failed(string errorCode) =>
-        new(AnalysisStatuses.Failed, errorCode, null, null);
-
-    private static string Classify(Exception exception) => exception switch
+    private static RunOutcome Failed(string errorCode)
     {
-        EngineFailedException engineFailed => engineFailed.ErrorCode,
-        DaemonTimeoutException => AnalysisErrorCodes.Timeout,
-        ResponseTooLargeException or EngineOutputTooLargeException => AnalysisErrorCodes.OutputTooLarge,
-        HttpRequestException http => ClassifyHttp(http.StatusCode),
-        _ => AnalysisErrorCodes.Internal
-    };
+        return new RunOutcome(AnalysisStatuses.Failed, errorCode, null, null);
+    }
 
-    private static string ClassifyHttp(HttpStatusCode? statusCode) => statusCode switch
+    private static string Classify(Exception exception)
     {
-        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => AnalysisErrorCodes.SourceAuthFailed,
-        // No status at all means the request never reached a server.
-        null => AnalysisErrorCodes.SourceUnreachable,
-        >= HttpStatusCode.BadRequest and < HttpStatusCode.InternalServerError =>
-            AnalysisErrorCodes.SourceRejectedRequest,
-        _ => AnalysisErrorCodes.SourceUnreachable
-    };
+        return exception switch
+        {
+            EngineFailedException engineFailed => engineFailed.ErrorCode,
+            DaemonTimeoutException => AnalysisErrorCodes.Timeout,
+            ResponseTooLargeException or EngineOutputTooLargeException => AnalysisErrorCodes.OutputTooLarge,
+            HttpRequestException http => ClassifyHttp(http.StatusCode),
+            _ => AnalysisErrorCodes.Internal
+        };
+    }
+
+    private static string ClassifyHttp(HttpStatusCode? statusCode)
+    {
+        return statusCode switch
+        {
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => AnalysisErrorCodes.SourceAuthFailed,
+            // No status at all means the request never reached a server.
+            null => AnalysisErrorCodes.SourceUnreachable,
+            >= HttpStatusCode.BadRequest and < HttpStatusCode.InternalServerError =>
+                AnalysisErrorCodes.SourceRejectedRequest,
+            _ => AnalysisErrorCodes.SourceUnreachable
+        };
+    }
 
     /// <summary>
-    /// Names an owner from what the engine printed. A heuristic on purpose:
-    /// the engine has no exit code per failure kind, and "the backend refused
-    /// us" and "the binary broke" have different owners and different next
-    /// steps. Anything unrecognised stays <c>binary_failed</c>.
+    ///     Names an owner from what the engine printed. A heuristic on purpose:
+    ///     the engine has no exit code per failure kind, and "the backend refused
+    ///     us" and "the binary broke" have different owners and different next
+    ///     steps. Anything unrecognised stays <c>binary_failed</c>.
     /// </summary>
     private static string ClassifyEngineFailure(string standardError)
     {
@@ -313,8 +328,10 @@ public sealed partial class AnalysisRunner(
             : AnalysisErrorCodes.BinaryFailed;
     }
 
-    private static bool Contains(string haystack, string needle) =>
-        haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+    private static bool Contains(string haystack, string needle)
+    {
+        return haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Best effort: false when the file is still there.</summary>
     private static bool TryDelete(string path)

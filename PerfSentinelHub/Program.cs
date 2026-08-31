@@ -24,7 +24,7 @@ if (args is ["backup", ..])
     var backupConfiguration = WebApplication.CreateSlimBuilder().Configuration;
     return await HubBackup.RunAsync(
         backupConfiguration[$"{HubOptions.SectionName}:{nameof(HubOptions.DatabasePath)}"]
-            ?? new HubOptions().DatabasePath,
+        ?? new HubOptions().DatabasePath,
         backupDestination);
 }
 

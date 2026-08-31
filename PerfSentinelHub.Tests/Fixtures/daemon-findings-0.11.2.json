@@ -23,13 +23,17 @@
         "lineno": 18,
         "namespace": "PerfSentinel.RiderSmoke.Program"
       },
-      "instrumentation_scopes": ["OpenTelemetry.Instrumentation.AspNetCore"],
+      "instrumentation_scopes": [
+        "OpenTelemetry.Instrumentation.AspNetCore"
+      ],
       "signature": "blocking_wait:rider-smoke:checkout:slow-path"
     },
     "stored_at_ms": 1786183205000,
     "first_seen_ms": 1786183200000,
     "seen_count": 8,
     "acknowledged_by": null,
-    "future_contract_field": { "preserve": true }
+    "future_contract_field": {
+      "preserve": true
+    }
   }
 ]

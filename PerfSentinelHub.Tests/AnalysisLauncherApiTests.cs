@@ -64,7 +64,7 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Sources =
                 [
-                    ..options.Sources,
+                    .. options.Sources,
                     new SourceOptions
                     {
                         Id = "victoria",
@@ -96,7 +96,7 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Sources =
                 [
-                    ..options.Sources,
+                    .. options.Sources,
                     new SourceOptions
                     {
                         Id = "tempo",
@@ -129,7 +129,7 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Sources =
                 [
-                    ..options.Sources,
+                    .. options.Sources,
                     new SourceOptions
                     {
                         Id = "guarded",

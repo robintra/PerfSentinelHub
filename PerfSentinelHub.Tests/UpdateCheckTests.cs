@@ -18,8 +18,10 @@ public sealed class UpdateCheckTests
     [InlineData(null, null)]
     [InlineData("v0.1.0/../../etc", null)]
     [InlineData("v0.1.0 0.2.0", null)]
-    public void A_tag_becomes_a_version_or_nothing(string? tag, string? expected) =>
+    public void A_tag_becomes_a_version_or_nothing(string? tag, string? expected)
+    {
         Assert.Equal(expected, UpdateChecker.Normalize(tag));
+    }
 
     [Fact]
     public void The_default_check_is_https_and_states_its_whole_destination()

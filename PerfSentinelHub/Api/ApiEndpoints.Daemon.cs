@@ -9,11 +9,14 @@ namespace PerfSentinelHub.Api;
 
 public static partial class ApiEndpoints
 {
+    private const int MaxHints = 100;
+    private const int MaxHintChars = 2000;
+
     /// <summary>
-    /// One daemon's applied settings and its own account of its state. Read on
-    /// demand rather than polled: settings never change without a restart the
-    /// Hub has no signal for, and the gauges are the whole point of the screen,
-    /// so an hour-old copy would be worse than none.
+    ///     One daemon's applied settings and its own account of its state. Read on
+    ///     demand rather than polled: settings never change without a restart the
+    ///     Hub has no signal for, and the gauges are the whole point of the screen,
+    ///     so an hour-old copy would be worse than none.
     /// </summary>
     // Every parameter is either the route's own or a collaborator the router
     // injects. Bundling them into a parameter object would hide the handler's
@@ -142,24 +145,26 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    /// Which absence it is, three different actions for an operator: a 404 is
-    /// the daemon saying its query API is off, a network failure is nothing
-    /// answering, and everything else answered with something the Hub refused
-    /// to relay, an error status, an oversized section, or a body that is not
-    /// the [daemon] object.
+    ///     Which absence it is, three different actions for an operator: a 404 is
+    ///     the daemon saying its query API is off, a network failure is nothing
+    ///     answering, and everything else answered with something the Hub refused
+    ///     to relay, an error status, an oversized section, or a body that is not
+    ///     the [daemon] object.
     /// </summary>
-    private static string? ConfigAbsence(DaemonRead<byte[]> config, string? relayed) =>
-        config switch
+    private static string? ConfigAbsence(DaemonRead<byte[]> config, string? relayed)
+    {
+        return config switch
         {
             { ErrorCode: "network_error" or "timeout" } => "unreachable",
             { ErrorCode: not null } => "unreadable",
             { Value: null } => "api_disabled",
             _ => relayed is null ? "unreadable" : null
         };
+    }
 
     /// <summary>
-    /// Relayed only once it is known to be an object, which bounds the shape
-    /// without the Hub having to model any field inside it.
+    ///     Relayed only once it is known to be an object, which bounds the shape
+    ///     without the Hub having to model any field inside it.
     /// </summary>
     private static string? ReadConfigObject(byte[]? body)
     {
@@ -178,14 +183,11 @@ public static partial class ApiEndpoints
         }
     }
 
-    private const int MaxHints = 100;
-    private const int MaxHintChars = 2000;
-
     /// <summary>
-    /// The three things a snapshot carries that /api/config does not: the
-    /// detection thresholds, the scoring half of the green section, and the
-    /// hints the daemon writes about its own tuning. One parse of the body
-    /// serves all of them.
+    ///     The three things a snapshot carries that /api/config does not: the
+    ///     detection thresholds, the scoring half of the green section, and the
+    ///     hints the daemon writes about its own tuning. One parse of the body
+    ///     serves all of them.
     /// </summary>
     private static DaemonSnapshotRead ReadSnapshot(byte[]? report)
     {
@@ -215,10 +217,10 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    /// The daemon's hints, wide enough that truncation is theoretical (the
-    /// daemon has ten advisor rules), and never silent when it happens: a cut
-    /// message carries a visible ellipsis and the dropped count goes on the
-    /// wire. ReportSummary's tighter run-storage bounds stay its own.
+    ///     The daemon's hints, wide enough that truncation is theoretical (the
+    ///     daemon has ten advisor rules), and never silent when it happens: a cut
+    ///     message carries a visible ellipsis and the dropped count goes on the
+    ///     wire. ReportSummary's tighter run-storage bounds stay its own.
     /// </summary>
     private static (IReadOnlyList<ResultWarning> Warnings, int Dropped) ReadHints(JsonElement root)
     {
@@ -249,7 +251,12 @@ public static partial class ApiEndpoints
             if (JsonRead.ReadString(entry, "kind") is not { } kind ||
                 JsonRead.ReadString(entry, "message") is not { } message)
                 continue;
-            if (warnings.Count == MaxHints) { dropped++; continue; }
+            if (warnings.Count == MaxHints)
+            {
+                dropped++;
+                continue;
+            }
+
             warnings.Add(new ResultWarning(kind, TruncateHint(message)));
         }
 
@@ -272,23 +279,34 @@ public static partial class ApiEndpoints
         {
             if (entry.ValueKind != JsonValueKind.String)
                 continue;
-            if (warnings.Count == MaxHints) { dropped++; continue; }
+            if (warnings.Count == MaxHints)
+            {
+                dropped++;
+                continue;
+            }
+
             warnings.Add(new ResultWarning("unknown", TruncateHint(entry.GetString()!)));
         }
 
         return (warnings, dropped);
     }
 
-    private static string TruncateHint(string message) =>
-        message.Length <= MaxHintChars ? message : message[..MaxHintChars] + "…";
+    private static string TruncateHint(string message)
+    {
+        return message.Length <= MaxHintChars ? message : message[..MaxHintChars] + "…";
+    }
 
-    private static JsonElement? Section(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object
+    private static JsonElement? Section(JsonElement root, string name)
+    {
+        return root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object
             ? value
             : null;
+    }
 
-    private static string? RawObject(JsonElement root, string name) =>
-        Section(root, name)?.GetRawText();
+    private static string? RawObject(JsonElement root, string name)
+    {
+        return Section(root, name)?.GetRawText();
+    }
 
     private static async Task<DaemonRead<T>> TryReadAsync<T>(
         Func<Task<T?>> read,
@@ -322,8 +340,8 @@ public static partial class ApiEndpoints
 }
 
 /// <summary>
-/// Each daemon read buffers a report snapshot, so a burst of folds on the
-/// Sources screen is real memory rather than a few cheap requests.
+///     Each daemon read buffers a report snapshot, so a burst of folds on the
+///     Sources screen is real memory rather than a few cheap requests.
 /// </summary>
 public sealed class DaemonViewGate() : RequestGate(MaxReads)
 {

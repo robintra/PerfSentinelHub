@@ -59,8 +59,8 @@ public static partial class FindingEnvelopeWriter
     private static partial void LogUnreadableEnvelope(ILogger logger, Exception exception, string signature);
 
     /// <summary>
-    /// What the Hub knows and the daemon does not: how long this finding has
-    /// been around, and what it is now.
+    ///     What the Hub knows and the daemon does not: how long this finding has
+    ///     been around, and what it is now.
     /// </summary>
     private static void WriteHubFields(Utf8JsonWriter writer, StoredFinding row)
     {
@@ -81,8 +81,8 @@ public static partial class FindingEnvelopeWriter
     }
 
     /// <summary>
-    /// Every source that reported this finding, oldest field first and ordered
-    /// by id so two identical pages compare equal.
+    ///     Every source that reported this finding, oldest field first and ordered
+    ///     by id so two identical pages compare equal.
     /// </summary>
     private static void WriteSources(Utf8JsonWriter writer, StoredFinding row, DateTimeOffset now)
     {
@@ -98,6 +98,7 @@ public static partial class FindingEnvelopeWriter
             writer.WriteString("status", source.UnreachableSinceMs is null ? "ok" : "unreachable_since");
             writer.WriteEndObject();
         }
+
         writer.WriteEndArray();
     }
 
@@ -107,11 +108,9 @@ public static partial class FindingEnvelopeWriter
         // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
 #pragma warning disable S3267
         foreach (var property in envelope.EnumerateObject())
-        {
             if (property.Name is not ("first_seen" or "last_seen" or "max_confidence" or "sources"
                 or "status" or "lineage"))
                 property.WriteTo(writer);
-        }
 #pragma warning restore S3267
     }
 }

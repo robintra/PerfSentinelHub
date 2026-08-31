@@ -112,8 +112,8 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    /// Serves a rendered report from the same origin as the launcher, which is
-    /// what lets the dashboard pick up the theme with no URL parameter.
+    ///     Serves a rendered report from the same origin as the launcher, which is
+    ///     what lets the dashboard pick up the theme with no URL parameter.
     /// </summary>
     private static async Task<IResult> GetReportAsync(
         string id,
@@ -140,7 +140,9 @@ public static partial class ApiEndpoints
         SourceOptions source,
         JsonElement request,
         string requestedBy,
-        long nowMs) => new(
+        long nowMs)
+    {
+        return new AnalysisRun(
             NewRunId(),
             AnalysisStatuses.Pending,
             source.Id,
@@ -151,20 +153,25 @@ public static partial class ApiEndpoints
             requestedBy,
             nowMs,
             null, null, null, null, null, null);
+    }
 
-    private static SourceOptions? ReadSource(JsonElement root, HubOptions options) =>
-        root.TryGetProperty("source_id", out var sourceId) &&
-        sourceId.ValueKind == JsonValueKind.String
+    private static SourceOptions? ReadSource(JsonElement root, HubOptions options)
+    {
+        return root.TryGetProperty("source_id", out var sourceId) &&
+               sourceId.ValueKind == JsonValueKind.String
             ? options.Sources.FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, sourceId.GetString(), StringComparison.Ordinal))
             : null;
+    }
 
     /// <summary>
-    /// The identity a reverse proxy established upstream. The Hub has no
-    /// account surface and does not verify it, so it is recorded as a claim.
+    ///     The identity a reverse proxy established upstream. The Hub has no
+    ///     account surface and does not verify it, so it is recorded as a claim.
     /// </summary>
-    private static string Identity(HttpRequest request, AnalysisOptions analysis) =>
-        KnownIdentity(request, analysis) ?? "unknown";
+    private static string Identity(HttpRequest request, AnalysisOptions analysis)
+    {
+        return KnownIdentity(request, analysis) ?? "unknown";
+    }
 
     /// <summary>Null when no proxy established one, rather than a placeholder.</summary>
     private static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
@@ -177,22 +184,28 @@ public static partial class ApiEndpoints
         return trimmed.Any(char.IsControl) ? null : trimmed;
     }
 
-    private static string NewRunId() =>
-        Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(RunIdHexChars / 2));
+    private static string NewRunId()
+    {
+        return Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(RunIdHexChars / 2));
+    }
 
     /// <summary>
-    /// Defence in depth ahead of the database lookup. Removing it changes no
-    /// observable response, since an id the Hub never minted finds no row and
-    /// 404s anyway, so no test can pin it from outside.
+    ///     Defence in depth ahead of the database lookup. Removing it changes no
+    ///     observable response, since an id the Hub never minted finds no row and
+    ///     404s anyway, so no test can pin it from outside.
     /// </summary>
-    private static bool IsRunId(string id) =>
-        id.Length == RunIdHexChars && id.All(char.IsAsciiHexDigitLower);
+    private static bool IsRunId(string id)
+    {
+        return id.Length == RunIdHexChars && id.All(char.IsAsciiHexDigitLower);
+    }
 
     // The typed overload keeps NativeAOT trimming safe: the reflection-based
     // one is flagged by IL2026 and IL3050 at build time.
-    private static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string detail) =>
-        TypedResults.Json(
+    private static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string detail)
+    {
+        return TypedResults.Json(
             new AnalysisProblem(detail),
             HubJsonContext.Default.AnalysisProblem,
             statusCode: statusCode);
+    }
 }

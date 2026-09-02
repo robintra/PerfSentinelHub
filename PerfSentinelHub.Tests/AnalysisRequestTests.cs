@@ -259,8 +259,9 @@ public sealed class AnalysisRequestTests
     // A pre-release of the minor that added a knob reads it too.
     [InlineData("0.18.0-rc.1", true, true)]
     [InlineData("0.5.7", true, false)]
-    // No probed version means no promise about what `-c` will be refused.
-    [InlineData(null, false, false)]
+    // No probed version withholds only what a version gates: the mode is read by
+    // every engine, so a failed probe still offers it.
+    [InlineData(null, true, false)]
     public void The_sanitizer_knobs_are_offered_only_to_an_engine_that_reads_them(
         string? engine, bool mode, bool threshold)
     {
@@ -284,11 +285,21 @@ public sealed class AnalysisRequestTests
             "sanitizer_aware_min_cv needs engine 0.18.0 or later, this Hub runs 0.17.0.",
             request!.Detection.RefusedBy("0.17.0"));
         Assert.Null(request.Detection.RefusedBy("0.18.0"));
-        // The mode is older than any engine the Hub drives, so it is never the reason.
+        // A version the probe never read, or read but could not parse, is named
+        // for what it is rather than called too old.
+        Assert.Equal(
+            "sanitizer_aware_min_cv needs engine 0.18.0 or later, this Hub has not read its engine's version.",
+            request.Detection.RefusedBy(null));
+        Assert.Equal(
+            "sanitizer_aware_min_cv needs engine 0.18.0 or later, this Hub could not read its engine's version (0.18.0.rc1).",
+            request.Detection.RefusedBy("0.18.0.rc1"));
+        // The mode is older than any engine the Hub drives, so it is never the
+        // reason, not even when the probe failed.
         var mode = Parse("""
                          {"service":"orders","lookback":"1h","detection":{"sanitizer_aware_classification":"strict"}}
                          """, SourceKinds.Tempo, out _);
         Assert.Null(mode!.Detection.RefusedBy("0.17.0"));
+        Assert.Null(mode.Detection.RefusedBy(null));
     }
 
     [Theory]

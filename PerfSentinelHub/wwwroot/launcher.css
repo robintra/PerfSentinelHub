@@ -3622,10 +3622,6 @@ body[data-screen="report"] .shell-footer {
        type scale, not the refresh row's. */
     select.input-knob::picker(select) {
         font-size: 13px;
-        /* The 4px the refresh select uses reads as a gap under a 24px control
-           and as a seam under this 34px one, so the offset follows the button
-           it hangs from. */
-        margin-block-start: 8px;
         /* The picker asks for `max-height: stretch`, so it claims whatever room
            the axis offers rather than the height its four options need. Down
            the page that reads as too little room below, the browser takes its

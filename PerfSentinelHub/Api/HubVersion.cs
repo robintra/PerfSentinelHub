@@ -9,9 +9,9 @@ namespace PerfSentinelHub.Api;
 public static class HubVersion
 {
     /// <summary>
-    ///     AssemblyVersion is padded to four components, so it reads `0.1.2.0`
+    ///     AssemblyVersion is padded to four components, so it reads `0.1.3.0`
     ///     where the tag, the chart appVersion and the image label all say
-    ///     `0.1.2`. The informational version carries what was released.
+    ///     `0.1.3`. The informational version carries what was released.
     /// </summary>
     public static string Current { get; } = Read();
 

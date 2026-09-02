@@ -10,3 +10,12 @@
 # The first entry validates a version that has never been published: the whole
 # point of the gate is to assert the lab saw the build before the tag exists.
 v0.1.0	d7f5889	2026-08-29	PASS
+# v0.1.2 PASS covers the scope feature/launcher-sanitizer-knobs touched, on Hub
+# commit 9e30921: all six hub-* scenarios green against a daemon on the published
+# 0.18.0 image, plus the launcher's own probe, which the lab had never exercised
+# because no manifest configured Hub:Analysis:EngineBinaryPath. With it set, the
+# Hub reads engine 0.18.0 and serves all ten detection knobs, sanitizer_aware_min_cv
+# included. A launcher run end to end is still uncovered: the lab configures no
+# trace-backend source for the Hub, and tests/launcher-e2e.test.js covers that path
+# against the real binary.
+v0.1.2	0e57121	2026-09-02	PASS

@@ -2,6 +2,27 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.1.4] - 2026-09-02
+
+### Fixed
+
+- The launcher's `sanitizer_aware_classification` control was a native select, whose menu the
+  OS draws over the button and aligns on the selected item. It now opts into the base
+  appearance the refresh select already used, so the list hangs under the button and is
+  painted by the page. Two details were measured rather than assumed. The picker asks for
+  `max-height: stretch`, so it claims whatever room the axis offers instead of the height its
+  four options need, and down the page that reads as too little room below and flips the list
+  back over the button. Bounding the height does not change that decision, only dropping the
+  position fallbacks does. And without the flex the base appearance leaves behind, the label
+  sat at the top-left of the button with the arrow adrift in the corner.
+- The four values `sanitizer_aware_classification` accepts, `auto`, `strict`, `always` and
+  `never`, are marked as code in its description, where they read as ordinary words of the
+  sentence before. The same treatment reaches `strict` and `auto` where
+  `sanitizer_aware_min_cv` names them.
+- `ParseEngineVersion` splits the probed version on separators passed as an array. As loose
+  arguments they partially matched `Split(char, int, StringSplitOptions)`, which is what a
+  reader has to rule out before trusting the line.
+
 ## [0.1.3] - 2026-09-02
 
 ### Changed

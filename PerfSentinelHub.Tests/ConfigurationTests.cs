@@ -116,8 +116,10 @@ public sealed class ConfigurationTests
     {
         var source = ValidSource() with
         {
-            ImportApiKey = "0123456789abcdef0123456789abcdef\n"
-        }; // gitleaks:allow -- synthetic test credential
+            // gitleaks:allow has to sit on the line the scanner matched, and the
+            // match starts here, not on the brace that closed the initialiser.
+            ImportApiKey = "0123456789abcdef0123456789abcdef\n" // gitleaks:allow -- synthetic test credential
+        };
         var options = ValidOptions() with { Sources = [source] };
 
         Assert.Equal("0123456789abcdef0123456789abcdef", source.ImportApiKey);

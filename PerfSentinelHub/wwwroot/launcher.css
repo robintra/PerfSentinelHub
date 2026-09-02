@@ -2125,6 +2125,11 @@ body[data-screen="report"] .shell-footer {
     padding: 18px;
     border: 1px solid;
     border-radius: var(--r);
+    /* Queried by the count strip below, which has to know the width it was
+       actually given, not the window's: this panel is one column of a grid
+       that collapses at 900px. */
+    container-type: inline-size;
+    container-name: strip;
 }
 
 .outcome[data-tone="ok"] {
@@ -2297,6 +2302,44 @@ body[data-screen="report"] .shell-footer {
 
 .count[data-kpi] .count-l {
     color: rgba(255, 255, 255, .78);
+}
+
+/* One row, or a column. Wrapped into two rows the strip's corners stop
+   matching its box: the cells ending each line are square where the container
+   is round, so the outline breaks at the top right and the bottom left.
+   Clipping the container would settle it and is ruled out above, so the strip
+   stops wrapping. The threshold is measured, not derived from the 104px floor:
+   the widest cells outgrow it on their label, and the six of a succeeded run
+   lay out at 656px, so 640 still left the strip wrapping in a window around
+   1090px. Stacked, each cell puts its label beside the figure rather than
+   under it, which is what keeps six of them from filling the viewport. */
+@container strip (max-width: 680px) {
+    .outcome .counts {
+        flex-direction: column;
+    }
+
+    .outcome .count {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .outcome .count-n {
+        margin-bottom: 0;
+    }
+
+    .outcome .count-l {
+        margin-left: auto;
+        text-align: right;
+    }
+
+    .outcome .count:first-child {
+        border-radius: var(--r-sm) var(--r-sm) 0 0;
+    }
+
+    .outcome .count:last-child {
+        border-radius: 0 0 var(--r-sm) var(--r-sm);
+    }
 }
 
 /* What the gauge moved by on the read just adopted, rising off the figure it

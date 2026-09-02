@@ -233,8 +233,13 @@ public sealed record DetectionOverrides
             return false;
         }
 
-        if (number != knob.Default.GetDouble())
-            literal = Decimal(number);
+        // Compared as the text that would be written rather than as doubles: the
+        // question is whether this run would spell the knob exactly as the
+        // default already does, and an exact equality on two doubles is the
+        // wrong instrument for it.
+        var text = Decimal(number);
+        if (text != Decimal(knob.Default.GetDouble()))
+            literal = text;
         return true;
     }
 

@@ -19,3 +19,9 @@ v0.1.0	d7f5889	2026-08-29	PASS
 # trace-backend source for the Hub, and tests/launcher-e2e.test.js covers that path
 # against the real binary.
 v0.1.2	0e57121	2026-09-02	PASS
+# v0.1.3 carries the same lab evidence as the v0.1.2 line above, on the same lab
+# commit: the six hub-* scenarios ran against Hub image 9e30921, which is this tag
+# minus three CSS fixes and a changelog entry. No hub-* scenario reads the
+# stylesheet, so the lab cannot tell the two builds apart, and the version in
+# column one has to be the one about to be tagged for the gate to find it.
+v0.1.3	0e57121	2026-09-02	PASS

@@ -50,6 +50,12 @@
     --ok-fg: #8fe6b8;
     --ok-bg: #17342a;
     --ok-bd: #235c41;
+    /* An inset sitting on a toned panel. Its old ground was --surface-2, a
+       grey-green within a tenth of --crit-bg's luminance, so the two read as
+       one block: the eye separates them by lightness, not by hue. Darkening
+       through whatever tone is behind it keeps one rule for all five. */
+    --inset-bg: rgba(0, 0, 0, .42);
+    --inset-bd: rgba(0, 0, 0, .55);
     --pill: #1e3b30;
     --pill-fg: #9fe9c6;
     --btn-bd: #2e4d41;
@@ -97,6 +103,9 @@
     --ok-fg: #1b530d;
     --ok-bg: #ddf3dc;
     --ok-bd: #c6e6c4;
+    /* See the dark half. Lightening does the same job on the pastel grounds. */
+    --inset-bg: rgba(255, 255, 255, .80);
+    --inset-bd: rgba(0, 0, 0, .13);
     --pill: #d6e9e3;
     --pill-fg: #0b523a;
     --btn-bd: #a7c7bc;

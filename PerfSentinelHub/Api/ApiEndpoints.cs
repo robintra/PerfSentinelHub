@@ -38,11 +38,7 @@ public static partial class ApiEndpoints
                     (int)analysis.Timeout.TotalSeconds,
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded),
-                [
-                    .. DetectionOverrides.SchemaFor(engine.Version)
-                        .Select(knob => new DetectionKnob(
-                            knob.Name, knob.Kind, knob.Min, knob.Max, knob.Default, knob.Choices))
-                ]);
+                [.. DetectionOverrides.SchemaFor(engine.Version)]);
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);

@@ -151,11 +151,31 @@ public sealed class AnalysisApiTests : IDisposable
         var knobs = (await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
             .GetProperty("detection_knobs").EnumerateArray().ToList();
 
-        // The stub reports 0.16.0, whose `[detection]` refuses the two keys outright.
-        Assert.Equal(8, knobs.Count);
-        Assert.All(knobs, knob => Assert.Equal("integer", knob.GetProperty("kind").GetString()));
-        Assert.DoesNotContain(knobs, knob =>
-            knob.GetProperty("name").GetString()!.StartsWith("sanitizer_aware", StringComparison.Ordinal));
+        // The stub reports 0.16.0: it has read the mode since 0.5.7 but its
+        // `[detection]` refuses the variance threshold outright.
+        Assert.Equal(9, knobs.Count);
+        var mode = Assert.Single(knobs, knob => knob.GetProperty("name").GetString() == "sanitizer_aware_classification");
+        Assert.Equal("choice", mode.GetProperty("kind").GetString());
+        Assert.Equal("auto", mode.GetProperty("default").GetString());
+        Assert.DoesNotContain(knobs, knob => knob.GetProperty("name").GetString() == "sanitizer_aware_min_cv");
+    }
+
+    [Fact]
+    public async Task A_knob_the_engine_cannot_read_is_refused_before_anything_is_queued()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var response = await SubmitAsync("""
+                                               {"source_id":"prod-tempo","request":{"service":"orders","lookback":"1h","detection":{"sanitizer_aware_min_cv":0.75}}}
+                                               """, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadAsStringAsync(cancellationToken);
+        Assert.Contains("sanitizer_aware_min_cv needs engine 0.18.0 or later, this Hub runs 0.16.0.", problem,
+            StringComparison.Ordinal);
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal(0, payload.GetProperty("queue_depth").GetInt32());
     }
 
     [Fact]

@@ -329,7 +329,7 @@
         if (r["from_ms"]) parts.push("from_ms = " + r["from_ms"]);
         if (r["to_ms"]) parts.push("to_ms = " + r["to_ms"]);
         if (r["max_traces"] != null) parts.push("max_traces = " + r["max_traces"]);
-        const detection = /** @type {Record<string, number>} */ (r["detection"] || {});
+        const detection = /** @type {Record<string, number|string>} */ (r["detection"] || {});
         Object.keys(detection).forEach(function (name) {
             parts.push(name + " = " + detection[name]);
         });
@@ -594,8 +594,9 @@
     /**
      * The overridden thresholds as the file `-c` expects. Only the ones a run
      * actually changed: a value equal to the engine's own default is dropped
-     * before it reaches here, so every key present is a real departure.
-     * @param {Record<string, number>} detection
+     * before it reaches here, so every key present is a real departure. A
+     * choice rides as a string and is quoted, a threshold as a number.
+     * @param {Record<string, number|string>} detection
      * @returns {string}
      */
     function detectionToml(detection) {

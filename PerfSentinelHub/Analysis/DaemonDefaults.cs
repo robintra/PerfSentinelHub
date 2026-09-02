@@ -9,11 +9,12 @@ namespace PerfSentinelHub.Analysis;
 ///     actually changed. Held as literal JSON and relayed rather than modelled,
 ///     for the same reason the sections beside them are: the Hub reads none of
 ///     these values, it only hands them to a reader that compares.
-///     These are the defaults of the engine version this Hub embeds, exactly as
-///     the engine's own `query monitor` compares against the defaults compiled
-///     into the binary running it. A daemon on a different minor can therefore
-///     have a different default, which is why the view names the version it
-///     compared against instead of asserting a value is wrong.
+///     These are the defaults of the newest engine this Hub knows, a superset of
+///     what an older daemon publishes, exactly as the engine's own `query monitor`
+///     compares against the defaults compiled into the binary running it. A daemon
+///     on a different minor can therefore have a different default, which is why
+///     the view names the version it compared against instead of asserting a value
+///     is wrong.
 ///     The [daemon] half is transcribed from `impl Default for DaemonConfig` in
 ///     sentinel-core. The detection half is derived from the launcher's own knob
 ///     schema so those values are stated once in this codebase, with only the

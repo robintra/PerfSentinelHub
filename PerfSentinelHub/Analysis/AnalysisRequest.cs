@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Analysis;
@@ -18,7 +19,7 @@ public sealed record AnalysisRequest
 
     private const int DefaultMaxTraces = 100;
 
-    private static readonly JsonElement EmptyObject = ParseEmptyObject();
+    private static readonly JsonElement EmptyObject = JsonRead.Literal("{}");
 
     // What the operator asked for, read only by the checks and the argument
     // builder below. Nothing outside needs a field of the request: callers take
@@ -36,13 +37,6 @@ public sealed record AnalysisRequest
     ///     already found, so a threshold sent here would change nothing.
     /// </summary>
     public DetectionOverrides Detection { get; private init; } = new();
-
-    /// <summary>Clone detaches the element, so the document's pooled buffer goes back.</summary>
-    private static JsonElement ParseEmptyObject()
-    {
-        using var document = JsonDocument.Parse("{}");
-        return document.RootElement.Clone();
-    }
 
     /// <summary>
     ///     Parses and validates a submitted request against the source it targets.

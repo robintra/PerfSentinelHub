@@ -252,21 +252,43 @@ public sealed class AnalysisRequestTests
     }
 
     [Theory]
-    [InlineData("0.17.0", false)]
-    [InlineData("0.18.0", true)]
-    [InlineData("0.19.2", true)]
-    // A pre-release of the minor that added them reads them too.
-    [InlineData("0.18.0-rc.1", true)]
+    // The mode dates back to engine 0.5.7, the variance threshold to 0.18.0.
+    [InlineData("0.17.0", true, false)]
+    [InlineData("0.18.0", true, true)]
+    [InlineData("0.19.2", true, true)]
+    // A pre-release of the minor that added a knob reads it too.
+    [InlineData("0.18.0-rc.1", true, true)]
+    [InlineData("0.5.7", true, false)]
     // No probed version means no promise about what `-c` will be refused.
-    [InlineData(null, false)]
-    public void The_sanitizer_knobs_are_offered_only_to_an_engine_that_reads_them(string? engine, bool offered)
+    [InlineData(null, false, false)]
+    public void The_sanitizer_knobs_are_offered_only_to_an_engine_that_reads_them(
+        string? engine, bool mode, bool threshold)
     {
         var names = DetectionOverrides.SchemaFor(engine).Select(knob => knob.Name).ToList();
 
-        Assert.Equal(offered, names.Contains("sanitizer_aware_classification"));
-        Assert.Equal(offered, names.Contains("sanitizer_aware_min_cv"));
+        Assert.Equal(mode, names.Contains("sanitizer_aware_classification"));
+        Assert.Equal(threshold, names.Contains("sanitizer_aware_min_cv"));
         // The eight thresholds predate the gate and are always there.
         Assert.Contains("n_plus_one_min_occurrences", names);
+    }
+
+    [Fact]
+    public void A_knob_the_engine_cannot_read_is_refused_at_submission_not_at_run_time()
+    {
+        var request = Parse("""
+                            {"service":"orders","lookback":"1h","detection":{"sanitizer_aware_min_cv":0.75}}
+                            """, SourceKinds.Tempo, out var error);
+        Assert.Null(error);
+
+        Assert.Equal(
+            "sanitizer_aware_min_cv needs engine 0.18.0 or later, this Hub runs 0.17.0.",
+            request!.Detection.RefusedBy("0.17.0"));
+        Assert.Null(request.Detection.RefusedBy("0.18.0"));
+        // The mode is older than any engine the Hub drives, so it is never the reason.
+        var mode = Parse("""
+                         {"service":"orders","lookback":"1h","detection":{"sanitizer_aware_classification":"strict"}}
+                         """, SourceKinds.Tempo, out _);
+        Assert.Null(mode!.Detection.RefusedBy("0.17.0"));
     }
 
     [Theory]

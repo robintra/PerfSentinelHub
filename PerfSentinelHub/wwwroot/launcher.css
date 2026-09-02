@@ -2386,6 +2386,15 @@ body[data-screen="report"] .shell-footer {
     background: var(--surface-2);
 }
 
+/* On a toned panel the neutral surface above is the wrong ground: it matches
+   --crit-bg in lightness closely enough that the inset dissolves into it.
+   Scoped to .outcome so the daemon's own insets, which sit on a neutral
+   surface, keep the surface treatment. */
+.outcome .outcome-warning {
+    background: var(--inset-bg);
+    border-color: var(--inset-bd);
+}
+
 .outcome-warning-kind {
     flex: 0 0 auto;
     margin-top: 1px;

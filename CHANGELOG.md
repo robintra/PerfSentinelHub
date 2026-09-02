@@ -4,6 +4,18 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Changed
+
+- The image carries the perf-sentinel 0.18.0 engine instead of 0.17.0. That release labels
+  `perf_sentinel_findings_total` and `perf_sentinel_slow_duration_seconds` by service, which
+  is breaking for an unaggregated alert on either, and it resolves a span with no service name
+  to `unknown` on every ingestion path, so an acknowledgment taken on a Zipkin or Jaeger
+  finding with a blank service has to be re-taken. It also adds `[detection]
+  sanitizer_aware_min_cv`, which is the knob the launcher withholds below this version, so the
+  advanced panel now offers it. The engine gains that one `[detection]` default and leaves the
+  other nine unchanged, so the table `GET /api/sources/{sourceId}/daemon` compares against
+  still holds for them.
+
 ### Added
 
 - The launcher's advanced panel offers the engine's two sanitizer settings on a backend

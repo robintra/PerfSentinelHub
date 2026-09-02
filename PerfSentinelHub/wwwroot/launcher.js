@@ -600,7 +600,9 @@
      */
     function detectionToml(detection) {
         return ["[detection]"].concat(Object.keys(detection).sort().map(function (name) {
-            return name + " = " + detection[name];
+            const value = detection[name];
+            // TOML has no bare words: a choice is a quoted string or a parse error.
+            return name + " = " + (typeof value === "string" ? JSON.stringify(value) : value);
         })).join("\n");
     }
 

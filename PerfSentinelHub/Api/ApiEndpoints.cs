@@ -39,8 +39,9 @@ public static partial class ApiEndpoints
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded),
                 [
-                    .. DetectionOverrides.Schema
-                        .Select(knob => new DetectionKnob(knob.Name, knob.Min, knob.Max, knob.Default))
+                    .. DetectionOverrides.SchemaFor(engine.Version)
+                        .Select(knob => new DetectionKnob(
+                            knob.Name, knob.Kind, knob.Min, knob.Max, knob.Default, knob.Choices))
                 ]);
         });
         app.MapGet("/api/sources", GetSourcesAsync);

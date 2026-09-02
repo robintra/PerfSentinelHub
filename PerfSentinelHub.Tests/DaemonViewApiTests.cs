@@ -41,7 +41,8 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
                                    "detection_config":{"n_plus_one_threshold":5,"window_ms":500,
                                      "slow_threshold_ms":500,"slow_min_occurrences":3,"max_fanout":20,
                                      "chatty_service_min_calls":15,"pool_saturation_concurrent_threshold":10,
-                                     "serialized_min_sequential":3,"sanitizer_aware_classification":"auto"},
+                                     "serialized_min_sequential":3,"sanitizer_aware_classification":"auto",
+                                     "sanitizer_aware_min_cv":0.5},
                                    "green_summary":{"energy_model":"measured","scoring_config":{"api_version":"1.0"}},
                                    "warning_details":[{"kind":"tuning","message":"ingest queue is undersized"}]}
                                   """;

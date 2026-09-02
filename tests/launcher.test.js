@@ -87,6 +87,13 @@ test("changed thresholds point the engine at a file, having no flag of their own
     "[detection]\nmax_fanout = 9\nn_plus_one_min_occurrences = 8");
 });
 
+test("a string threshold is quoted in the config, a number is not", () => {
+  // TOML has no bare words: unquoted, `strict` is a parse error the engine
+  // reports before it reads anything else in the file.
+  assert.equal(PSL.detectionToml({ sanitizer_aware_classification: "strict", sanitizer_aware_min_cv: 0.75 }),
+    "[detection]\nsanitizer_aware_classification = \"strict\"\nsanitizer_aware_min_cv = 0.75");
+});
+
 test("a daemon has no command at all", () => {
   assert.equal(PSL.analysisCommand({ engine_subcommand: null, base_url: "http://d:4318" }, {}), null);
 });

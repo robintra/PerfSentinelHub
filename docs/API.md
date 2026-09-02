@@ -164,10 +164,16 @@ for every run.
 A request may carry a `detection` object overriding the engine's thresholds:
 `n_plus_one_min_occurrences`, `window_duration_ms`, `slow_query_threshold_ms`,
 `slow_query_min_occurrences`, `max_fanout`, `chatty_service_min_calls`,
-`pool_saturation_concurrent_threshold`, `serialized_min_sequential`.
+`pool_saturation_concurrent_threshold`, `serialized_min_sequential`, and, from engine
+0.18.0, `sanitizer_aware_classification` (one of `auto`, `strict`, `always`, `never`) and
+`sanitizer_aware_min_cv` (a decimal from `0.01` to `10`).
 
 Bounds mirror the engine's own validator, and `GET /api/status` publishes them with each
-default under `detection_knobs`. A value equal to the default is dropped rather than
+default under `detection_knobs`. Each entry names its `kind`: `integer` and `decimal`
+carry `min`, `max` and a numeric `default`, `choice` carries its `choices` and a string
+`default`. A knob the probed engine's `[detection]` does not read is withheld from the list
+rather than offered and refused at run time, so the two sanitizer knobs appear only once
+the embedded binary is 0.18.0 or later. A value equal to the default is dropped rather than
 recorded, so a run carries only what departs from the standard configuration. The
 overrides are written to a per-run TOML handed to both invocations through `-c`, and
 deleted when the run ends.

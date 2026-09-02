@@ -29,7 +29,19 @@ public sealed record StatusLimits(
     int ReportRetentionHours,
     int MaxTracesEmbedded);
 
-public sealed record DetectionKnob(string Name, int Min, int Max, int Default);
+/// <summary>
+///     One detection threshold a run may override. `Kind` is `integer`, `decimal`
+///     or `choice`: the first two carry bounds and a numeric default, the last
+///     carries its choices and a string default. `Default` is the engine's own
+///     value as JSON, relayed rather than typed.
+/// </summary>
+public sealed record DetectionKnob(
+    string Name,
+    string Kind,
+    double? Min,
+    double? Max,
+    System.Text.Json.JsonElement Default,
+    IReadOnlyList<string>? Choices);
 
 /// <summary>
 ///     A configured source joined to its last known collection state. The

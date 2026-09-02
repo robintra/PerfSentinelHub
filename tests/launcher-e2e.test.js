@@ -25,8 +25,10 @@ const PSL = globalThis.PSL;
 const engineRepo = process.env.PERF_SENTINEL_REPO
   || path.join(os.homedir(), "RustroverProjects", "perf-sentinel");
 const engine = path.join(engineRepo, "target", "release", "perf-sentinel");
-// DetectionOverrides.Knobs holds eight, and three tests below count on it.
-const KNOB_COUNT = 8;
+// DetectionOverrides.cs holds eight integer thresholds in Knobs, one decimal in
+// Decimals and one choice in Choices. Three tests below count on the split.
+const INTEGER_KNOB_COUNT = 8;
+const KNOB_COUNT = 10;
 // Six near-identical queries in one trace, which is one N+1 at the default
 // threshold of five and nothing at all above six.
 const fixture = path.join(engineRepo, "tests", "fixtures", "n_plus_one_sql.json");
@@ -96,7 +98,7 @@ test("the engine reads the file the command names, and the threshold takes effec
 // them, so an empty file passed.
 //
 // The left name is the file key the launcher writes, the right one is what
-// the engine calls it back in detection_config. Four of the eight differ,
+// the engine calls it back in detection_config. Four of the ten differ,
 // and that pairing is duplicated in DaemonDefaults.ExportSpelling and in
 // app.js DETECT_ALIAS, so the run below and the table tests after it are what
 // keep the three in step.
@@ -108,7 +110,9 @@ const written = {
   max_fanout: [42, "max_fanout"],
   chatty_service_min_calls: [33, "chatty_service_min_calls"],
   pool_saturation_concurrent_threshold: [17, "pool_saturation_concurrent_threshold"],
-  serialized_min_sequential: [8, "serialized_min_sequential"]
+  serialized_min_sequential: [8, "serialized_min_sequential"],
+  sanitizer_aware_classification: ["strict", "sanitizer_aware_classification"],
+  sanitizer_aware_min_cv: [0.75, "sanitizer_aware_min_cv"]
 };
 
 test("every threshold the Hub can write reaches the engine under its own name", { skip }, () => {
@@ -128,7 +132,7 @@ test("every threshold the Hub can write reaches the engine under its own name", 
     assert.notEqual(untouched[engineName], value, key + " was written at its own default");
   });
   assert.equal(Object.keys(written).length, KNOB_COUNT,
-    "DetectionOverrides.Knobs holds " + KNOB_COUNT);
+    "DetectionOverrides.cs declares " + KNOB_COUNT + " knobs");
 });
 
 // ------------------------------------------------- the tables the JS copies
@@ -184,15 +188,37 @@ function declaredKnobs() {
   });
 
   const knobs = {};
-  const table = tableIn(overridesSource, "Knobs =", "];");
-  entriesIn(table, /\("([a-z0-9_]+)", (\w+), (\w+), (\w+)\)/g, KNOB_COUNT, "knobs in DetectionOverrides.cs")
-    .forEach(function (found) {
-      knobs[found[1]] = {
-        min: numberIn(found[2], constants, found[1]),
-        max: numberIn(found[3], constants, found[1]),
-        default: numberIn(found[4], constants, found[1])
-      };
-    });
+  entriesIn(
+    tableIn(overridesSource, "Knobs =", "];"),
+    /\("([a-z0-9_]+)", (\w+), (\w+), (\w+)\)/g,
+    INTEGER_KNOB_COUNT,
+    "integer knobs in DetectionOverrides.cs"
+  ).forEach(function (found) {
+    knobs[found[1]] = {
+      min: numberIn(found[2], constants, found[1]),
+      max: numberIn(found[3], constants, found[1]),
+      default: numberIn(found[4], constants, found[1])
+    };
+  });
+  // A decimal knob writes its bounds as literals, no const carries a point.
+  entriesIn(
+    tableIn(overridesSource, "Decimals =", "];"),
+    /\("([a-z0-9_]+)", ([\d.]+), ([\d.]+), ([\d.]+), "[\d.]+"\)/g,
+    KNOB_COUNT - INTEGER_KNOB_COUNT - 1,
+    "decimal knobs in DetectionOverrides.cs"
+  ).forEach(function (found) {
+    knobs[found[1]] = { min: Number(found[2]), max: Number(found[3]), default: Number(found[4]) };
+  });
+  // A choice knob has no bounds, and its default is the first choice listed.
+  entriesIn(
+    tableIn(overridesSource, "Choices =", "];"),
+    /\("([a-z0-9_]+)", \[([^\]]+)\], "[\d.]+"\)/g,
+    1,
+    "choice knobs in DetectionOverrides.cs"
+  ).forEach(function (found) {
+    const choices = Array.from(found[2].matchAll(/"([a-z]+)"/g)).map(function (m) { return m[1]; });
+    knobs[found[1]] = { default: choices[0], choices };
+  });
   return knobs;
 }
 
@@ -223,8 +249,13 @@ test("the values this file writes are still off the defaults DetectionOverrides.
     // default that moved onto one of these would empty the [detection] section
     // and leave the run above asserting nothing.
     assert.notEqual(value, knob.default, key + " is written at its own default of " + knob.default);
-    assert.ok(value >= knob.min && value <= knob.max,
-      key + " is written at " + value + ", outside the " + knob.min + " to " + knob.max + " the Hub accepts");
+    if (knob.choices) {
+      assert.ok(knob.choices.includes(value),
+        key + " is written as " + value + ", which is no choice the Hub accepts");
+    } else {
+      assert.ok(value >= knob.min && value <= knob.max,
+        key + " is written at " + value + ", outside the " + knob.min + " to " + knob.max + " the Hub accepts");
+    }
   });
   // The fixture holds six near-identical queries, so the default the first run
   // leans on has to stay under that count for the untouched report to hold one.

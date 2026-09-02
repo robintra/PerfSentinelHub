@@ -100,8 +100,11 @@ public sealed class DaemonStateTests
         using var detection = JsonDocument.Parse(DaemonDefaults.DetectionJson);
 
         Assert.Equal(JsonValueKind.Object, daemon.RootElement.ValueKind);
-        Assert.Equal(9, detection.RootElement.EnumerateObject().Count());
+        // Eight integer thresholds, the classification mode and its variance threshold.
+        Assert.Equal(10, detection.RootElement.EnumerateObject().Count());
         Assert.Equal(5, detection.RootElement.GetProperty("n_plus_one_threshold").GetInt32());
+        Assert.Equal("auto", detection.RootElement.GetProperty("sanitizer_aware_classification").GetString());
+        Assert.Equal(0.5, detection.RootElement.GetProperty("sanitizer_aware_min_cv").GetDouble());
     }
 
     private static DaemonStatus Status(long? activeTraces = null, long? maxActiveTraces = null)

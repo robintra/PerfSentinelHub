@@ -143,6 +143,22 @@ public sealed class AnalysisApiTests : IDisposable
 
 
     [Fact]
+    public async Task An_engine_too_old_for_the_sanitizer_knobs_is_not_offered_them()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var knobs = (await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
+            .GetProperty("detection_knobs").EnumerateArray().ToList();
+
+        // The stub reports 0.16.0, whose `[detection]` refuses the two keys outright.
+        Assert.Equal(8, knobs.Count);
+        Assert.All(knobs, knob => Assert.Equal("integer", knob.GetProperty("kind").GetString()));
+        Assert.DoesNotContain(knobs, knob =>
+            knob.GetProperty("name").GetString()!.StartsWith("sanitizer_aware", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task The_engine_version_and_the_declared_retention_reach_the_launcher()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

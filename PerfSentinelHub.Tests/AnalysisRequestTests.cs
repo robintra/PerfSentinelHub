@@ -213,6 +213,62 @@ public sealed class AnalysisRequestTests
         Assert.True(request!.Detection.IsEmpty);
     }
 
+    [Fact]
+    public void The_classification_mode_is_written_as_a_quoted_string()
+    {
+        var request = Parse("""
+                            {"service":"orders","lookback":"1h","detection":{"sanitizer_aware_classification":"strict"}}
+                            """, SourceKinds.Tempo, out var error);
+
+        Assert.Null(error);
+        Assert.Equal("[detection]\nsanitizer_aware_classification = \"strict\"\n", request!.Detection.ToToml());
+    }
+
+    [Theory]
+    // TOML tells an integer from a float by the point. The engine reads `1` into
+    // its float all the same, but `1.0` says what was meant.
+    [InlineData("1", "1.0")]
+    [InlineData("0.75", "0.75")]
+    public void The_variance_threshold_keeps_a_decimal_point(string sent, string written)
+    {
+        var request = Parse(
+            $$$"""{"service":"orders","lookback":"1h","detection":{"sanitizer_aware_min_cv":{{{sent}}}}}""",
+            SourceKinds.Tempo, out var error);
+
+        Assert.Null(error);
+        Assert.Equal($"[detection]\nsanitizer_aware_min_cv = {written}\n", request!.Detection.ToToml());
+    }
+
+    [Theory]
+    [InlineData("""{"sanitizer_aware_classification":"auto"}""")]
+    [InlineData("""{"sanitizer_aware_min_cv":0.5}""")]
+    public void The_sanitizer_defaults_are_not_recorded_as_overrides(string detection)
+    {
+        var request = Parse(
+            $$"""{"service":"orders","lookback":"1h","detection":{{detection}}}""",
+            SourceKinds.Tempo, out _);
+
+        Assert.True(request!.Detection.IsEmpty);
+    }
+
+    [Theory]
+    [InlineData("0.17.0", false)]
+    [InlineData("0.18.0", true)]
+    [InlineData("0.19.2", true)]
+    // A pre-release of the minor that added them reads them too.
+    [InlineData("0.18.0-rc.1", true)]
+    // No probed version means no promise about what `-c` will be refused.
+    [InlineData(null, false)]
+    public void The_sanitizer_knobs_are_offered_only_to_an_engine_that_reads_them(string? engine, bool offered)
+    {
+        var names = DetectionOverrides.SchemaFor(engine).Select(knob => knob.Name).ToList();
+
+        Assert.Equal(offered, names.Contains("sanitizer_aware_classification"));
+        Assert.Equal(offered, names.Contains("sanitizer_aware_min_cv"));
+        // The eight thresholds predate the gate and are always there.
+        Assert.Contains("n_plus_one_min_occurrences", names);
+    }
+
     [Theory]
     // Bounds mirror the engine's validator: two of them floor at 2, not 1.
     [InlineData("""{"n_plus_one_min_occurrences":0}""")]
@@ -221,6 +277,11 @@ public sealed class AnalysisRequestTests
     [InlineData("""{"max_fanout":100001}""")]
     [InlineData("""{"n_plus_one_min_occurrences":"many"}""")]
     [InlineData("""{"no_such_setting":3}""")]
+    [InlineData("""{"sanitizer_aware_classification":"loose"}""")]
+    [InlineData("""{"sanitizer_aware_classification":3}""")]
+    [InlineData("""{"sanitizer_aware_min_cv":0}""")]
+    [InlineData("""{"sanitizer_aware_min_cv":10.5}""")]
+    [InlineData("""{"sanitizer_aware_min_cv":"high"}""")]
     public void An_out_of_range_or_unknown_detection_setting_is_refused(string detection)
     {
         Assert.Null(Parse(

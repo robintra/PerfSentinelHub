@@ -16,9 +16,9 @@ namespace PerfSentinelHub.Analysis;
 ///     compared against instead of asserting a value is wrong.
 ///     The [daemon] half is transcribed from `impl Default for DaemonConfig` in
 ///     sentinel-core. The detection half is derived from the launcher's own knob
-///     schema so those eight numbers are stated once in this codebase, with only
-///     the export spellings (DetectConfig's field names, not the file keys the
-///     knobs carry) and the one string knob living here.
+///     schema so those values are stated once in this codebase, with only the
+///     export spellings (DetectConfig's field names, not the file keys the knobs
+///     carry) living here.
 /// </summary>
 public static class DaemonDefaults
 {
@@ -72,8 +72,11 @@ public static class DaemonDefaults
         {
             writer.WriteStartObject();
             foreach (var knob in DetectionOverrides.Schema)
-                writer.WriteNumber(ExportSpelling.GetValueOrDefault(knob.Name, knob.Name), knob.Default);
-            writer.WriteString("sanitizer_aware_classification", "auto");
+            {
+                writer.WritePropertyName(ExportSpelling.GetValueOrDefault(knob.Name, knob.Name));
+                knob.Default.WriteTo(writer);
+            }
+
             writer.WriteEndObject();
         }
 

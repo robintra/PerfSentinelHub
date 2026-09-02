@@ -2,6 +2,22 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- The launcher's advanced panel offers the engine's two sanitizer settings on a backend
+  run: `sanitizer_aware_classification` as a choice among `auto`, `strict`, `always` and
+  `never`, and `sanitizer_aware_min_cv`, the timing-variance threshold that decides
+  whether a run of identical parameterised queries reads as an N+1 or as a cached repeat,
+  as a decimal from `0.01` to `10`. Both are recorded on the run and written to the
+  per-run config like the eight thresholds before them. `detection_knobs` in
+  `GET /api/status` now names each knob's `kind` (`integer`, `decimal` or `choice`) and,
+  for a choice, its `choices`, with the default relayed as a JSON value rather than typed.
+  A knob the probed engine's `[detection]` does not read is withheld from the list rather
+  than offered and refused at run time, so the two new ones appear only once the embedded
+  binary is 0.18.0 or later.
+
 ## [0.1.2] - 2026-08-31
 
 ### Fixed

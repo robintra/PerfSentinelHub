@@ -3838,7 +3838,13 @@
         pool_saturation_concurrent_threshold: "Peak concurrent SQL spans on one service before the "
             + "connection pool is called at risk. Set it to the pool size you actually run.",
         serialized_min_sequential: "Sequential independent calls under one parent before they are "
-            + "worth parallelising."
+            + "worth parallelising.",
+        sanitizer_aware_classification: "How a run of identical parameterised queries is read once the "
+            + "agent has hidden their literals. auto calls it an N+1 on the ORM scope alone, strict also "
+            + "wants the timings to spread, never leaves it a redundant query, always reports an N+1.",
+        sanitizer_aware_min_cv: "How much those timings have to spread (standard deviation over "
+            + "mean) before strict or auto call the run an N+1 rather than a cached repeat. Raise it on "
+            + "a jittery runtime such as PHP-FPM, where repeats of one cached query spread past 0.5."
     };
 
     function detectionKnobs() {
@@ -3850,10 +3856,12 @@
     }
 
     function setDetection(name, raw, knob) {
-        const value = Number(raw);
+        // A choice stays the word it is, a threshold becomes the number it reads as.
+        const value = knob.kind === "choice" ? raw : Number(raw);
+        const unreadable = knob.kind !== "choice" && !Number.isFinite(value);
         // An empty field or the engine's own default is not an override: recording
         // it would make the run card claim a departure that never happened.
-        if (raw === "" || !Number.isFinite(value) || value === knob.default) delete state.form.detection[name];
+        if (raw === "" || unreadable || value === knob.default) delete state.form.detection[name];
         else state.form.detection[name] = value;
         updateSubmit();
         refreshDetectionCount();
@@ -3954,18 +3962,27 @@
     function detectionRow(knob) {
         const current = state.form.detection[knob.name];
         const identifier = "knob-" + knob.name;
-        const input = el("input", {
-            id: identifier,
-            type: "number",
-            class: "input input-knob",
-            min: String(knob.min),
-            max: String(knob.max),
-            // The default as a value, not as a placeholder. Empty, the field had
-            // nothing for the spinner to step from, so the up arrow jumped to the
-            // minimum: 10 became 2. It stays in the muted tone until it is moved,
-            // and a value equal to the default is still not an override.
-            value: current === undefined ? String(knob.default) : String(current)
-        });
+        // The default as a value, not as a placeholder. Empty, the field had
+        // nothing for the spinner to step from, so the up arrow jumped to the
+        // minimum: 10 became 2. It stays in the muted tone until it is moved,
+        // and a value equal to the default is still not an override.
+        const shown = current === undefined ? String(knob.default) : String(current);
+        const input = knob.kind === "choice"
+            ? el("select", {id: identifier, class: "input input-knob"}, knob.choices.map(function (choice) {
+                return el("option", {value: choice, text: choice});
+            }))
+            : el("input", {
+                id: identifier,
+                type: "number",
+                class: "input input-knob",
+                min: String(knob.min),
+                max: String(knob.max),
+                // A decimal steps by a hundredth, an integer by one.
+                step: knob.kind === "decimal" ? "0.01" : "1",
+                value: shown
+            });
+        // A select takes its value once its options exist, not as an attribute.
+        if (knob.kind === "choice") input.value = shown;
         const label = "Put " + knob.name + " back to " + knob.default;
         const reset = el("button", {
             type: "button",

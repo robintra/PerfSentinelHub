@@ -143,7 +143,7 @@ public sealed class AnalysisApiTests : IDisposable
 
 
     [Fact]
-    public async Task An_engine_too_old_for_the_sanitizer_knobs_is_not_offered_them()
+    public async Task An_old_engine_is_offered_the_mode_but_not_the_variance_threshold()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
@@ -154,6 +154,9 @@ public sealed class AnalysisApiTests : IDisposable
         // The stub reports 0.16.0: it has read the mode since 0.5.7 but its
         // `[detection]` refuses the variance threshold outright.
         Assert.Equal(9, knobs.Count);
+        Assert.All(
+            knobs.Where(knob => knob.GetProperty("name").GetString() != "sanitizer_aware_classification"),
+            knob => Assert.Equal("integer", knob.GetProperty("kind").GetString()));
         var mode = Assert.Single(knobs, knob => knob.GetProperty("name").GetString() == "sanitizer_aware_classification");
         Assert.Equal("choice", mode.GetProperty("kind").GetString());
         Assert.Equal("auto", mode.GetProperty("default").GetString());

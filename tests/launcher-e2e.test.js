@@ -214,7 +214,7 @@ function declaredKnobs() {
   // A choice knob has no bounds, and its default is the first choice listed.
   entriesIn(
     tableIn(overridesSource, "Choices =", "];"),
-    /\("([a-z0-9_]+)", \[([^\]]+)\], "[\d.]+"\)/g,
+    /\("([a-z0-9_]+)", \[([^\]]+)\], (?:"[\d.]+"|null)\)/g,
     CHOICE_KNOB_COUNT,
     "choice knobs in DetectionOverrides.cs"
   ).forEach(function (found) {

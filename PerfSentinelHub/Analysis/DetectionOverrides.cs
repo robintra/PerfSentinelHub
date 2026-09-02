@@ -36,7 +36,10 @@ public sealed record DetectionOverrides
     /// <summary>
     ///     Each decimal knob, with the engine minor that first read it: an older
     ///     `[detection]` refuses an unknown key outright, so the launcher must not
-    ///     offer one to a binary that predates it.
+    ///     offer one to a binary that predates it. The minor is compared to what
+    ///     `--version` prints, and the engine bumps its version last, so a build of
+    ///     an unreleased branch still reports the previous minor and is withheld a
+    ///     knob it reads until the bump lands.
     /// </summary>
     private static readonly (string Name, double Min, double Max, double Default, string Since)[] Decimals =
     [
@@ -46,11 +49,12 @@ public sealed record DetectionOverrides
         ("sanitizer_aware_min_cv", 0.01, 10, 0.5, "0.18.0")
     ];
 
-    /// <summary>Each choice knob, its choices with the engine default first, and the minor that first read it.</summary>
-    private static readonly (string Name, string[] Choices, string Since)[] Choices =
+    /// <summary>Each choice knob, its choices with the engine default first, and the minor that first read it, null when every engine does.</summary>
+    private static readonly (string Name, string[] Choices, string? Since)[] Choices =
     [
-        // The mode itself dates back to 0.5.7, only its variance threshold above is new.
-        ("sanitizer_aware_classification", ["auto", "strict", "always", "never"], "0.5.7")
+        // The mode has been read since 0.5.7, before any engine this Hub drives, so
+        // it is not gated: a probe that could not read the version must still offer it.
+        ("sanitizer_aware_classification", ["auto", "strict", "always", "never"], null)
     ];
 
     /// <summary>
@@ -94,7 +98,7 @@ public sealed record DetectionOverrides
         {
             // A copy, so the served list cannot reach back into the table.
             var knob = new DetectionKnob(name, "choice", null, null, JsonRead.Literal(Quoted(choices[0])), [.. choices]);
-            all.Add((knob, Version.Parse(since)));
+            all.Add((knob, since is null ? null : Version.Parse(since)));
         }
 
         return [.. all];
@@ -152,8 +156,18 @@ public sealed record DetectionOverrides
         var engine = ParseEngineVersion(engineVersion);
         foreach (var (knob, since) in All)
             if (_values.ContainsKey(knob.Name) && !Reads(engine, since))
-                return $"{knob.Name} needs engine {since} or later, this Hub runs {engineVersion ?? "an engine of unknown version"}.";
+                return $"{knob.Name} needs engine {since} or later, {Runs(engineVersion, engine)}.";
         return null;
+    }
+
+    /// <summary>What the Hub knows of its engine's version, saying so when it could not read it.</summary>
+    private static string Runs(string? engineVersion, Version? engine)
+    {
+        if (engineVersion is null)
+            return "this Hub has not read its engine's version";
+        return engine is null
+            ? $"this Hub could not read its engine's version ({engineVersion})"
+            : $"this Hub runs {engineVersion}";
     }
 
     /// <summary>
@@ -175,7 +189,10 @@ public sealed record DetectionOverrides
         {
             "integer" => TryReadInteger(knob, property.Value, out literal, out error),
             "decimal" => TryReadDecimal(knob, property.Value, out literal, out error),
-            _ => TryReadChoice(knob, property.Value, out literal, out error)
+            "choice" => TryReadChoice(knob, property.Value, out literal, out error),
+            // A kind the table declares and nothing here reads is a programming
+            // error, not a bad request, and must not fall into TryReadChoice.
+            _ => throw new InvalidOperationException($"No reader for knob kind {knob.Kind} on {knob.Name}.")
         };
     }
 

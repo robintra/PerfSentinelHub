@@ -20,8 +20,10 @@ All notable changes to PerfSentinelHub are recorded here.
 
 - Two visual faults on a run's result panel. The `tuning` inset sat on
   `--surface-2`, close enough in lightness to `--crit-bg` that it dissolved into
-  the panel behind it in the dark theme, and it now darkens through whatever
-  tone is behind it. And the count strip wrapped into a second row on a narrow
+  the panel behind it in the dark theme. It now darkens through whatever tone is
+  behind it, which takes the lightness ratio between the two from 1.27 to 2.42.
+  The light theme keeps its opaque white ground, which already sat above the
+  pastel panels, and gains only the firmer border. And the count strip wrapped into a second row on a narrow
   viewport, where the cells ending each line are square while the container is
   round, so its outline broke at the top right and the bottom left. It stacks
   instead, each cell carrying its label beside the figure.

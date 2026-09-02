@@ -103,8 +103,12 @@
     --ok-fg: #1b530d;
     --ok-bg: #ddf3dc;
     --ok-bd: #c6e6c4;
-    /* See the dark half. Lightening does the same job on the pastel grounds. */
-    --inset-bg: rgba(255, 255, 255, .80);
+    /* See the dark half, which is where the two grounds collided. On the
+       pastel panels white already sits above them, so the ground is kept
+       opaque, and measured: at 80% the panel bleeds through and the inset
+       loses contrast against it (1.17 where opaque white reads 1.22). Only
+       the border is carried over, --border being paler than this on white. */
+    --inset-bg: #ffffff;
     --inset-bd: rgba(0, 0, 0, .13);
     --pill: #d6e9e3;
     --pill-fg: #0b523a;

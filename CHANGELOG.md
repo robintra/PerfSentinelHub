@@ -16,6 +16,16 @@ All notable changes to PerfSentinelHub are recorded here.
   other nine unchanged, so the table `GET /api/sources/{sourceId}/daemon` compares against
   still holds for them.
 
+### Fixed
+
+- Two visual faults on a run's result panel. The `tuning` inset sat on
+  `--surface-2`, close enough in lightness to `--crit-bg` that it dissolved into
+  the panel behind it in the dark theme, and it now darkens through whatever
+  tone is behind it. And the count strip wrapped into a second row on a narrow
+  viewport, where the cells ending each line are square while the container is
+  round, so its outline broke at the top right and the bottom left. It stacks
+  instead, each cell carrying its label beside the figure.
+
 ### Added
 
 - The launcher's advanced panel offers the engine's two sanitizer settings on a backend

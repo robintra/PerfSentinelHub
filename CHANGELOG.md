@@ -14,9 +14,11 @@ All notable changes to PerfSentinelHub are recorded here.
   per-run config like the eight thresholds before them. `detection_knobs` in
   `GET /api/status` now names each knob's `kind` (`integer`, `decimal` or `choice`) and,
   for a choice, its `choices`, with the default relayed as a JSON value rather than typed.
-  A knob the probed engine's `[detection]` does not read is withheld from the list rather
-  than offered and refused at run time, so the two new ones appear only once the embedded
-  binary is 0.18.0 or later.
+  A knob the probed engine's `[detection]` does not read is withheld from the list and
+  refused on submission with a 400 naming both versions, rather than written to the run
+  config and refused by the engine at run time with a stderr the Hub never returns. The
+  mode has been read since engine 0.5.7 and is offered to every engine, the variance
+  threshold appears only once the embedded binary is 0.18.0 or later.
 
 ## [0.1.2] - 2026-08-31
 

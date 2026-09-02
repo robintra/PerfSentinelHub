@@ -1229,8 +1229,6 @@
             + "first's own occurrences, before the pair is worth reporting.",
         correlation_max_tracked_pairs: "Cap on tracked pairs. The least frequent are evicted past it, "
             + "and the daemon says so above when that happens.",
-        sanitizer_aware_classification: "Whether already-parameterised SQL is recognised as such, "
-            + "which stops it being reported as an N+1.",
         energy_model: "Where the energy figure comes from. Measured means a power backend answered, "
             + "estimated means it was derived from I/O counts.",
         api_version: "The Electricity Maps API version these figures were scored against.",
@@ -2980,7 +2978,12 @@
     }
 
     function group(value) {
-        return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
+        // Thousands separators on the integer part only: a decimal such as
+        // 0.6667 must not come out as 0.6 667.
+        const text = String(value);
+        const point = text.indexOf(".");
+        const whole = point < 0 ? text : text.slice(0, point);
+        return whole.replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f") + (point < 0 ? "" : text.slice(point));
     }
 
     // render() returns early when the status is missing, so every caller runs
@@ -3843,8 +3846,9 @@
             + "agent has hidden their literals. auto calls it an N+1 on the ORM scope alone, strict also "
             + "wants the timings to spread, never leaves it a redundant query, always reports an N+1.",
         sanitizer_aware_min_cv: "How much those timings have to spread (standard deviation over "
-            + "mean) before strict or auto call the run an N+1 rather than a cached repeat. Raise it on "
-            + "a jittery runtime such as PHP-FPM, where repeats of one cached query spread past 0.5."
+            + "mean) before strict or auto call the run an N+1 rather than a cached repeat. The same bar "
+            + "reads a repeated HTTP call. Raise it on a jittery runtime such as PHP-FPM, where repeats "
+            + "of one cached query spread past 0.5."
     };
 
     function detectionKnobs() {

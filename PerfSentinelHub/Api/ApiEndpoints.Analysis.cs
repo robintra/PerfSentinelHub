@@ -27,6 +27,7 @@ public static partial class ApiEndpoints
     private static async Task<IResult> SubmitAnalysisAsync(
         HttpRequest request,
         HubDatabase database,
+        EngineProbe engine,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -60,8 +61,12 @@ public static partial class ApiEndpoints
                 ? submitted
                 : default;
             var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-            if (AnalysisRequest.TryParse(requestElement, source, hubOptions.Analysis, nowMs, out var error) is null)
+            if (AnalysisRequest.TryParse(requestElement, source, hubOptions.Analysis, nowMs, out var error) is not { } parsed)
                 return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+            // A knob the embedded engine's `[detection]` does not read is refused
+            // here, with both versions named, not by the engine at run time.
+            if (parsed.Detection.RefusedBy(engine.Version) is { } refused)
+                return Problem(StatusCodes.Status400BadRequest, refused);
 
             var run = NewRun(source, requestElement, Identity(request, hubOptions.Analysis), nowMs);
             if (await database.TryInsertRunAsync(run, cancellationToken))

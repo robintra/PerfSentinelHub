@@ -174,17 +174,18 @@ lancé, de décider des seuils de détection de tous les runs.
 Une requête peut porter un objet `detection` qui surcharge les seuils du moteur :
 `n_plus_one_min_occurrences`, `window_duration_ms`, `slow_query_threshold_ms`,
 `slow_query_min_occurrences`, `max_fanout`, `chatty_service_min_calls`,
-`pool_saturation_concurrent_threshold`, `serialized_min_sequential`, et, à partir du
-moteur 0.18.0, `sanitizer_aware_classification` (une valeur parmi `auto`, `strict`,
-`always`, `never`) et `sanitizer_aware_min_cv` (un décimal de `0.01` à `10`).
+`pool_saturation_concurrent_threshold`, `serialized_min_sequential`,
+`sanitizer_aware_classification` (une valeur parmi `auto`, `strict`, `always`, `never`)
+et, à partir du moteur 0.18.0, `sanitizer_aware_min_cv` (un décimal de `0.01` à `10`).
 
 Les bornes reflètent le validateur du moteur, et `GET /api/status` les publie avec chaque
 défaut sous `detection_knobs`. Chaque entrée nomme son `kind` : `integer` et `decimal`
 portent `min`, `max` et un `default` numérique, `choice` porte ses `choices` et un
 `default` chaîne. Un réglage que la section `[detection]` du moteur sondé ne lit pas est
-retiré de la liste plutôt que proposé puis refusé à l'exécution, si bien que les deux
-réglages du sanitizer n'apparaissent qu'une fois le binaire embarqué en 0.18.0 ou plus.
-Une valeur égale au défaut est écartée plutôt
+retiré de la liste et refusé à la soumission par un 400 qui nomme les deux versions,
+plutôt qu'écrit dans la configuration du run et refusé par le moteur à l'exécution, si
+bien que `sanitizer_aware_min_cv` n'apparaît qu'une fois le binaire embarqué en 0.18.0 ou
+plus. Une valeur égale au défaut est écartée plutôt
 qu'enregistrée, de sorte qu'un run ne porte que ce qui s'écarte de la configuration
 standard. Les surcharges sont écrites dans un TOML propre au run, remis aux deux
 invocations via `-c`, et supprimé à la fin du run.

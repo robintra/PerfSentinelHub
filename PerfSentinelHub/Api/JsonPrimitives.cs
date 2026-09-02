@@ -9,6 +9,13 @@ namespace PerfSentinelHub.Api;
 /// </summary>
 internal static class JsonRead
 {
+    /// <summary>One JSON value detached from its document, so the pooled buffer goes back.</summary>
+    public static JsonElement Literal(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
     public static string? ReadString(JsonElement element, string name)
     {
         return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

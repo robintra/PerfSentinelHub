@@ -28,7 +28,9 @@ const engine = path.join(engineRepo, "target", "release", "perf-sentinel");
 // DetectionOverrides.cs holds eight integer thresholds in Knobs, one decimal in
 // Decimals and one choice in Choices. Three tests below count on the split.
 const INTEGER_KNOB_COUNT = 8;
-const KNOB_COUNT = 10;
+const DECIMAL_KNOB_COUNT = 1;
+const CHOICE_KNOB_COUNT = 1;
+const KNOB_COUNT = INTEGER_KNOB_COUNT + DECIMAL_KNOB_COUNT + CHOICE_KNOB_COUNT;
 // Six near-identical queries in one trace, which is one N+1 at the default
 // threshold of five and nothing at all above six.
 const fixture = path.join(engineRepo, "tests", "fixtures", "n_plus_one_sql.json");
@@ -204,7 +206,7 @@ function declaredKnobs() {
   entriesIn(
     tableIn(overridesSource, "Decimals =", "];"),
     /\("([a-z0-9_]+)", ([\d.]+), ([\d.]+), ([\d.]+), "[\d.]+"\)/g,
-    KNOB_COUNT - INTEGER_KNOB_COUNT - 1,
+    DECIMAL_KNOB_COUNT,
     "decimal knobs in DetectionOverrides.cs"
   ).forEach(function (found) {
     knobs[found[1]] = { min: Number(found[2]), max: Number(found[3]), default: Number(found[4]) };
@@ -213,7 +215,7 @@ function declaredKnobs() {
   entriesIn(
     tableIn(overridesSource, "Choices =", "];"),
     /\("([a-z0-9_]+)", \[([^\]]+)\], "[\d.]+"\)/g,
-    1,
+    CHOICE_KNOB_COUNT,
     "choice knobs in DetectionOverrides.cs"
   ).forEach(function (found) {
     const choices = Array.from(found[2].matchAll(/"([a-z]+)"/g)).map(function (m) { return m[1]; });

@@ -18,6 +18,13 @@ All notable changes to PerfSentinelHub are recorded here.
   /api/sources/{sourceId}/daemon` compares against still hold and the launcher offers the same
   knobs. The Hub's own dashboard reads `perf_sentinel_hub_*` and is untouched.
 
+### Fixed
+
+- The daemon view carries a default for `per_service_labels` and `per_grouping_labels`, and the
+  settings panel draws them under a `metrics labels` group. A daemon publishes the first since
+  engine 0.18.0 and the second since 0.19.0, and a setting the panel has no group for is not
+  drawn at all, so both were invisible rather than marked as changed.
+
 ## [0.1.4] - 2026-09-02
 
 ### Fixed

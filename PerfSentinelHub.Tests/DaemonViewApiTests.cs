@@ -28,6 +28,7 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
                                    "max_retained_findings":10000,"max_export_findings":1000,
                                    "max_retained_traces":50,"ingest_queue_capacity":1024,
                                    "analysis_queue_capacity":1024,"memory_high_water_pct":0,
+                                   "per_service_labels":true,"per_grouping_labels":false,
                                    "api_enabled":true,"tls_configured":true,"ack_enabled":true,
                                    "ack_api_key_set":true,"cors_allowed_origins":[],
                                    "archive_configured":false,"correlation_enabled":true,

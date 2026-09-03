@@ -2,6 +2,22 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image carries the perf-sentinel 0.19.0 engine instead of 0.18.0. That release adds a
+  `grouping` label beside `service` on `perf_sentinel_findings_total`,
+  `perf_sentinel_slow_duration_seconds` and the three `perf_sentinel_service_*_io_ops_total`
+  counters, which is breaking for an unaggregated alert on any of them the way 0.18.0 was for
+  `service`: `sum()` or `sum by (service)` around one keeps what it matched before. The value is
+  the finding's effective grouping, the namespace on Kubernetes, and `[daemon]
+  per_grouping_labels = false` restores the 0.18.0 shape. Nothing the Hub itself reads moved.
+  The report JSON keeps its shape, the new per-pair split is `serde(skip)` and in-process only,
+  and the engine adds no `[detection]` key, so the ten defaults `GET
+  /api/sources/{sourceId}/daemon` compares against still hold and the launcher offers the same
+  knobs. The Hub's own dashboard reads `perf_sentinel_hub_*` and is untouched.
+
 ## [0.1.4] - 2026-09-02
 
 ### Fixed

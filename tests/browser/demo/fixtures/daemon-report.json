@@ -1,6 +1,6 @@
 {
   "analysis": {
-    "duration_ms": 1,
+    "duration_ms": 0,
     "events_processed": 84,
     "traces_analyzed": 11
   },
@@ -294,7 +294,7 @@
         "window_ms": 300,
         "distinct_params": 16
       },
-      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET user-svc/api/user/profile x1, GET notification-svc/api/notifications/unread x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
+      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET ranking-svc/api/ranking/current x1, GET trade-svc/api/trades/pending x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
       "first_timestamp": "2025-07-10T14:32:12.000Z",
       "last_timestamp": "2025-07-10T14:32:12.300Z",
       "green_impact": {
@@ -554,7 +554,7 @@
       "io_ops": 3
     }
   ],
-  "binary_version": "0.17.0",
+  "binary_version": "0.19.0",
   "detection_config": {
     "n_plus_one_threshold": 5,
     "window_ms": 500,
@@ -564,7 +564,8 @@
     "chatty_service_min_calls": 15,
     "pool_saturation_concurrent_threshold": 10,
     "serialized_min_sequential": 3,
-    "sanitizer_aware_classification": "auto"
+    "sanitizer_aware_classification": "auto",
+    "sanitizer_aware_min_cv": 0.5
   },
   "warnings": [
     "ingest queue is undersized for the observed span rate"

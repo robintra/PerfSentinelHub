@@ -21,7 +21,7 @@ public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<H
             await status.Content.ReadAsStreamAsync(cancellationToken),
             cancellationToken: cancellationToken);
         Assert.Equal("perf-sentinel-hub", body.RootElement.GetProperty("service").GetString());
-        // The padded four-component AssemblyVersion would read 0.1.4.0, matching
+        // The padded four-component AssemblyVersion would read 0.1.5.0, matching
         // neither the tag, the chart appVersion, nor the image label.
         Assert.Matches(
             @"^\d+\.\d+\.\d+$", body.RootElement.GetProperty("version").GetString());

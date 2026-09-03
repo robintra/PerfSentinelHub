@@ -3,7 +3,7 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "identity": null,
       "engine_version": "0.19.0",
       "latest_engine_version": null,
@@ -209,23 +209,6 @@
         "result": null
       },
       {
-        "id": "0000000000000003",
-        "status": "failed",
-        "source_id": "search-prod",
-        "source_name": "Search production",
-        "environment": "production",
-        "kind": "daemon",
-        "request": {},
-        "requested_by": "unknown",
-        "created_at_ms": 1756511999000,
-        "started_at_ms": 1756512000000,
-        "finished_at_ms": 1756512000000,
-        "expires_at_ms": null,
-        "producer_version": null,
-        "error_code": "source_unreachable",
-        "result": null
-      },
-      {
         "id": "0000000000000002",
         "status": "succeeded",
         "source_id": "billing-stg",
@@ -256,6 +239,23 @@
             }
           ]
         }
+      },
+      {
+        "id": "0000000000000003",
+        "status": "failed",
+        "source_id": "search-prod",
+        "source_name": "Search production",
+        "environment": "production",
+        "kind": "daemon",
+        "request": {},
+        "requested_by": "unknown",
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": null,
+        "producer_version": null,
+        "error_code": "source_unreachable",
+        "result": null
       },
       {
         "id": "0000000000000001",

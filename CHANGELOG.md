@@ -24,6 +24,13 @@ All notable changes to PerfSentinelHub are recorded here.
   settings panel draws them under a `metrics labels` group. A daemon publishes the first since
   engine 0.18.0 and the second since 0.19.0, and a setting the panel has no group for is not
   drawn at all, so both were invisible rather than marked as changed.
+- The two buttons on a run's outcome panel had no ground of their own, so on the five toned
+  panels they took the panel's tone as their face and read as prose with a ring around it. They
+  now sit on the ground the insets already use, which separates by lightness on all five tones
+  and in both themes. Their hover was `filter: brightness()`, which on the light theme fades a
+  pale border towards the panel behind it: the hovered `Check the source` lost its outline where
+  it was meant to gain one. Both outlined buttons state a darker edge instead, and the filled
+  one keeps the brightening its opaque face was written for.
 
 ## [0.1.4] - 2026-09-02
 

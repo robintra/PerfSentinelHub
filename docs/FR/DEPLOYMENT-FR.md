@@ -8,14 +8,14 @@ se lise avant de déployer quoi que ce soit.
 
 ## Chaque flux, et dans quel sens il va
 
-| Flux                          | Sens     | Ce qu'il porte                                                                |
-|-------------------------------|----------|--------------------------------------------------------------------------------|
-| daemon vers Hub               | entrant  | le chemin principal des findings, `POST /api/import/findings` avec `X-API-Key` |
-| Hub vers daemon               | sortant  | le poll, la joignabilité, et `api/export/report` au lancement d'un run         |
-| Hub vers backend de traces    | sortant  | pendant un run, et jamais autrement                                            |
-| navigateur vers Hub           | entrant  | le lanceur et les rapports qu'il ouvre                                         |
-| greffon d'IDE ou job de CI    | entrant  | `GET /api/findings`, rien d'autre                                              |
-| Hub vers api.github.com       | sortant  | la vérification de version, que `Hub:UpdateCheck:Enabled` désactive            |
+| Flux                       | Sens    | Ce qu'il porte                                                                 |
+|----------------------------|---------|--------------------------------------------------------------------------------|
+| daemon vers Hub            | entrant | le chemin principal des findings, `POST /api/import/findings` avec `X-API-Key` |
+| Hub vers daemon            | sortant | le poll, la joignabilité, et `api/export/report` au lancement d'un run         |
+| Hub vers backend de traces | sortant | pendant un run, et jamais autrement                                            |
+| navigateur vers Hub        | entrant | le lanceur et les rapports qu'il ouvre                                         |
+| greffon d'IDE ou job de CI | entrant | `GET /api/findings`, rien d'autre                                              |
+| Hub vers api.github.com    | sortant | la vérification de version, que `Hub:UpdateCheck:Enabled` désactive            |
 
 Le Hub n'initie jamais rien vers une CI. Un build lance le moteur en mode
 batch, il n'y a pas de daemon dedans, donc rien à interroger. La même topologie
@@ -23,11 +23,11 @@ est dessinée dans [ARCHITECTURE-FR.md](ARCHITECTURE-FR.md).
 
 ## Trois formes, et le prix de chacune
 
-| Forme                       | Réseau à ouvrir       | Ce qui fonctionne                                                                            | URL pour les clients machine |
-|-----------------------------|-----------------------|-----------------------------------------------------------------------------------------------|------------------------------|
-| un Hub par cluster          | rien                  | tout                                                                                         | une par environnement        |
-| Hub central, deux sens      | deux flux par cluster | tout                                                                                         | une seule                    |
-| Hub central, push seul      | un flux par cluster   | findings oui, joignabilité et dépliage d'une rangée daemon et run sur une source daemon non   | une seule                    |
+| Forme                  | Réseau à ouvrir       | Ce qui fonctionne                                                                           | URL pour les clients machine |
+|------------------------|-----------------------|---------------------------------------------------------------------------------------------|------------------------------|
+| un Hub par cluster     | rien                  | tout                                                                                        | une par environnement        |
+| Hub central, deux sens | deux flux par cluster | tout                                                                                        | une seule                    |
+| Hub central, push seul | un flux par cluster   | findings oui, joignabilité et dépliage d'une rangée daemon et run sur une source daemon non | une seule                    |
 
 Un Hub déployé dans le cluster qu'il collecte joint ses daemons et ses backends
 de traces en ClusterIP, donc la première forme n'ouvre aucune règle de
@@ -61,9 +61,10 @@ daemon commence par lui demander `api/export/report`. Et un finding qui a cessé
 de récidiver pendant une coupure n'est plus jamais poussé, parce que seule la
 récidive le pousse.
 
-Une chose borne la gravité de tout cela. L'exportateur du daemon rafraîchit une
-signature encore active au plus une fois par heure, donc un problème persistant
-revient de lui-même dans l'heure, poll ou pas. Ce que le poll aurait récupéré,
+Une chose borne la gravité de tout cela. L'exportateur du daemon pousse une
+signature dès sa découverte ou dès que sa sévérité empire, puis en rafraîchit une
+encore active au plus une fois par heure, donc un problème persistant revient de
+lui-même dans l'heure, poll ou pas. Ce que le poll aurait récupéré,
 c'est le finding qui s'est tu, et la fenêtre entre un redémarrage et le
 prochain rafraîchissement naturel.
 

@@ -146,7 +146,7 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers le daemon, le poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` et `FetchFindingsAsync`                                |
 | Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                |
 | Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                        |
-| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync`, `MarkSourceFailureAsync` et son upsert          |
+| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                        |
 | Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                     |
 | Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                         |
 | Le moteur écrit le rapport                        | `Analysis/AnalysisRunner.cs`                                                                            |

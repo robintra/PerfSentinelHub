@@ -58,9 +58,10 @@ source on demand. Launching a run against a daemon source starts by fetching
 `api/export/report` from it. And a finding that stopped recurring during an
 outage is never pushed again, because only recurrence pushes it.
 
-One thing bounds how much any of that matters. The daemon's exporter refreshes
-a signature that is still active at most once an hour, so a problem that
-persists comes back on its own within the hour, poll or no poll. What the poll
+One thing bounds how much any of that matters. The daemon's exporter pushes a
+signature the moment it is discovered or its severity worsens, then refreshes a
+still-active one at most once an hour, so a problem that persists comes back on
+its own within the hour, poll or no poll. What the poll
 would have recovered is the finding that went quiet, and the window between a
 restart and the next natural refresh.
 

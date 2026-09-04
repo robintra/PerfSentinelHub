@@ -10,7 +10,8 @@ All notable changes to PerfSentinelHub are recorded here.
   documentation left to be reconstituted from the code: whether walled-off environments get a
   Hub each or one central Hub, which way every flow goes, and what opening only the push
   direction gives up. It states what a poll actually resynchronises, that the daemon's
-  exporter refreshes a still-active signature at most hourly, and that a backend a central
+  exporter pushes a signature on discovery or on a severity escalation and refreshes a
+  still-active one at most hourly, and that a backend a central
   Hub cannot reach stays analysable from the command line the launcher prints.
 - `docs/LIMITATIONS.md` now carries two boundaries an operator used to meet at the first page
   load. The Hub must be served at the root of an origin, the launcher calling the API in

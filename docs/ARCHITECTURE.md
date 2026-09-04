@@ -143,7 +143,7 @@ is wrong the first time anyone edits above it.
 | Hub to daemon, poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` and `FetchFindingsAsync`                          |
 | Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                           |
 | Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                   |
-| Reachability set, and cleared             | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync`, `MarkSourceFailureAsync` and its upsert    |
+| Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                    |
 | Hub to SQLite                             | `Storage/Schema.cs`                                                                                |
 | Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                        |
 | Engine writes the report                  | `Analysis/AnalysisRunner.cs`                                                                       |

@@ -34,7 +34,8 @@ Both paths write findings. Only one writes reachability.
 A daemon pushing successfully proves that the daemon can reach the Hub. It proves
 nothing about whether the Hub can reach the daemon, which is a different route through
 a different set of firewalls, and that is the direction an operator needs when a source
-goes quiet. So the import handler never touches `source_state`: a source whose push
+goes quiet. So the import handler touches no reachability column: it may
+refresh an existing row's `producer_version` and nothing more. A source whose push
 lands while its poll fails keeps reporting `unreachable_since`, and that is correct
 rather than stale.
 
@@ -142,7 +143,7 @@ is wrong the first time anyone edits above it.
 | Hub to daemon, poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` and `FetchFindingsAsync`                          |
 | Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                           |
 | Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                   |
-| Reachability set, and cleared             | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync` and `MarkSourceFailureAsync`, nowhere else  |
+| Reachability set, and cleared             | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync`, `MarkSourceFailureAsync` and its upsert    |
 | Hub to SQLite                             | `Storage/Schema.cs`                                                                                |
 | Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                        |
 | Engine writes the report                  | `Analysis/AnalysisRunner.cs`                                                                       |

@@ -35,8 +35,9 @@ Les deux chemins écrivent des findings. Un seul écrit la joignabilité.
 Un daemon qui pousse avec succès prouve qu'il peut joindre le Hub. Il ne prouve rien
 sur la capacité du Hub à le joindre, qui est une autre route à travers un autre jeu de
 pare-feux, et c'est cette direction dont un opérateur a besoin quand une source se tait.
-Le gestionnaire d'import ne touche donc jamais à `source_state` : une source dont le
-push arrive alors que son poll échoue continue de rapporter `unreachable_since`, et
+Le gestionnaire d'import ne touche donc aucune colonne de joignabilité : il peut
+rafraîchir le `producer_version` d'une ligne existante et rien de plus. Une source dont
+le push arrive alors que son poll échoue continue de rapporter `unreachable_since`, et
 c'est juste plutôt que périmé.
 
 Les deux chemins diffèrent aussi de contre-pression, délibérément. Le poll bloque sur le
@@ -145,7 +146,7 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers le daemon, le poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` et `FetchFindingsAsync`                                |
 | Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                |
 | Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                        |
-| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync` et `MarkSourceFailureAsync`, nulle part ailleurs |
+| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, `MarkSourceAttemptAsync`, `MarkSourceFailureAsync` et son upsert          |
 | Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                     |
 | Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                         |
 | Le moteur écrit le rapport                        | `Analysis/AnalysisRunner.cs`                                                                            |

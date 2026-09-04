@@ -92,6 +92,7 @@ publication réussies.
 |------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
 | [docs/FR/ARCHITECTURE-FR.md](docs/FR/ARCHITECTURE-FR.md)   | Cinq schémas : la topologie, push contre poll, ce que fait un run, les horloges de rétention, les états d'un run |
 | [docs/FR/CONFIGURATION-FR.md](docs/FR/CONFIGURATION-FR.md) | Chaque réglage, où le Hub se connecte, et une source https derrière une CA privée                                |
+| [docs/FR/DEPLOYMENT-FR.md](docs/FR/DEPLOYMENT-FR.md)       | Un Hub par cluster ou un Hub central, les flux qu'exige chaque forme, et ce que le push seul abandonne           |
 | [docs/FR/API-FR.md](docs/FR/API-FR.md)                     | Les API d'import, de lecture et d'analyse                                                                        |
 | [docs/FR/LAUNCHER-FR.md](docs/FR/LAUNCHER-FR.md)           | L'interface de navigateur, ses commandes imprimées et ses rapports live                                          |
 | [docs/FR/OPERATIONS-FR.md](docs/FR/OPERATIONS-FR.md)       | Fraîcheur, rétablissement, sauvegarde et restauration                                                            |

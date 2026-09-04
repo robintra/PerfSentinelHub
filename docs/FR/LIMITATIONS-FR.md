@@ -67,6 +67,22 @@ Les comptes de runs aux seuils de détection différents ne sont pas comparables
 Relever un seuil n'allège pas un run, il empêche le détecteur de rapporter les
 cas les plus petits.
 
+## Ce que le Hub n'authentifie pas
+
+Un seul endpoint réclame une preuve, `POST /api/import/findings`, dont la
+`X-API-Key` est comparée par empreinte. Tous les autres ne réclament rien :
+`/api/status`, `/api/sources`, `/api/findings`, `/api/analyses` aussi bien pour
+la liste que pour la requête qui lance un run, `/reports/`, `/metrics`, et le
+lanceur lui-même. Qui joint le port lit tous les findings de tous les tenants,
+modèles de requêtes SQL et noms d'endpoints compris.
+
+L'en-tête d'identité attribue, il n'authentifie pas.
+`Hub:Analysis:IdentityHeader` est enregistré sur un run comme une déclaration
+faite par un proxy, et le Hub n'en vérifie rien. C'est le bon comportement
+derrière un proxy authentifiant, et aucune défense sans lui. Si le réseau n'est
+pas la frontière, posez ce proxy devant. Voir
+[DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
+
 ## Ce qui se joue hors du Hub
 
 Un rapport vivant exige deux choses que le Hub ne contrôle pas : le
@@ -75,6 +91,12 @@ le Hub sert ses rapports, et le lecteur doit pouvoir joindre ce daemon
 directement. Un daemon derrière un ingress à préfixe de chemin reçoit un rapport
 statique à la place, parce que le `--daemon-url` du moteur prend une origine et
 rien d'autre. Voir [LAUNCHER-FR.md](LAUNCHER-FR.md).
+
+Le Hub porte la cousine de cette contrainte et doit lui-même être servi à la
+racine d'une origine. Le lanceur appelle `/api/status`, `/api/sources`,
+`/api/analyses` et `/reports/` en chemins absolus, rien ne les réécrit, et un
+ingress à préfixe de chemin laisse le navigateur réclamer un préfixe auquel le
+Hub ne répond jamais. Voir [DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
 
 ## Échelle et observabilité
 

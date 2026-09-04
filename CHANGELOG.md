@@ -2,6 +2,27 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Documentation
+
+- A new page, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), answers the question the rest of the
+  documentation left to be reconstituted from the code: whether walled-off environments get a
+  Hub each or one central Hub, which way every flow goes, and what opening only the push
+  direction gives up. It states what a poll actually resynchronises, that the daemon's
+  exporter refreshes a still-active signature at most hourly, and that a backend a central
+  Hub cannot reach stays analysable from the command line the launcher prints.
+- `docs/LIMITATIONS.md` now carries two boundaries an operator used to meet at the first page
+  load. The Hub must be served at the root of an origin, the launcher calling the API in
+  absolute paths, which is the cousin of the daemon constraint already described beside it.
+  And a single endpoint asks for a credential, `POST /api/import/findings`, so whoever
+  reaches the port reads every finding of every tenant and can start a run. `docs/OPERATIONS.md`
+  adds the consequence for `/metrics`, which shares its origin with the launcher.
+- The two reachability claims in `docs/ARCHITECTURE.md` say what the code does. The import
+  handler touches no reachability column rather than never touching `source_state`, since it
+  may refresh an existing row's `producer_version`, and the poll writes reachability through
+  its upsert as well as through the two `MarkSource` calls.
+
 ## [0.1.5] - 2026-09-03
 
 ### Changed

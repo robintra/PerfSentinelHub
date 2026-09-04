@@ -61,6 +61,21 @@ Counts from runs with different detection thresholds are not comparable. Raising
 a threshold does not make a run lighter, it stops the detector from reporting
 the smaller cases.
 
+## What the Hub does not authenticate
+
+One endpoint asks for a credential, `POST /api/import/findings`, whose
+`X-API-Key` is compared by fingerprint. Every other one asks for nothing:
+`/api/status`, `/api/sources`, `/api/findings`, `/api/analyses` for both the
+listing and the request that starts a run, `/reports/`, `/metrics`, and the
+launcher itself. Whoever reaches the port reads every finding of every tenant,
+SQL query shapes and endpoint names included.
+
+The identity header attributes, it does not authenticate.
+`Hub:Analysis:IdentityHeader` is recorded on a run as a claim some proxy made,
+and the Hub verifies nothing about it. That is the right behaviour behind an
+authenticating proxy and no defence at all without one. If the network is not
+the boundary, put that proxy in front. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## What sits outside the Hub
 
 A live report needs two things the Hub does not control: the daemon's
@@ -68,6 +83,12 @@ A live report needs two things the Hub does not control: the daemon's
 from, and the viewer must be able to reach that daemon directly. A daemon behind
 a path-based ingress gets a static report instead, because the engine's
 `--daemon-url` takes an origin and nothing else. See [LAUNCHER.md](LAUNCHER.md).
+
+The Hub has the cousin of that constraint and must itself be served at the root
+of an origin. The launcher calls `/api/status`, `/api/sources`, `/api/analyses`
+and `/reports/` as absolute paths, nothing rewrites them, and a path-based
+ingress leaves the browser asking for a prefix the Hub never answers. See
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Scale and observability
 

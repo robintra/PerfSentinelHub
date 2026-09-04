@@ -60,7 +60,9 @@ Cardinality is bounded by configuration. `source` takes the ids in
 label.
 
 The endpoint carries no authentication, exactly like `/api/status`. Keep it
-behind whatever fronts the rest of the Hub. The chart leaves the scrape opted
+behind whatever fronts the rest of the Hub. It shares that origin with the
+launcher, so a proxy opened for the browser serves `/metrics` as well unless
+the path is excluded. The chart leaves the scrape opted
 into rather than assumed:
 
 ```yaml

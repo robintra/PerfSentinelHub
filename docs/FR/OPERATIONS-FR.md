@@ -64,7 +64,9 @@ alphanumériques, `.`, `_` ou `-`. `status` prend six constantes. Rien de ce
 qu'envoie un appelant n'atteint un libellé.
 
 L'endpoint ne porte aucune authentification, exactement comme `/api/status`.
-Gardez-le derrière ce qui protège déjà le reste du Hub. Le chart laisse la
+Gardez-le derrière ce qui protège déjà le reste du Hub. Il partage cette
+origine avec le lanceur, donc un proxy ouvert pour le navigateur sert aussi
+`/metrics` tant que le chemin n'est pas exclu. Le chart laisse la
 collecte en opt-in plutôt que de la supposer :
 
 ```yaml

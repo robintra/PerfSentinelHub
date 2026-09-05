@@ -864,6 +864,46 @@
         return state ? age + ", " + state : age;
     }
 
+    /**
+     * The route that opens New analysis on an incident's window. The end is held
+     * at now: an incident younger than two TTLs still has a `window_to_ms` in the
+     * future, and the Hub refuses a window that ends there.
+     * @param {{id: string, service: string, window_from_ms: number, window_to_ms: number}} incident
+     * @param {number} nowMs
+     * @returns {string}
+     */
+    function incidentHandoffHash(incident, nowMs) {
+        return "#/new?from=" + incident.window_from_ms
+            + "&to=" + Math.min(incident.window_to_ms, nowMs)
+            + "&service=" + encodeURIComponent(incident.service)
+            + "&incident=" + encodeURIComponent(incident.id);
+    }
+
+    /**
+     * What a `#/new?from=…&to=…&service=…` hash carries for the form, or null
+     * when it carries nothing the form can take: both bounds numbers with the
+     * start before the end, a service name, and the end no later than now, held
+     * there rather than refused since a shared link ages. Any other route, and
+     * the bare `#/new` the tab points at, read as null.
+     * @param {string | null | undefined} hash
+     * @param {number} nowMs
+     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string} | null}
+     */
+    function readHandoff(hash, nowMs) {
+        const text = String(hash || "");
+        if (text.indexOf("#/new?") !== 0) return null;
+        const params = new URLSearchParams(text.slice("#/new?".length));
+        const number = function (key) {
+            const raw = params.get(key);
+            return raw === null || raw.trim() === "" ? NaN : Number(raw);
+        };
+        const fromMs = number("from");
+        const toMs = Math.min(number("to"), nowMs);
+        const service = (params.get("service") || "").trim();
+        if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs || service === "") return null;
+        return {fromMs: fromMs, toMs: toMs, service: service, incidentId: params.get("incident") || ""};
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -880,6 +920,7 @@
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
         hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
         gaugeTone, gaugeMove,
-        INCIDENT_KIND_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy
+        INCIDENT_KIND_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy,
+        incidentHandoffHash, readHandoff
     };
 })(globalThis);

@@ -13,6 +13,11 @@ The form adapts to the selected source's `kind` rather than offering an independ
 live-or-historical switch. A switch would let an operator compose impossible states, such
 as a three-hour window against a daemon that keeps ten minutes.
 
+A link from the incidents screen arrives here with the form filled in: the incident's
+service, and its window as an absolute range with its end held at now. A banner above the
+parameters names the incident. The source is not part of the link, since a daemon takes no
+window: under a daemon the banner says so and asks for a trace backend.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
   <img alt="The fleet health screen with a daemon row unfolded" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
@@ -127,9 +132,10 @@ how many of its values depart from the engine's own defaults. The row ends with 
 ## The incidents screen
 
 Each row is an incident a daemon recorded when the operator's alerting posted it, in the
-order the daemon's own monitor prints the columns: started, service, kind, ended,
-findings, capture, source. The daemon is the author and the Hub copies its record, so the
-screen reads what the daemon froze and re-derives nothing.
+order the daemon's own monitor prints the columns: started, namespace, service, kind,
+ended, findings, capture, source. The namespace is the alert label the daemon read beside
+the service, empty when the alert carried none. The daemon is the author and the Hub copies
+its record, so the screen reads what the daemon froze and re-derives nothing.
 
 Opening the screen reads every daemon before it draws, so the rows are what the fleet holds
 now rather than what the last poll left behind: an operator paged about an OOM kill would
@@ -146,11 +152,19 @@ A row unfolds into the findings the daemon froze for that incident, each placed 
 the incident or after the restart from its own stamp against the incident's. The capture
 column carries the daemon's reading of how far back its ring still reached: complete,
 partial, or empty. Times are relative, never dates, and the exact stamp sits in the
-tooltip. A service select narrows the list, and a button loads the next hundred older
-rows, from the store rather than from the daemons. Under the table, one line per daemon
-says when its copy was read, or that it was never read, so a quiet fleet never reads as a
-stale copy. A daemon that refused the Hub's key on that route gets a banner naming the
-setting to fix, and its findings stay collected.
+tooltip. Five selects narrow the list, by kind, service, namespace, environment and daemon,
+the namespace one appearing once a row has carried one. The Hub applies them, so the older
+rows a button loads next, a hundred at a time from the store rather than from the daemons,
+follow the same filter. Under the table, one line per daemon says when its copy was read,
+or that it was never read, so a quiet fleet never reads as a stale copy. A daemon that
+refused the Hub's key on that route gets a banner naming the setting to fix, and its
+findings stay collected.
+
+An unfolded row carries an Analyse this window button beside its heading, which opens New
+analysis on the incident's service and window, described under The form follows the
+source. The source stays the operator's choice, because a daemon takes no window and the
+incident's own daemon would run its in-memory snapshot rather than the window. The link
+keeps its parameters, so it can be shared or reloaded, and the New tab itself carries none.
 
 ## Safety
 

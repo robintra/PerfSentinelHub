@@ -2,73 +2,6 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
-
-### Added
-
-- The incidents screen reads the daemons when it is opened, instead of showing whatever the
-  last poll left behind. An operator paged about an OOM kill opens that screen within the
-  minute, and `Hub:PollInterval` defaults to an hour, so the screen they reached for was
-  the one surface guaranteed to be empty exactly when it mattered. A new
-  `POST /api/incidents/refresh` reads every daemon's ring now and answers with the same body
-  and the same parameters as the listing, so the screen costs one round trip, and the poll
-  becomes the floor rather than the only path. A POST because the route writes to the store,
-  and because a GET would be cached and prefetched, which a fleet read must never be. The
-  read leg itself is now one class shared by the poll and the route, so the two cannot drift
-  on how a refused key, a missing route or an oversized page is filed, and it keeps the same
-  isolation it always had: those outcomes live in the source's own `incidents_read` row and
-  never in its reachability, since a wrong read key says nothing about the findings that
-  daemon reports. What bounds it, given every screen open triggers one: the fan-out is
-  capped by `Hub:MaxConcurrentPolls` the way the poll worker is, two refreshes run at once
-  and a third gets a `503` with `Retry-After`, and a source read in the last ten seconds is
-  skipped with its stored copy served instead, so a reload loop or five people watching the
-  same screen cannot storm the fleet. That floor is a constant rather than a setting,
-  because it protects the daemons from this Hub and is not an operator's preference.
-  `/api/sources` gains `incidents_read_ms` beside `incidents_state`, and the screen prints
-  one line per daemon saying how long ago its copy was read, or that it was never read: a
-  fleet with nothing to report and a copy nobody refreshed used to look identical, which is
-  the second half of the same problem.
-- The incidents screen shows the namespace an incident carries and filters on kind,
-  namespace, environment and daemon beside the service filter it already had. The
-  namespace is the alert label a perf-sentinel 0.20.0 daemon writes on an incident when
-  the alert named one, relayed as the daemon wrote it and absent when it did not, so two
-  deployments of one service name in two namespaces read apart: a tag for reading and
-  filtering, never part of the copy's key. The daemon's own monitor prints namespace and
-  service in one cell, the Hub gives the namespace a column of its own so the screen reads
-  and narrows on either. The filters are applied by the Hub rather than by the page,
-  `GET /api/incidents` and `POST /api/incidents/refresh` take `kind`, `namespace` and
-  `environment` beside `service` and `source_id`, so the older rows a button loads next
-  follow the same filter instead of the screen narrowing the one page it holds. `service`
-  and `namespace` are free strings matched exactly, and an unknown one is an empty page,
-  since only the daemons know the set. `kind`, `environment` and `source_id` are closed
-  sets, the daemon's five kinds and the Hub's configured sources, and a value outside them
-  is a `400` rather than an empty page: an empty incidents screen is the answer an operator
-  hopes for, so a typo in a filter that configuration could have checked must not be able
-  to produce it. `environment` resolves to every source configured with it, and given
-  together with `source_id` the narrower `source_id` wins with no intersection. The
-  filters narrow the answer, never the read: a refresh still reads the whole fleet whatever
-  the query asks for.
-- An unfolded incident carries an Analyse this window button, which opens New analysis
-  with the mode set to a service, the incident's service filled in and the range set
-  absolute to the window the daemon froze, under a banner naming the incident and, while
-  the incidents screen still holds its row, how far the window reaches either side of it,
-  otherwise its length. The operator paged about an incident used to read
-  the window off the row and retype it into the form, four numbers and a name copied by
-  hand at the worst moment to copy anything. The source stays the operator's choice and is
-  not part of the link: a daemon takes no window, so the incident's own daemon would run
-  its in-memory snapshot rather than the window, and the window has to go to a trace
-  backend the operator picks on the left. Under a daemon the banner says so and asks for
-  one, instead of the form pretending the pair can run. The window's end is clamped to
-  now, in the link when it is built and again when it is read: the daemon's window reaches
-  past the alert, so a young incident still has a `window_to_ms` in the future, and the
-  Hub refuses a range that ends there, which means the link built the moment the alert
-  fires would otherwise open a form that cannot run. Clamping on the read side as well
-  holds a hash that reaches the form by any other path to the same rule rather than
-  refusing it. The handoff travels as
-  `#/new?from=<ms>&to=<ms>&service=<name>&incident=<id>`, so the link keeps its parameters
-  and can be shared or reloaded while the New tab itself carries none, and a query on any
-  other route leaves the form alone.
-
 ## [0.1.6] - 2026-09-05
 
 ### Added
@@ -99,6 +32,68 @@ All notable changes to PerfSentinelHub are recorded here.
   screen listing them in the daemon monitor's column order, its pages sized under the
   operator's read limit, each row unfolding into the findings it froze, placed before the
   incident or after the restart from their own stamp.
+- The incidents screen reads the daemons when it is opened, rather than serving whatever the
+  last poll left behind. An operator paged about an OOM kill opens that screen within the
+  minute, and `Hub:PollInterval` defaults to an hour, so a poll-only screen would be empty
+  exactly when it matters. `POST /api/incidents/refresh` reads every daemon's ring now and
+  answers with the same body and the same parameters as the listing, so the screen costs one
+  round trip, and the poll is the floor rather than the only path. A POST because the route
+  writes to the store, and because a GET would be cached and prefetched, which a fleet read
+  must never be. The
+  read leg itself is one class shared by the poll and the route, so the two cannot drift
+  on how a refused key, a missing route or an oversized page is filed, and it carries the
+  same isolation: those outcomes live in the source's own `incidents_read` row and
+  never in its reachability, since a wrong read key says nothing about the findings that
+  daemon reports. What bounds it, given every screen open triggers one: the fan-out is
+  capped by `Hub:MaxConcurrentPolls` the way the poll worker is, two refreshes run at once
+  and a third gets a `503` with `Retry-After`, and a source read in the last ten seconds is
+  skipped with its stored copy served instead, so a reload loop or five people watching the
+  same screen cannot storm the fleet. That floor is a constant rather than a setting,
+  because it protects the daemons from this Hub and is not an operator's preference.
+  `/api/sources` gains `incidents_read_ms` beside `incidents_state`, and the screen prints
+  one line per daemon saying how long ago its copy was read, or that it was never read: a
+  fleet with nothing to report and a copy nobody refreshed would otherwise look identical,
+  which is the second half of the same problem.
+- The incidents screen shows the namespace an incident carries and filters on service,
+  kind, namespace, environment and daemon. The namespace is the alert label a perf-sentinel
+  0.20.0 daemon writes on an incident when the alert named one, relayed as the daemon wrote
+  it and absent when it did not, so two
+  deployments of one service name in two namespaces read apart: a tag for reading and
+  filtering, never part of the copy's key. The daemon's own monitor prints namespace and
+  service in one cell, the Hub gives the namespace a column of its own so the screen reads
+  and narrows on either. The filters are applied by the Hub rather than by the page,
+  `GET /api/incidents` and `POST /api/incidents/refresh` take `kind`, `namespace` and
+  `environment` beside `service` and `source_id`, so the older rows a button loads next
+  follow the same filter instead of the screen narrowing the one page it holds. `service`
+  and `namespace` are free strings matched exactly, and an unknown one is an empty page,
+  since only the daemons know the set. `kind`, `environment` and `source_id` are closed
+  sets, the daemon's five kinds and the Hub's configured sources, and a value outside them
+  is a `400` rather than an empty page: an empty incidents screen is the answer an operator
+  hopes for, so a typo in a filter that configuration could have checked must not be able
+  to produce it. `environment` resolves to every source configured with it, and given
+  together with `source_id` the narrower `source_id` wins with no intersection. The
+  filters narrow the answer, never the read: a refresh still reads the whole fleet whatever
+  the query asks for.
+- An unfolded incident carries an Analyse this window button, which opens New analysis
+  with the mode set to a service, the incident's service filled in and the range set
+  absolute to the window the daemon froze, under a banner naming the incident and, while
+  the incidents screen still holds its row, how far the window reaches either side of it,
+  otherwise its length. Without it the operator paged about an incident reads the window
+  off the row and retypes it into the form, four numbers and a name copied by hand at the
+  worst moment to copy anything. The source stays the operator's choice and is
+  not part of the link: a daemon takes no window, so the incident's own daemon would run
+  its in-memory snapshot rather than the window, and the window has to go to a trace
+  backend the operator picks on the left. Under a daemon the banner says so and asks for
+  one, instead of the form pretending the pair can run. The window's end is clamped to
+  now, in the link when it is built and again when it is read: the daemon's window reaches
+  past the alert, so a young incident still has a `window_to_ms` in the future, and the
+  Hub refuses a range that ends there, which means the link built the moment the alert
+  fires would otherwise open a form that cannot run. Clamping on the read side as well
+  holds a hash that reaches the form by any other path to the same rule rather than
+  refusing it. The handoff travels as
+  `#/new?from=<ms>&to=<ms>&service=<name>&incident=<id>`, so the link keeps its parameters
+  and can be shared or reloaded while the New tab itself carries none, and a query on any
+  other route leaves the form alone.
 
 ### Documentation
 

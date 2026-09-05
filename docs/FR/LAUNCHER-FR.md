@@ -15,6 +15,12 @@ sélecteur indépendant entre live et historique. Un tel sélecteur laisserait u
 composer des états impossibles, comme une fenêtre de trois heures contre un daemon qui en
 garde dix minutes.
 
+Un lien depuis l'écran des incidents arrive ici avec le formulaire rempli : le service de
+l'incident, et sa fenêtre en plage absolue dont la fin est retenue à maintenant. Un bandeau
+au-dessus des paramètres nomme l'incident. La source ne fait pas partie du lien, puisqu'un
+daemon ne prend aucune fenêtre : sous un daemon le bandeau le dit et demande un backend de
+traces.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
   <img alt="L'écran de santé de la flotte avec une ligne daemon dépliée" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
@@ -140,9 +146,11 @@ commande `perf-sentinel query monitor` pour la même vue dans un terminal.
 ## L'écran des incidents
 
 Chaque ligne est un incident qu'un daemon a enregistré quand l'alerte de l'exploitant le
-lui a posté, dans l'ordre où le moniteur du daemon imprime ses colonnes : début, service,
-kind, fin, findings, capture, source. Le daemon en est l'auteur et le Hub copie son
-enregistrement, donc l'écran lit ce que le daemon a gelé et ne redérive rien.
+lui a posté, dans l'ordre où le moniteur du daemon imprime ses colonnes : début, namespace,
+service, kind, fin, findings, capture, source. Le namespace est le label d'alerte que le
+daemon a lu à côté du service, vide quand l'alerte n'en portait pas. Le daemon en est
+l'auteur et le Hub copie son enregistrement, donc l'écran lit ce que le daemon a gelé et ne
+redérive rien.
 
 Ouvrir l'écran lit chaque daemon avant de dessiner, donc les lignes sont ce que la flotte
 tient maintenant et non ce que le dernier poll a laissé : un exploitant alerté d'un OOM
@@ -160,12 +168,21 @@ Une ligne se déplie sur les findings que le daemon a gelés pour cet incident, 
 avant l'incident ou après le redémarrage d'après son propre horodatage face à celui de
 l'incident. La colonne capture porte la lecture du daemon de jusqu'où son anneau
 remontait encore : complete, partial ou empty. Les durées sont relatives, jamais des
-dates, et l'horodatage exact est dans l'infobulle. Un sélecteur de service restreint la
-liste, et un bouton charge la centaine de lignes plus anciennes suivante, depuis le magasin
-et non depuis les daemons. Sous le tableau, une ligne par daemon dit quand sa copie a été
-lue, ou qu'elle ne l'a jamais été, pour qu'une flotte calme ne se lise jamais comme une
+dates, et l'horodatage exact est dans l'infobulle. Cinq sélecteurs restreignent la liste,
+par kind, service, namespace, environnement et daemon, celui du namespace apparaissant dès
+qu'une ligne en a porté un. C'est le Hub qui les applique, donc les lignes plus anciennes
+qu'un bouton charge ensuite, par centaine et depuis le magasin plutôt que depuis les
+daemons, suivent le même filtre. Sous le tableau, une ligne par daemon dit quand sa copie a
+été lue, ou qu'elle ne l'a jamais été, pour qu'une flotte calme ne se lise jamais comme une
 copie périmée. Un daemon qui a refusé la clé du Hub sur cette route reçoit un bandeau
 nommant le réglage à corriger, et ses findings restent collectés.
+
+Une ligne dépliée porte un bouton Analyse this window à côté de son en-tête, qui ouvre New
+analysis sur le service et la fenêtre de l'incident, décrit sous Le formulaire suit la
+source. La source reste au choix de l'exploitant, parce qu'un daemon ne prend aucune
+fenêtre et que le daemon de l'incident lui-même analyserait son instantané en mémoire
+plutôt que la fenêtre. Le lien garde ses paramètres, donc il se partage et se recharge, et
+l'onglet New lui-même n'en porte aucun.
 
 ## Sûreté
 

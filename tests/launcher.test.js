@@ -445,3 +445,41 @@ test("incidentsCopy dates a daemon's copy and names what the read came to", () =
 test("every incidents read state the Hub files has words, bar the one the age already tells", () => {
   assert.deepEqual(Object.keys(PSL.INCIDENT_READ_STATE).sort(), ["absent", "error", "unauthorized"]);
 });
+
+test("an incident's window travels to New analysis as a hash and back", () => {
+  const incident = {id: "d650edad80ac5c2d99b8d1dde07100c2", service: "shop svc", window_from_ms: 1000, window_to_ms: 5000};
+  const hash = PSL.incidentHandoffHash(incident, 9000);
+  assert.equal(hash, "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2");
+  assert.deepEqual(PSL.readHandoff(hash, 9000),
+    {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2"});
+});
+
+test("the window's end is held at now, in the hash and again when it is read", () => {
+  // An incident younger than two TTLs has a window still running, and the Hub
+  // refuses a window that ends in the future.
+  const incident = {id: "a", service: "svc", window_from_ms: 1000, window_to_ms: 5000};
+  assert.match(PSL.incidentHandoffHash(incident, 3000), /&to=3000&/);
+  // A shared link ages: the end it carries is held at the reader's own now.
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 3000).toMs, 3000);
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).toMs, 5000);
+});
+
+test("a handoff the form cannot take reads as null", () => {
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=", 9000), null, "empty service");
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=%20", 9000), null, "blank service");
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000", 9000), null, "no service");
+  assert.equal(PSL.readHandoff("#/new?from=5000&to=5000&service=svc", 9000), null, "from equal to to");
+  assert.equal(PSL.readHandoff("#/new?from=6000&to=5000&service=svc", 9000), null, "from after to");
+  assert.equal(PSL.readHandoff("#/new?from=abc&to=5000&service=svc", 9000), null, "non-numeric from");
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=&service=svc", 9000), null, "empty to");
+  assert.equal(PSL.readHandoff("#/new?service=svc", 9000), null, "no bounds");
+  // Held at now, the end can land at or before the start: a window entirely
+  // in the future is not a window to run.
+  assert.equal(PSL.readHandoff("#/new?from=9000&to=9500&service=svc", 9000), null, "all in the future");
+  assert.equal(PSL.readHandoff("#/new", 9000), null, "no parameters");
+  assert.equal(PSL.readHandoff("#/incidents?from=1000&to=5000&service=svc", 9000), null, "another route");
+  assert.equal(PSL.readHandoff("", 9000), null);
+  assert.equal(PSL.readHandoff(null, 9000), null);
+  // The id is along for the banner, never a condition.
+  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).incidentId, "");
+});

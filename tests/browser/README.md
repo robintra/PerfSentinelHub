@@ -44,8 +44,9 @@ reports zeros, and a screenshot of zeros teaches nothing. One daemon sits near
 its cap so the toning shows, the other is comfortable.
 
 The incidents are captured the same way, from a daemon fed five Alertmanager
-deliveries, and the fake daemon slides their stamps forward to the present as
-it serves them. The screen prints every time as an age, so a body captured last
+deliveries carrying three `namespace` labels and one alert without, so the
+column shows both a value and the empty cell, and the fake daemon slides their
+stamps forward to the present as it serves them. The screen prints every time as an age, so a body captured last
 quarter would put "3 months ago" on an OOM kill and read as a broken screen.
 One delta over every millisecond field, so the windows, the frozen findings and
 the before-or-after-the-restart reading keep the distances the daemon measured.

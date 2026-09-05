@@ -162,9 +162,15 @@ def post(alerts):
         return json.loads(answer.read())
 
 
-def alert(service, kind, at_ms, summary, ended_ms=None):
+def alert(service, kind, at_ms, summary, ended_ms=None, namespace=None):
+    # The namespace label kube-prometheus attaches, left off one alert so the
+    # screen also shows the empty cell. The daemon hashes it into the id, so a
+    # resolve must carry the same one as the firing it closes.
+    labels = {"service": service, "perf_sentinel_kind": kind}
+    if namespace:
+        labels["namespace"] = namespace
     return {"status": "resolved" if ended_ms else "firing",
-            "labels": {"service": service, "perf_sentinel_kind": kind},
+            "labels": labels,
             "annotations": {"summary": summary},
             "startsAt": rfc3339(at_ms),
             "endsAt": rfc3339(ended_ms) if ended_ms else "0001-01-01T00:00:00Z"}
@@ -202,7 +208,7 @@ now_ms = lambda: int(time.time() * 1000)
 # Nothing has been analysed yet, so this one freezes an empty ring. Its settle
 # pass re-resolves the window one TTL after it closes and would find the seeded
 # findings, so the seeding waits for that pass to have run.
-post([alert("gateway-svc", "deploy", now_ms(), "rollout 4f21c8 reached every replica")])
+post([alert("gateway-svc", "deploy", now_ms(), "rollout 4f21c8 reached every replica", namespace="edge")])
 time.sleep(4.5)
 seed("order-svc", "orders", "GET /orders", "a")
 seed("cache-svc", "sessions", "GET /sessions", "b")
@@ -214,12 +220,14 @@ time.sleep(2.5)
 at = now_ms()
 # Two windows that open after the ring did, so their capture is complete, and
 # two that open before it, so the daemon reports a partial one.
-post([alert("checkout-svc", "oom_kill", at, "container exceeded its memory limit"),
-      alert("reports-svc", "memory_saturation", at, "working set at 94 percent of the limit"),
-      alert("order-svc", "restart", at - 4000, "pod restarted by the kubelet"),
+post([alert("checkout-svc", "oom_kill", at, "container exceeded its memory limit", namespace="shop"),
+      alert("reports-svc", "memory_saturation", at, "working set at 94 percent of the limit",
+            namespace="reporting"),
+      alert("order-svc", "restart", at - 4000, "pod restarted by the kubelet", namespace="shop"),
       # An unrecognised kind folds to other rather than minting a label.
       alert("cache-svc", "node_pressure", at - 4000, "node under memory pressure, pod evicted")])
-post([alert("order-svc", "restart", at - 4000, "pod restarted by the kubelet", ended_ms=at + 41_000)])
+post([alert("order-svc", "restart", at - 4000, "pod restarted by the kubelet", ended_ms=at + 41_000,
+            namespace="shop")])
 
 request = urllib.request.Request(base + "/api/incidents?limit=100")
 request.add_header("X-API-Key", key)
@@ -249,6 +257,10 @@ verdicts = {verdict(i) for i in incidents}
 if len(kinds) < 5 or len(verdicts) < 3:
     sys.exit(f"captured {sorted(kinds)} and {sorted(verdicts)}, "
              "expected five kinds and three capture verdicts")
+namespaces = {i.get("namespace") for i in incidents}
+if None not in namespaces or len(namespaces) < 3:
+    sys.exit(f"captured namespaces {sorted(n or '' for n in namespaces)}, "
+             "expected the three labels and one alert without")
 
 # One file per fake daemon, the way the status fixture already splits, so the
 # fleet reads as two daemons with their own incidents rather than one record

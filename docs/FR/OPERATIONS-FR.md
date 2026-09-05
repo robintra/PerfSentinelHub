@@ -28,6 +28,15 @@ findings viennent d'être collectés. Les incidents sont lus au même poll horai
 findings, donc un incident capturé quelques minutes avant un redémarrage du daemon peut
 se perdre entre deux polls, ce que l'archive NDJSON du daemon lui-même couvre.
 
+Ce poll est le plancher des incidents, pas l'unique chemin. `POST /api/incidents/refresh`
+lit chaque daemon à la demande, et l'écran des incidents du lanceur l'appelle à chaque
+ouverture, pour qu'un exploitant alerté d'un OOM kill voie ce que la flotte tient
+maintenant au lieu d'attendre l'intervalle. Les daemons en sont protégés par un plancher de
+dix secondes par source, sous lequel la copie stockée est servie intacte, et par une
+barrière de deux rafraîchissements simultanés. `incidents_read_ms` sur `/api/sources` dit
+quand chaque copie a été prise, ce qui distingue une flotte sans rien à signaler d'une
+copie que personne n'a rafraîchie.
+
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt

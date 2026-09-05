@@ -2,6 +2,33 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- The incidents screen reads the daemons when it is opened, instead of showing whatever the
+  last poll left behind. An operator paged about an OOM kill opens that screen within the
+  minute, and `Hub:PollInterval` defaults to an hour, so the screen they reached for was
+  the one surface guaranteed to be empty exactly when it mattered. A new
+  `POST /api/incidents/refresh` reads every daemon's ring now and answers with the same body
+  and the same parameters as the listing, so the screen costs one round trip, and the poll
+  becomes the floor rather than the only path. A POST because the route writes to the store,
+  and because a GET would be cached and prefetched, which a fleet read must never be. The
+  read leg itself is now one class shared by the poll and the route, so the two cannot drift
+  on how a refused key, a missing route or an oversized page is filed, and it keeps the same
+  isolation it always had: those outcomes live in the source's own `incidents_read` row and
+  never in its reachability, since a wrong read key says nothing about the findings that
+  daemon reports. What bounds it, given every screen open triggers one: the fan-out is
+  capped by `Hub:MaxConcurrentPolls` the way the poll worker is, two refreshes run at once
+  and a third gets a `503` with `Retry-After`, and a source read in the last ten seconds is
+  skipped with its stored copy served instead, so a reload loop or five people watching the
+  same screen cannot storm the fleet. That floor is a constant rather than a setting,
+  because it protects the daemons from this Hub and is not an operator's preference.
+  `/api/sources` gains `incidents_read_ms` beside `incidents_state`, and the screen prints
+  one line per daemon saying how long ago its copy was read, or that it was never read: a
+  fleet with nothing to report and a copy nobody refreshed used to look identical, which is
+  the second half of the same problem.
+
 ## [0.1.6] - 2026-09-05
 
 ### Added

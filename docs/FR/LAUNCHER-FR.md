@@ -142,7 +142,14 @@ commande `perf-sentinel query monitor` pour la même vue dans un terminal.
 Chaque ligne est un incident qu'un daemon a enregistré quand l'alerte de l'exploitant le
 lui a posté, dans l'ordre où le moniteur du daemon imprime ses colonnes : début, service,
 kind, fin, findings, capture, source. Le daemon en est l'auteur et le Hub copie son
-enregistrement à chaque poll, donc l'écran lit ce que le daemon a gelé et ne redérive rien.
+enregistrement, donc l'écran lit ce que le daemon a gelé et ne redérive rien.
+
+Ouvrir l'écran lit chaque daemon avant de dessiner, donc les lignes sont ce que la flotte
+tient maintenant et non ce que le dernier poll a laissé : un exploitant alerté d'un OOM
+kill attendrait sinon un poll horaire devant un tableau vide. Un bouton répète cette
+lecture à la demande et s'éteint tant qu'une lecture est en vol. Aucun des deux ne peut
+prendre la flotte d'assaut, un daemon lu il y a moins de dix secondes étant sauté et sa
+copie stockée servie à la place.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">
@@ -154,9 +161,11 @@ avant l'incident ou après le redémarrage d'après son propre horodatage face �
 l'incident. La colonne capture porte la lecture du daemon de jusqu'où son anneau
 remontait encore : complete, partial ou empty. Les durées sont relatives, jamais des
 dates, et l'horodatage exact est dans l'infobulle. Un sélecteur de service restreint la
-liste, et un bouton charge la centaine de lignes plus anciennes suivante. Un daemon qui a
-refusé la clé du Hub sur cette route reçoit un bandeau nommant le réglage à corriger, et
-ses findings restent collectés.
+liste, et un bouton charge la centaine de lignes plus anciennes suivante, depuis le magasin
+et non depuis les daemons. Sous le tableau, une ligne par daemon dit quand sa copie a été
+lue, ou qu'elle ne l'a jamais été, pour qu'une flotte calme ne se lise jamais comme une
+copie périmée. Un daemon qui a refusé la clé du Hub sur cette route reçoit un bandeau
+nommant le réglage à corriger, et ses findings restent collectés.
 
 ## Sûreté
 

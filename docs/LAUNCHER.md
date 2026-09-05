@@ -128,8 +128,14 @@ how many of its values depart from the engine's own defaults. The row ends with 
 
 Each row is an incident a daemon recorded when the operator's alerting posted it, in the
 order the daemon's own monitor prints the columns: started, service, kind, ended,
-findings, capture, source. The daemon is the author and the Hub copies its record on
-every poll, so the screen reads what the daemon froze and re-derives nothing.
+findings, capture, source. The daemon is the author and the Hub copies its record, so the
+screen reads what the daemon froze and re-derives nothing.
+
+Opening the screen reads every daemon before it draws, so the rows are what the fleet holds
+now rather than what the last poll left behind: an operator paged about an OOM kill would
+otherwise wait out an hourly poll in front of an empty table. A button repeats that read on
+demand and goes dead while one is in flight. Neither can storm the fleet, since a daemon
+read in the last ten seconds is skipped and its stored copy served instead.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">

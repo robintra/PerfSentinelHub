@@ -33,6 +33,7 @@ the Hub's route to the daemon, which a push does not exercise.
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `source_id`, `offset`, `limit`. Without their findings, see below                                            |
 | `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
+| `POST /api/incidents/refresh`        | Reads every daemon's incidents ring now, then answers exactly as `GET /api/incidents`. Same parameters. See below                                                                          |
 | `GET /metrics`                       | Prometheus text format, see [OPERATIONS.md](OPERATIONS.md#metrics)                                                                                                                         |
 | `GET /health/live`                   | Whether the process is up                                                                                                                                                                  |
 | `GET /health/ready`                  | Successful after SQLite initialization                                                                                                                                                     |
@@ -126,6 +127,28 @@ when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms
 only after the restart. Like `/api/findings`, both
 answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
 Hub re-exposes the frozen findings behind whatever fronts the Hub.
+
+`POST /api/incidents/refresh` reads the fleet on demand, the way the daemon view does, and
+the incidents screen calls it every time it is opened. The poll is the floor rather than
+the only path: an operator paged about an OOM kill opens the screen within the minute and
+`Hub:PollInterval` is an hour, so a poll-only screen would show nothing until the next one.
+A POST because it writes to the store, and because a GET would be cached and prefetched,
+which a fleet read must never be. It fans out over every source of kind `daemon`, bounded
+by `Hub:MaxConcurrentPolls` exactly as the poll worker is, and answers the same body as
+`GET /api/incidents` with the same `service`, `source_id`, `offset` and `limit`, validated
+identically, so a screen needs one round trip. It shares the poll's failure isolation: a
+401, a 404, a 503 or an oversized page files its own `incidents_state` and never touches
+the source's reachability, and one refusing daemon costs the others nothing.
+
+What it guarantees the daemons: a source whose last read is younger than ten seconds is
+skipped and its stored copy served instead, so a reload loop, or five people watching the
+same screen, cannot storm the fleet. That floor is a constant and not a setting, because it
+protects the daemons from this Hub rather than expressing a preference. A second guarantee
+sits in front of it, a gate of two concurrent refreshes, which answers `503` with
+`Retry-After: 1` past that, since each refresh buffers a page per daemon under the 4 MiB
+body cap. `incidents_read_ms` on `/api/sources` carries when each copy was taken, null
+alongside a null `incidents_state` when none ever was: without it a quiet fleet and a stale
+copy read the same.
 
 ### What the Hub adds to a finding
 

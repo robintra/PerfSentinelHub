@@ -26,6 +26,14 @@ neither marks the source unreachable, since its findings were just collected. In
 are read on the same hourly poll as the findings, so one captured minutes before a daemon
 restart can be lost between two polls, which the daemon's own NDJSON archive covers.
 
+That poll is the floor for incidents, not the only path. `POST /api/incidents/refresh`
+reads every daemon on demand, and the launcher's incidents screen calls it on every open,
+so an operator paged about an OOM kill sees what the fleet holds now instead of waiting out
+the interval. The daemons are protected from that by a ten-second floor per source, below
+which the stored copy is served untouched, and by a gate of two concurrent refreshes.
+`incidents_read_ms` on `/api/sources` says when each copy was taken, which is what tells a
+fleet with nothing to report from a copy nobody has refreshed.
+
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather

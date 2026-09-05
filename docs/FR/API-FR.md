@@ -35,6 +35,7 @@ push n'exerce pas.
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                    |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas                                  |
 | `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                      |
+| `POST /api/incidents/refresh`        | Lit maintenant l'anneau d'incidents de chaque daemon, puis répond exactement comme `GET /api/incidents`. Mêmes paramètres. Voir plus bas                                                                        |
 | `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                    |
 | `GET /health/live`                   | Si le process est debout                                                                                                                                                                                        |
 | `GET /health/ready`                  | Positif après l'initialisation de SQLite                                                                                                                                                                        |
@@ -134,6 +135,30 @@ dépasse `at_ms` n'a démarré qu'après le redémarrage. Comme `/api/findings`,
 répondent à quiconque atteint le port du Hub :
 la clé de lecture d'un daemon protège le daemon, et le Hub réexpose les findings gelés
 derrière ce qui protège le Hub.
+
+`POST /api/incidents/refresh` lit la flotte à la demande, comme le fait la vue daemon, et
+l'écran des incidents l'appelle à chaque ouverture. Le poll est le plancher plutôt que
+l'unique chemin : un exploitant alerté d'un OOM kill ouvre l'écran dans la minute et
+`Hub:PollInterval` vaut une heure, donc un écran nourri du seul poll n'afficherait rien
+jusqu'au suivant. Un POST parce que la route écrit dans le magasin, et parce qu'un GET
+serait mis en cache et préchargé, ce qu'une lecture de flotte ne doit jamais être. Elle
+s'étale sur chaque source de kind `daemon`, bornée par `Hub:MaxConcurrentPolls` exactement
+comme le worker de poll, et répond le même corps que `GET /api/incidents` avec les mêmes
+`service`, `source_id`, `offset` et `limit`, validés à l'identique, de sorte qu'un écran
+n'a besoin que d'un aller-retour. Elle partage l'isolation des pannes du poll : un 401, un
+404, un 503 ou une page trop grosse classe son propre `incidents_state` et ne touche jamais
+la joignabilité de la source, et un daemon qui refuse ne coûte rien aux autres.
+
+Ce qu'elle garantit aux daemons : une source dont la dernière lecture a moins de dix
+secondes est sautée et sa copie stockée est servie à la place, pour qu'une boucle de
+rechargement, ou cinq personnes devant le même écran, ne puissent pas prendre la flotte
+d'assaut. Ce plancher est une constante et non un réglage, parce qu'il protège les daemons
+de ce Hub plutôt qu'il n'exprime une préférence. Une seconde garantie le précède, une
+barrière de deux rafraîchissements simultanés, qui répond `503` avec `Retry-After: 1`
+au-delà, chaque rafraîchissement tamponnant une page par daemon sous le plafond de corps
+de 4 Mio. `incidents_read_ms` sur `/api/sources` porte la date de chaque copie, null aux
+côtés d'un `incidents_state` null quand aucune n'a jamais été prise : sans elle, une flotte
+calme et une copie périmée se lisent pareil.
 
 ### Ce que le Hub ajoute à un finding
 

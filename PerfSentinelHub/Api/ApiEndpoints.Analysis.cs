@@ -61,7 +61,8 @@ public static partial class ApiEndpoints
                 ? submitted
                 : default;
             var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-            if (AnalysisRequest.TryParse(requestElement, source, hubOptions.Analysis, nowMs, out var error) is not { } parsed)
+            if (AnalysisRequest.TryParse(requestElement, source, hubOptions.Analysis, nowMs, out var error) is not
+                { } parsed)
                 return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
             // A knob the embedded engine's `[detection]` does not read is refused
             // here, with both versions named, not by the engine at run time.

@@ -30,14 +30,14 @@ public sealed record ParsedIncidentPage(IReadOnlyList<ParsedIncident> Incidents,
 
 public static class IncidentParser
 {
+    // Unix-ms sanity floor (2001-09-09), the same one the finding parser applies.
+    private const long MinPlausibleEpochMs = 1_000_000_000_000;
+
     /// <summary>
     ///     The daemon's closed set of kinds. Anything else folds to `other`, as
     ///     the daemon itself does, so a label can never carry a free string.
     /// </summary>
     public static readonly string[] Kinds = ["oom_kill", "memory_saturation", "restart", "deploy", "other"];
-
-    // Unix-ms sanity floor (2001-09-09), the same one the finding parser applies.
-    private const long MinPlausibleEpochMs = 1_000_000_000_000;
 
     public static ParsedIncidentPage Parse(ReadOnlyMemory<byte> payload)
     {

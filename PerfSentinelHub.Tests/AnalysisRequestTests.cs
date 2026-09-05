@@ -256,8 +256,10 @@ public sealed class AnalysisRequestTests
     [InlineData("0.17.0", true, false)]
     [InlineData("0.18.0", true, true)]
     [InlineData("0.19.2", true, true)]
-    // A pre-release of the minor that added a knob reads it too.
+    // A pre-release of the minor that added a knob reads it too, and so does a
+    // build-metadata suffix, which is the other half of what the parser strips.
     [InlineData("0.18.0-rc.1", true, true)]
+    [InlineData("0.18.0+build.5", true, true)]
     [InlineData("0.5.7", true, false)]
     // No probed version withholds only what a version gates: the mode is read by
     // every engine, so a failed probe still offers it.

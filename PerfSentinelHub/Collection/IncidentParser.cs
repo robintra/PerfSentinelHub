@@ -115,12 +115,7 @@ public static class IncidentParser
     // The daemon's id is a SHA-256 over service|kind|at_ms, printed as lowercase hex.
     private static bool IsIncidentId(string id)
     {
-        if (id.Length != 32)
-            return false;
-        foreach (var character in id)
-            if (!char.IsAsciiHexDigitLower(character))
-                return false;
-        return true;
+        return id.Length == 32 && id.All(char.IsAsciiHexDigitLower);
     }
 
     private static string FoldKind(JsonElement element)

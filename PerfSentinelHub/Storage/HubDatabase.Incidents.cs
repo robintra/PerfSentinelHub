@@ -15,6 +15,16 @@ public sealed partial class HubDatabase
                                            first_seen_ms, last_seen_ms
                                            """;
 
+    // What a reader actually uses, which is fewer columns than the table holds:
+    // the id, the service, the kind, the start and the window's end are in the
+    // relayed document already, and the listing only needs them in the WHERE and
+    // the ORDER BY. SQLite walks every earlier column to reach a later one, the
+    // same reason findings_json sits last.
+    private const string IncidentReadColumns = """
+                                               source_id, ended_at_ms, window_from_ms, oldest_finding_ms,
+                                               finding_count, incident_json, first_seen_ms, last_seen_ms
+                                               """;
+
     /// <summary>
     ///     Stores one poll's incidents and files the read as ok, in one
     ///     transaction. A row is one daemon's capture, so two daemons fed the
@@ -155,7 +165,7 @@ public sealed partial class HubDatabase
         // a scan over the rows the other predicates leave. A column and an index
         // if the table ever outgrows what the retention keeps.
         command.CommandText = $"""
-                               SELECT {IncidentColumns} FROM incidents
+                               SELECT {IncidentReadColumns} FROM incidents
                                WHERE ($service IS NULL OR service = $service)
                                  AND ($kind IS NULL OR kind = $kind)
                                  AND ($namespace IS NULL OR json_extract(incident_json, '$.namespace') = $namespace)
@@ -188,7 +198,7 @@ public sealed partial class HubDatabase
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-                               SELECT {IncidentColumns}, findings_json FROM incidents
+                               SELECT {IncidentReadColumns}, findings_json FROM incidents
                                WHERE id = $id
                                ORDER BY finding_count DESC, source_id ASC
                                LIMIT 1;
@@ -237,18 +247,14 @@ public sealed partial class HubDatabase
     {
         return new StoredIncident(
             reader.GetString(0),
-            reader.GetString(1),
-            reader.GetString(2),
-            reader.GetString(3),
-            reader.GetInt64(4),
-            reader.IsDBNull(5) ? null : reader.GetInt64(5),
+            reader.IsDBNull(1) ? null : reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.IsDBNull(3) ? null : reader.GetInt64(3),
+            reader.GetInt32(4),
+            reader.GetString(5),
             reader.GetInt64(6),
             reader.GetInt64(7),
-            reader.IsDBNull(8) ? null : reader.GetInt64(8),
-            reader.GetInt32(9),
-            reader.GetString(10),
-            reader.GetInt64(11),
-            reader.GetInt64(12),
-            reader.FieldCount > 13 ? reader.GetString(13) : null);
+            // Only the single-incident route selects the findings.
+            reader.FieldCount > 8 ? reader.GetString(8) : null);
     }
 }

@@ -58,19 +58,17 @@ public sealed record SourceState(
 
 /// <summary>
 ///     One daemon's capture of an incident as the Hub keeps it: the daemon's
-///     document without its findings, the columns the listing filters and
-///     orders by, the Hub's own clock for when the copy was first and last
-///     refreshed, and the findings when the read asked for them.
+///     document without its findings, the Hub's own clock for when the copy was
+///     first and last refreshed, and the findings when the read asked for them.
+///     The id, the service, the kind, the start and the window's end are columns
+///     of the table, which the listing filters and orders by, and properties of
+///     the document, which is relayed whole, so the row carries them once rather
+///     than twice.
 /// </summary>
 public sealed record StoredIncident(
-    string Id,
     string SourceId,
-    string Service,
-    string Kind,
-    long AtMs,
     long? EndedAtMs,
     long WindowFromMs,
-    long WindowToMs,
     long? OldestFindingMs,
     int FindingCount,
     string IncidentJson,

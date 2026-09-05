@@ -4121,8 +4121,16 @@
         return postJson("/api/incidents/refresh" + incidentsQuery(0)).then(function (rows) {
             adoptIncidents(rows, []);
         }).catch(function () {
-            state.incidentsError = true;
-            state.incidents = [];
+            // The fleet was not read: refused by the gate while two reads run,
+            // or the route failed. The store still holds what the last read
+            // left, and showing it beats an empty screen with a red banner.
+            return getJson(incidentsPath(0)).then(function (rows) {
+                state.incidentsError = "stale";
+                adoptIncidents(rows, []);
+            }).catch(function () {
+                state.incidentsError = "unread";
+                state.incidents = [];
+            });
         }).finally(function () {
             state.incidentsReading = false;
             // The sources carry the read stamps this screen prints under its
@@ -4140,7 +4148,7 @@
             state.incidentsError = false;
             adoptIncidents(rows, state.incidents);
         }).catch(function () {
-            state.incidentsError = true;
+            state.incidentsError = "page";
         }).finally(function () {
             if (currentScreen() === "incidents") render();
         });
@@ -4184,14 +4192,16 @@
             return section;
         }
         if (state.incidentsError) {
-            section.appendChild(el("div", {class: "banner", "data-tone": "crit"}, [
-                critGlyph(16),
-                el("div", {
-                    text: "The Hub is not answering, so the incidents it holds are unknown. This is the Hub itself, "
-                        + "not any daemon. Rows already on screen are the last page it did answer."
-                })
+            section.appendChild(el("div", {class: "banner", "data-tone": INCIDENT_ERROR_TONE[state.incidentsError]}, [
+                state.incidentsError === "stale" ? warningGlyph(16) : critGlyph(16),
+                el("div", {text: INCIDENT_ERROR_TEXT[state.incidentsError]})
             ]));
-            if (state.incidents.length === 0) return section;
+            if (state.incidents.length === 0) {
+                // The read-now control belongs on screen even here: without it
+                // the only way out of a refused read is a page reload.
+                section.appendChild(incidentFilterLine());
+                return section;
+            }
         }
         unauthorizedBanners().forEach(function (banner) {
             section.appendChild(banner);
@@ -4285,6 +4295,21 @@
             read
         ]);
     }
+
+    // Three ways the screen can be short of a reading, and they are not the
+    // same news. `stale` is the Hub answering promptly that it is already
+    // running two fleet reads, or a read that failed, with the stored copy
+    // still on screen. `unread` is the Hub not answering at all. `page` is one
+    // older page that did not append, the rows above it untouched.
+    const INCIDENT_ERROR_TONE = {stale: "warn", unread: "crit", page: "crit"};
+    const INCIDENT_ERROR_TEXT = {
+        stale: "The daemons were not read just now, so these rows are the copy the last read left. "
+            + "The line under the table says how old each one is. Read again in a moment.",
+        unread: "The Hub did not return the incidents, so nothing here is a reading of the fleet. "
+            + "This is the Hub itself, not any daemon.",
+        page: "The Hub is not answering, so the older rows are unknown. This is the Hub itself, "
+            + "not any daemon. Rows already on screen are the last page it did answer."
+    };
 
     /**
      * One line per daemon, saying when the Hub last read its ring. Without it a

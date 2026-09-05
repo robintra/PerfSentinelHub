@@ -107,7 +107,7 @@ public sealed class IncidentPollingTests : IDisposable
     }
 
     [Fact]
-    public async Task A_page_over_the_body_cap_is_re_read_at_half_the_size()
+    public async Task A_page_over_the_body_cap_is_re_read_at_half_the_size_and_widens_back()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var template = await TemplateAsync(cancellationToken);
@@ -139,7 +139,10 @@ public sealed class IncidentPollingTests : IDisposable
         var result = await poller.PollAsync(Source(daemon), cancellationToken);
 
         Assert.Equal(held, result.IncidentCount);
-        Assert.Equal(["100@0", "50@0", "50@50"], requests);
+        // Halved on the page that did not fit, then widened again on the one
+        // that did, at the cost of one probe per oversized page. Kept narrow,
+        // a single fat incident would walk the rest of the ring at that width.
+        Assert.Equal(["100@0", "50@0", "100@50", "50@50"], requests);
         Assert.Equal(held, (await database.ListIncidentsAsync(new IncidentQuery(null, null, 0, 1000), cancellationToken)).Count);
         await AssertReachableAsync(database, IncidentReadStates.Ok, null, cancellationToken);
     }

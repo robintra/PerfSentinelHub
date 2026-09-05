@@ -1,3 +1,6 @@
+using System.Buffers;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
@@ -148,15 +151,24 @@ public sealed partial class HubDatabase
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // ponytail: the namespace is read out of the document with json_extract,
+        // a scan over the rows the other predicates leave. A column and an index
+        // if the table ever outgrows what the retention keeps.
         command.CommandText = $"""
                                SELECT {IncidentColumns} FROM incidents
                                WHERE ($service IS NULL OR service = $service)
-                                 AND ($source_id IS NULL OR source_id = $source_id)
+                                 AND ($kind IS NULL OR kind = $kind)
+                                 AND ($namespace IS NULL OR json_extract(incident_json, '$.namespace') = $namespace)
+                                 AND ($source_ids IS NULL OR source_id IN (SELECT value FROM json_each($source_ids)))
                                ORDER BY at_ms DESC, id ASC, source_id ASC
                                LIMIT $limit OFFSET $offset;
                                """;
         command.Parameters.AddWithValue(ServiceParameter, (object?)query.Service ?? DBNull.Value);
-        command.Parameters.AddWithValue(SourceIdParameter, (object?)query.SourceId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$kind", (object?)query.Kind ?? DBNull.Value);
+        command.Parameters.AddWithValue("$namespace", (object?)query.Namespace ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$source_ids",
+            query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));
         command.Parameters.AddWithValue("$limit", query.Limit);
         command.Parameters.AddWithValue("$offset", query.Offset);
 
@@ -204,6 +216,21 @@ public sealed partial class HubDatabase
                 reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3));
         return reads;
+    }
+
+    // The shape json_each reads, so one bound parameter carries the whole set.
+    private static string JsonArray(IReadOnlyList<string> values)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartArray();
+            foreach (var value in values)
+                writer.WriteStringValue(value);
+            writer.WriteEndArray();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private static StoredIncident ReadIncident(SqliteDataReader reader)

@@ -162,17 +162,55 @@ public static partial class ApiEndpoints
         if (!HasValidUtf8(request.QueryString.Value) || request.Query.Any(item => item.Value.Count != 1))
             return false;
         if (!TryReadBounded(request, "limit", options.DefaultReadLimit, 1, options.MaxReadLimit, out var limit) ||
-            !TryReadBounded(request, "offset", 0, 0, int.MaxValue, out var offset))
+            !TryReadBounded(request, "offset", 0, 0, int.MaxValue, out var offset) ||
+            !TryReadIncidentFilters(request, options, out var kind, out var sourceIds))
             return false;
 
-        // An unknown source id is a bad request rather than an empty page: the
-        // ids are configuration, and a typo would otherwise read as "no incidents".
+        query = new IncidentQuery(
+            Service: ReadOptional(request, "service"),
+            Namespace: ReadOptional(request, "namespace"),
+            Kind: kind,
+            SourceIds: sourceIds,
+            Offset: offset,
+            Limit: limit);
+        return true;
+    }
+
+    /// <summary>
+    ///     The closed filters. A kind, a source id or an environment is
+    ///     configuration, so an unknown one is a bad request rather than an empty
+    ///     page: a typo would otherwise read as "no incidents". Given together,
+    ///     source_id wins over environment as the narrower of the two.
+    /// </summary>
+    private static bool TryReadIncidentFilters(
+        HttpRequest request,
+        HubOptions options,
+        out string? kind,
+        out IReadOnlyList<string>? sourceIds)
+    {
+        sourceIds = null;
+        kind = ReadOptional(request, "kind");
+        if (kind is not null && Array.IndexOf(IncidentParser.Kinds, kind) < 0)
+            return false;
+
         var sourceId = ReadOptional(request, "source_id");
         if (sourceId is not null &&
             !options.Sources.Any(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal)))
             return false;
 
-        query = new IncidentQuery(ReadOptional(request, "service"), sourceId, offset, limit);
+        var environment = ReadOptional(request, "environment");
+        if (environment is not null)
+        {
+            sourceIds = options.Sources
+                .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
+                .Select(source => source.Id)
+                .ToArray();
+            if (sourceIds.Count == 0)
+                return false;
+        }
+
+        if (sourceId is not null)
+            sourceIds = [sourceId];
         return true;
     }
 

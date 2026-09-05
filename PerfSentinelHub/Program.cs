@@ -57,6 +57,7 @@ builder.Services.AddSingleton<ImportGate>();
 builder.Services.AddSingleton<ImportMetrics>();
 builder.Services.AddSingleton<ImportAdmission>();
 builder.Services.AddSingleton<DaemonViewGate>();
+builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AnalysisRunner>();
 builder.Services.AddHostedService<AnalysisWorker>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -79,6 +80,7 @@ builder.Services.AddHttpClient(UpdateChecker.ClientName).ConfigurePrimaryHttpMes
     });
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateChecker>());
+builder.Services.AddTransient<IncidentReader>();
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddHostedService<RetentionWorker>();

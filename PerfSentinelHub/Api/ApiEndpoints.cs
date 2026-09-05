@@ -47,6 +47,7 @@ public static partial class ApiEndpoints
         app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
         app.MapGet("/api/incidents", GetIncidentsAsync);
         app.MapGet("/api/incidents/{id}", GetIncidentAsync);
+        app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync);
         app.MapGet("/health/live", TypedResults.Ok);
         app.MapGet("/health/ready", (HubDatabase database) =>
@@ -84,7 +85,8 @@ public static partial class ApiEndpoints
                     source.EndpointArgument,
                     source.EngineSubcommand,
                     source.AuthHeaderName,
-                    read?.State);
+                    read?.State,
+                    read?.LastReadMs);
             })
         ];
     }

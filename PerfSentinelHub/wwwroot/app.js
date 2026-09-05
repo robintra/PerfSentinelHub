@@ -79,6 +79,9 @@
         incidents: null,
         incidentsError: false,
         incidentsDone: false,
+        // Set while a live read of the fleet is in flight, so the read-now
+        // button cannot be pressed twice into the same request.
+        incidentsReading: false,
         incidentFilter: {service: ""},
         incidentServices: [],
         incidentDetails: {},
@@ -195,11 +198,20 @@
 
     // ----------------------------------------------------------------- data
 
-    function getJson(path) {
-        return fetch(path, {headers: {accept: "application/json"}}).then(function (response) {
+    function fetchJson(path, method) {
+        return fetch(path, {method: method, headers: {accept: "application/json"}}).then(function (response) {
             if (!response.ok) throw new Error(path + " answered " + response.status);
             return response.json();
         });
+    }
+
+    function getJson(path) {
+        return fetchJson(path, "GET");
+    }
+
+    /** A POST because the route writes: it reads the daemons before it answers. */
+    function postJson(path) {
+        return fetchJson(path, "POST");
     }
 
     function loadShell() {
@@ -229,6 +241,21 @@
             }
             renderShell();
             onRoute();
+        });
+    }
+
+    /**
+     * The sources alone, for a screen whose own action moved their state. A
+     * failure is left silent: the incidents that came back are still real, only
+     * the read stamps under them stay as they were.
+     */
+    function reloadSources() {
+        return getJson("/api/sources").then(function (sources) {
+            state.sources = sources;
+            state.sourcesError = false;
+            renderSourcesBadge();
+        }).catch(function () {
+            void 0;
         });
     }
 
@@ -4067,25 +4094,43 @@
         return Math.min(INCIDENT_PAGE, (limits && limits.max_read_limit) || INCIDENT_PAGE);
     }
 
-    function incidentsPath(offset) {
+    function incidentsQuery(offset) {
         const service = state.incidentFilter.service;
-        return "/api/incidents?limit=" + incidentPage() + "&offset=" + offset
+        return "?limit=" + incidentPage() + "&offset=" + offset
             + (service ? "&service=" + encodeURIComponent(service) : "");
     }
 
-    /** The first page for the current filter. Older pages append, see loadOlderIncidents. */
+    function incidentsPath(offset) {
+        return "/api/incidents" + incidentsQuery(offset);
+    }
+
+    /**
+     * The first page for the current filter, read from the daemons themselves
+     * rather than from whatever the last poll left behind: an operator paged
+     * about an OOM kill opens this screen within the minute, and the poll runs
+     * hourly. The route reads the fleet and answers the listing, so this is one
+     * round trip, and its own floor per source keeps a reload loop off the
+     * daemons. Older pages append from the store, see loadOlderIncidents.
+     */
     function loadIncidents() {
         state.incidents = null;
         state.incidentsError = false;
         state.incidentsDone = false;
+        state.incidentsReading = true;
         render();
-        return getJson(incidentsPath(0)).then(function (rows) {
+        return postJson("/api/incidents/refresh" + incidentsQuery(0)).then(function (rows) {
             adoptIncidents(rows, []);
         }).catch(function () {
             state.incidentsError = true;
             state.incidents = [];
         }).finally(function () {
-            if (currentScreen() === "incidents") render();
+            state.incidentsReading = false;
+            // The sources carry the read stamps this screen prints under its
+            // table, and the read that just ran moved them. Awaited, or the
+            // stamps would be one render behind the rows they describe.
+            return reloadSources().then(function () {
+                if (currentScreen() === "incidents") render();
+            });
         });
     }
 
@@ -4125,11 +4170,16 @@
                 class: "page-sub",
                 text: "Each row is an incident a daemon recorded when the operator's alerting posted it, with the "
                     + "findings it froze from the minutes before. The daemon is the author: the Hub copies its record "
-                    + "on every poll and re-derives nothing, and keeps the copy after the daemon's own ring has let it go."
+                    + "and re-derives nothing, and keeps the copy after the daemon's own ring has let it go. Opening "
+                    + "this screen reads every daemon, so the rows are what the fleet holds now rather than what the "
+                    + "last poll left. Under the table, when each daemon was last read."
             })
         ]);
 
         if (state.loading || state.incidents === null) {
+            // The filter line comes first even here, so the read-now control is
+            // on screen, and visibly dead, while the read it started runs.
+            section.appendChild(incidentFilterLine());
             section.appendChild(el("div", {class: "sources-wrap"}, [skeletonTable()]));
             return section;
         }
@@ -4154,9 +4204,10 @@
                     text: "An incident exists only when a daemon with [daemon.incidents] enabled receives one from "
                         + "the operator's alerting. Nothing here means none was posted"
                         + (state.incidentFilter.service ? " for this service" : "")
-                        + ", or that no polled daemon publishes them yet."
+                        + ", or that no daemon read just now publishes them yet."
                 })
             ]));
+            appendCopyNote(section);
             return section;
         }
         section.appendChild(el("div", {class: "sources-wrap"}, [incidentsTable(state.incidents)]));
@@ -4170,6 +4221,7 @@
             });
             section.appendChild(el("p", {class: "sources-note"}, [older]));
         }
+        appendCopyNote(section);
         section.appendChild(el("p", {
             class: "sources-note",
             text: "Started and Ended are the alerting's own stamps, relayed by the daemon. The Hub keeps an incident "
@@ -4214,10 +4266,56 @@
             state.incidentFilter.service = select.value;
             loadIncidents();
         });
+        const read = el("button", {
+            type: "button",
+            class: "pill-button",
+            // Disabled rather than queued: a second read would be refused by the
+            // route's own floor anyway, and a dead button says why better.
+            disabled: state.incidentsReading ? "disabled" : null
+        }, [
+            svg([["path", {d: "M20 11a8 8 0 1 0-2.3 5.7"}], ["path", {d: "M20 5v6h-6"}]], 14),
+            el("span", {text: state.incidentsReading ? "Reading the daemons" : "Read the daemons now"})
+        ]);
+        read.addEventListener("click", function () {
+            loadIncidents();
+        });
         return el("div", {class: "refresh"}, [
             el("span", {class: "refresh-label", text: "service"}),
-            select
+            select,
+            read
         ]);
+    }
+
+    /**
+     * One line per daemon, saying when the Hub last read its ring. Without it a
+     * quiet fleet and a stale copy read the same, which is the whole reason the
+     * screen reads on open.
+     */
+    function incidentCopyNote() {
+        const daemons = (state.sources || []).filter(function (source) {
+            return source.kind === "daemon";
+        });
+        if (daemons.length === 0) return null;
+        return el("p", {class: "sources-note"}, [
+            el("span", {text: "Every row comes from a daemon, copied here when its ring was read. "})
+        ].concat(daemons.map(function (source) {
+            const text = function () {
+                return PSL.incidentsCopy(source, Date.now());
+            };
+            // The title on the wrapper, not on the live span: the ticker copies
+            // its own text into any title it finds on the node it rewrites.
+            return el("span", {
+                title: source.incidents_read_ms == null ? null : PSL.dtHuman(source.incidents_read_ms)
+            }, [
+                live(el("span", {text: text()}), text),
+                el("span", {text: ". "})
+            ]);
+        })));
+    }
+
+    function appendCopyNote(section) {
+        const note = incidentCopyNote();
+        if (note) section.appendChild(note);
     }
 
     function incidentsTable(incidents) {

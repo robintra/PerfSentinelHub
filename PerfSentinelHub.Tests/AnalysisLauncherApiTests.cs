@@ -32,6 +32,8 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
         Assert.Equal(2000, limits.GetProperty("max_traces_cap").GetInt32());
         Assert.Equal(300, limits.GetProperty("analysis_timeout_seconds").GetInt32());
         Assert.Equal(24, limits.GetProperty("report_retention_hours").GetInt32());
+        // The launcher sizes its incident pages under this rather than meeting a 400.
+        Assert.Equal(10_000, limits.GetProperty("max_read_limit").GetInt32());
     }
 
     [Fact]

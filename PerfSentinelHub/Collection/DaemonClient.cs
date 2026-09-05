@@ -28,8 +28,10 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     internal const int MaxBodyBytes = 16 * 1024 * 1024;
     private const int ConfigMaxBytes = 64 * 1024;
 
-    // Smaller than the findings cap on purpose: a page carries up to 100
-    // incidents of up to 1000 findings each, and four polls may run at once.
+    // Smaller than the findings cap on purpose, four polls may run at once. A
+    // page of 100 incidents of up to 1000 findings each does not fit under it,
+    // so the poller halves the page and re-reads the same offset when a page
+    // overflows, down to a single incident.
     public const int IncidentsMaxBytes = 4 * 1024 * 1024;
     internal const int FindingsLimit = 1000;
     public const int IncidentsPageSize = 100;
@@ -139,13 +141,14 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     public async Task<byte[]?> FetchIncidentsPageAsync(
         SourceOptions source,
         int offset,
+        int limit,
         CancellationToken cancellationToken)
     {
         try
         {
             return await SendAsync(
                 source,
-                $"api/incidents?limit={IncidentsPageSize}&offset={offset}",
+                $"api/incidents?limit={limit}&offset={offset}",
                 cancellationToken,
                 maxBytes: IncidentsMaxBytes);
         }

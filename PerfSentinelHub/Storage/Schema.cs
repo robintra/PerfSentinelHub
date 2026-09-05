@@ -121,13 +121,17 @@ internal static class Schema
     // The daemon's incidents, copied by the poll. `at_ms` is the alerting clock
     // and the daemon's id already hashes it, so the Hub keeps its own clock in
     // first_seen_ms and last_seen_ms, which retention and ORDER BY read. The
-    // document stays whole in incident_json, findings included: the Hub reads
-    // none of them, it re-emits them. incident_reads is kept apart from
+    // id hashes service, kind and at_ms and nothing of the daemon, so two
+    // daemons fed the same alert compute the same id and each freezes its own
+    // ring: the key is (id, source_id), the way finding_sources is keyed. The
+    // findings sit in findings_json, listed last because SQLite walks every
+    // earlier column to reach a later one, so the listing, which reads none of
+    // them, never pays for them. incident_reads is kept apart from
     // source_state for the reason source_imports is: a refused or absent
     // incidents route must never look like an unreachable daemon.
     internal const string V5 = """
                                CREATE TABLE IF NOT EXISTS incidents (
-                                 id TEXT PRIMARY KEY,
+                                 id TEXT NOT NULL,
                                  source_id TEXT NOT NULL,
                                  service TEXT NOT NULL,
                                  kind TEXT NOT NULL,
@@ -139,7 +143,9 @@ internal static class Schema
                                  finding_count INTEGER NOT NULL,
                                  incident_json TEXT NOT NULL,
                                  first_seen_ms INTEGER NOT NULL,
-                                 last_seen_ms INTEGER NOT NULL
+                                 last_seen_ms INTEGER NOT NULL,
+                                 findings_json TEXT NOT NULL,
+                                 PRIMARY KEY(id, source_id)
                                );
                                CREATE INDEX IF NOT EXISTS ix_incidents_at ON incidents(at_ms DESC);
                                CREATE INDEX IF NOT EXISTS ix_incidents_service_at

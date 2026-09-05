@@ -57,9 +57,10 @@ public sealed record SourceState(
     string? LastErrorCode);
 
 /// <summary>
-///     One daemon incident as the Hub keeps it: the daemon's document whole,
-///     the columns the listing filters and orders by, and the Hub's own clock
-///     for when the copy was first and last refreshed.
+///     One daemon's capture of an incident as the Hub keeps it: the daemon's
+///     document without its findings, the columns the listing filters and
+///     orders by, the Hub's own clock for when the copy was first and last
+///     refreshed, and the findings when the read asked for them.
 /// </summary>
 public sealed record StoredIncident(
     string Id,
@@ -74,7 +75,9 @@ public sealed record StoredIncident(
     int FindingCount,
     string IncidentJson,
     long FirstSeenMs,
-    long LastSeenMs);
+    long LastSeenMs,
+    // Null on the listing, which never reads the column.
+    string? FindingsJson);
 
 /// <summary>The outcome of the last incidents read of one source.</summary>
 public sealed record IncidentRead(long LastReadMs, string State, string? LastErrorCode);

@@ -11,6 +11,9 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     private const string FixtureId = "d650edad80ac5c2d99b8d1dde07100c2";
     private const string EmptyId = "0000000000000000000000000000000e";
     private const string CompleteId = "0000000000000000000000000000000c";
+    private const string EndedId = "0000000000000000000000000000000d";
+    // The fixture's at_ms plus 45 s.
+    private const long EndedAtMs = 1_788_607_484_029;
 
     private readonly HttpClient _client = factory.CreateClient();
 
@@ -78,7 +81,7 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         await SeedAsync();
         var all = (await ListAsync("/api/incidents")).EnumerateArray().Select(Id).ToArray();
         // Newest first, the daemon's own order.
-        Assert.Equal([CompleteId, EmptyId, FixtureId], all);
+        Assert.Equal([CompleteId, EmptyId, FixtureId, EndedId], all);
         Assert.Equal([EmptyId], (await ListAsync("/api/incidents?service=other-svc")).EnumerateArray().Select(Id));
         Assert.Equal([EmptyId], (await ListAsync("/api/incidents?limit=1&offset=1")).EnumerateArray().Select(Id));
         Assert.Empty((await ListAsync("/api/incidents?service=missing")).EnumerateArray());
@@ -117,6 +120,22 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.Equal(expected, IncidentWriter.Capture(oldest, windowFrom));
     }
 
+    [Fact]
+    public async Task An_end_kept_in_the_column_alone_is_still_written()
+    {
+        await SeedAsync();
+        using var response = await _client.GetAsync($"/api/incidents/{EndedId}", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
+        var incident = document.RootElement;
+        // The richer document was kept, findings and all, and the end the
+        // poorer re-capture carried is read from the column, not from it.
+        Assert.Equal(2, incident.GetProperty("findings").GetArrayLength());
+        Assert.Equal(EndedAtMs, incident.GetProperty("ended_at_ms").GetInt64());
+    }
+
     private static string Id(JsonElement incident)
     {
         return incident.GetProperty("id").GetString()!;
@@ -132,8 +151,8 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         return document.RootElement.Clone();
     }
 
-    // The capture plus two variants of it: one from an empty ring, one whose
-    // ring still reached past the window's start.
+    // The capture plus three variants of it: one from an empty ring, one whose
+    // ring still reached past the window's start, one whose end arrived later.
     private async Task SeedAsync()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -155,8 +174,26 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         complete["at_ms"] = atMs + 2000;
         complete["oldest_finding_ms"] = complete["window_from_ms"]!.GetValue<long>() - 1;
 
-        var page = IncidentParser.Parse(
-            System.Text.Encoding.UTF8.GetBytes($"[{template},{empty.ToJsonString()},{complete.ToJsonString()}]"));
+        // And one whose end arrived on a poorer re-capture: the column takes
+        // the end, the richer document is kept without it.
+        var ended = JsonNode.Parse(template)!;
+        ended["id"] = EndedId;
+        ended["service"] = "ended-svc";
+        ended["at_ms"] = atMs - 1000;
+        var recapture = JsonNode.Parse(ended.ToJsonString())!;
+        recapture["findings"] = new JsonArray();
+        recapture.AsObject().Remove("oldest_finding_ms");
+        recapture["ended_at_ms"] = EndedAtMs;
+
+        await UpsertAsync(
+            $"[{template},{empty.ToJsonString()},{complete.ToJsonString()},{ended.ToJsonString()}]",
+            cancellationToken);
+        await UpsertAsync($"[{recapture.ToJsonString()}]", cancellationToken);
+    }
+
+    private async Task UpsertAsync(string payload, CancellationToken cancellationToken)
+    {
+        var page = IncidentParser.Parse(System.Text.Encoding.UTF8.GetBytes(payload));
         Assert.Equal(0, page.RejectedCount);
         await factory.Database.UpsertIncidentsAsync("test", page.Incidents, 5000, cancellationToken);
     }

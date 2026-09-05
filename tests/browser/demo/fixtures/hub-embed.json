@@ -14,7 +14,8 @@
         "max_traces_cap": 2000,
         "analysis_timeout_seconds": 300,
         "report_retention_hours": 24,
-        "max_traces_embedded": 50
+        "max_traces_embedded": 50,
+        "max_read_limit": 10000
       },
       "detection_knobs": [
         {

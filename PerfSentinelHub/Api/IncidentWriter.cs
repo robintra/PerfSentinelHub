@@ -12,7 +12,10 @@ namespace PerfSentinelHub.Api;
 /// </summary>
 public static class IncidentWriter
 {
-    /// <summary>The listing, without the per-incident findings, which can run to a thousand rows each.</summary>
+    /// <summary>
+    ///     The listing, without the per-incident findings, which can run to a
+    ///     thousand rows each: the rows come from a read that never loads them.
+    /// </summary>
     public static async Task WriteArrayAsync(
         HttpResponse response,
         IReadOnlyList<StoredIncident> rows,
@@ -24,7 +27,7 @@ public static class IncidentWriter
         writer.WriteStartArray();
         foreach (var row in rows)
         {
-            WriteIncident(writer, row, sources, false);
+            WriteIncident(writer, row, sources);
             if (writer.BytesPending < 64 * 1024)
                 continue;
 
@@ -37,7 +40,7 @@ public static class IncidentWriter
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
 
-    /// <summary>One incident whole, findings included.</summary>
+    /// <summary>One incident whole, the findings the row was read with included.</summary>
     public static async Task WriteObjectAsync(
         HttpResponse response,
         StoredIncident row,
@@ -46,7 +49,7 @@ public static class IncidentWriter
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
-        WriteIncident(writer, row, sources, true);
+        WriteIncident(writer, row, sources);
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
@@ -68,19 +71,25 @@ public static class IncidentWriter
 
     // `ended_at_ms` comes from the column and not from the document: an end the
     // daemon reported on a re-capture this row did not adopt is still an end.
+    // The findings are relayed as the daemon wrote them, with no second parse.
     private static void WriteIncident(
         Utf8JsonWriter writer,
         StoredIncident row,
-        IReadOnlyList<SourceOptions> sources,
-        bool includeFindings)
+        IReadOnlyList<SourceOptions> sources)
     {
         using var document = JsonDocument.Parse(row.IncidentJson);
         writer.WriteStartObject();
         foreach (var property in document.RootElement.EnumerateObject())
         {
-            if (property.Name == "ended_at_ms" || (!includeFindings && property.Name == "findings"))
+            if (property.Name == "ended_at_ms")
                 continue;
             property.WriteTo(writer);
+        }
+
+        if (row.FindingsJson is not null)
+        {
+            writer.WritePropertyName("findings");
+            writer.WriteRawValue(row.FindingsJson);
         }
 
         JsonWrite.NumberOrNull(writer, "ended_at_ms", row.EndedAtMs);

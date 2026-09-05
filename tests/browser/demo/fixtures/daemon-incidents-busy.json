@@ -1,0 +1,88 @@
+[
+  {
+    "id": "3a25d88492b92b022dc5a76dcdf94bd8",
+    "service": "reports-svc",
+    "kind": "memory_saturation",
+    "at_ms": 1788614690037,
+    "detail": "working set at 94 percent of the limit",
+    "window_from_ms": 1788614687037,
+    "window_to_ms": 1788614692037,
+    "oldest_finding_ms": 1788614686495,
+    "findings": [
+      {
+        "finding": {
+          "type": "n_plus_one_sql",
+          "severity": "warning",
+          "trace_id": "hubd0000000000000000000000000000",
+          "service": "reports-svc",
+          "source_endpoint": "GET /reports",
+          "pattern": {
+            "template": "SELECT * FROM exports WHERE owner_id = ?",
+            "occurrences": 8,
+            "window_ms": 0,
+            "distinct_params": 8,
+            "span_duration_us_p50": 1500,
+            "span_duration_us_p99": 1500,
+            "span_duration_cv_x1000": 0
+          },
+          "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+          "first_timestamp": "2026-09-05T13:24:47.533Z",
+          "last_timestamp": "2026-09-05T13:24:47.533Z",
+          "green_impact": {
+            "estimated_extra_io_ops": 7,
+            "io_intensity_score": 8.0,
+            "io_intensity_band": "high"
+          },
+          "confidence": "daemon_staging",
+          "signature": "n_plus_one_sql:reports-svc:GET__reports:eca589985f26e880cf5b71a71303e90f"
+        },
+        "stored_at_ms": 1788614688994,
+        "first_seen_ms": 1788614688994,
+        "seen_count": 1
+      }
+    ]
+  },
+  {
+    "id": "dd6e0be5bdf9832bdee36532d6a72afa",
+    "service": "checkout-svc",
+    "kind": "oom_kill",
+    "at_ms": 1788614690037,
+    "detail": "container exceeded its memory limit",
+    "window_from_ms": 1788614687037,
+    "window_to_ms": 1788614692037,
+    "oldest_finding_ms": 1788614686495,
+    "findings": [
+      {
+        "finding": {
+          "type": "n_plus_one_sql",
+          "severity": "warning",
+          "trace_id": "hubc0000000000000000000000000000",
+          "service": "checkout-svc",
+          "source_endpoint": "POST /checkout",
+          "pattern": {
+            "template": "SELECT * FROM invoices WHERE owner_id = ?",
+            "occurrences": 8,
+            "window_ms": 0,
+            "distinct_params": 8,
+            "span_duration_us_p50": 1500,
+            "span_duration_us_p99": 1500,
+            "span_duration_cv_x1000": 0
+          },
+          "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+          "first_timestamp": "2026-09-05T13:24:47.532Z",
+          "last_timestamp": "2026-09-05T13:24:47.532Z",
+          "green_impact": {
+            "estimated_extra_io_ops": 7,
+            "io_intensity_score": 8.0,
+            "io_intensity_band": "high"
+          },
+          "confidence": "daemon_staging",
+          "signature": "n_plus_one_sql:checkout-svc:POST__checkout:e1e0bf0f3636b95b2421e5e4a3c0832c"
+        },
+        "stored_at_ms": 1788614688994,
+        "first_seen_ms": 1788614688994,
+        "seen_count": 1
+      }
+    ]
+  }
+]

@@ -96,6 +96,16 @@ All notable changes to PerfSentinelHub are recorded here.
   and can be shared or reloaded while the New tab itself carries none, and a query on any
   other route leaves the form alone.
 
+### Changed
+
+- The image ships perf-sentinel `0.20.0` as its analysis engine, repinned by digest from
+  `0.19.0`. That is the binary the Hub runs for a backend analysis, so a run gets the
+  0.20.0 detectors, and it is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.19.0` now reads one minor behind
+  where it read level. The engine is copied from the published image rather than
+  downloaded, so the build reaches no host outside the registry, and
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
 ### Documentation
 
 - A new page, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), answers the question the rest of the

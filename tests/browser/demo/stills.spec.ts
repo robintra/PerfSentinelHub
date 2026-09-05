@@ -80,6 +80,11 @@ test("incidents", async ({ page }, info) => {
   await page.locator("button.row-toggle").first().click();
   await expect(page.locator(".daemon-panel .table").first()).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: nameFor("launcher-incidents", info.project.name), fullPage: true, animations: "disabled" });
+  // Not a still: the button in the unfolded row must open New analysis on the
+  // incident's window, with the banner that names where the form came from.
+  await page.getByRole("button", { name: "Analyse this window" }).first().click();
+  await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=[^&]+&incident=[0-9a-f]{32}$/);
+  await expect(page.locator(".banner", { hasText: "from the incidents screen" })).toBeVisible();
 });
 
 test("one run", async ({ page }, info) => {

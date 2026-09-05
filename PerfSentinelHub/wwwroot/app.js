@@ -4600,11 +4600,11 @@
         analyse.addEventListener("click", function () {
             location.hash = PSL.incidentHandoffHash(detail, Date.now());
         });
+        // The button comes after the note that describes the window, since it
+        // is the action the note argues for, and in the row the older-rows
+        // button already uses under the table.
         return el("div", {class: "daemon-panel"}, [
-            el("div", {class: "refresh"}, [
-                el("p", {class: "overline daemon-audience", text: "// frozen by the daemon"}),
-                analyse
-            ]),
+            el("p", {class: "overline daemon-audience", text: "// frozen by the daemon"}),
             el("p", {
                 class: "daemon-source-note",
                 text: INCIDENT_CAPTURE[capture] + " The window ran from "
@@ -4612,6 +4612,7 @@
                     + PSL.dur(detail.window_to_ms - detail.at_ms) + " after it, and a finding stamped after the "
                     + "incident belongs to the replacement, not to what died."
             }),
+            el("p", {class: "sources-note"}, [analyse]),
             findings.length === 0
                 ? el("p", {class: "daemon-lead", text: "The daemon froze no finding for this incident."})
                 : el("div", {class: "sources-wrap"}, [incidentFindingsTable(findings, detail)])

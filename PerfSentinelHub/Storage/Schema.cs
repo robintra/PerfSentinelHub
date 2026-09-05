@@ -117,4 +117,38 @@ internal static class Schema
                                  last_import_ms INTEGER NOT NULL
                                );
                                """;
+
+    // The daemon's incidents, copied by the poll. `at_ms` is the alerting clock
+    // and the daemon's id already hashes it, so the Hub keeps its own clock in
+    // first_seen_ms and last_seen_ms, which retention and ORDER BY read. The
+    // document stays whole in incident_json, findings included: the Hub reads
+    // none of them, it re-emits them. incident_reads is kept apart from
+    // source_state for the reason source_imports is: a refused or absent
+    // incidents route must never look like an unreachable daemon.
+    internal const string V5 = """
+                               CREATE TABLE IF NOT EXISTS incidents (
+                                 id TEXT PRIMARY KEY,
+                                 source_id TEXT NOT NULL,
+                                 service TEXT NOT NULL,
+                                 kind TEXT NOT NULL,
+                                 at_ms INTEGER NOT NULL,
+                                 ended_at_ms INTEGER,
+                                 window_from_ms INTEGER NOT NULL,
+                                 window_to_ms INTEGER NOT NULL,
+                                 oldest_finding_ms INTEGER,
+                                 finding_count INTEGER NOT NULL,
+                                 incident_json TEXT NOT NULL,
+                                 first_seen_ms INTEGER NOT NULL,
+                                 last_seen_ms INTEGER NOT NULL
+                               );
+                               CREATE INDEX IF NOT EXISTS ix_incidents_at ON incidents(at_ms DESC);
+                               CREATE INDEX IF NOT EXISTS ix_incidents_service_at
+                                 ON incidents(service, at_ms DESC);
+                               CREATE TABLE IF NOT EXISTS incident_reads (
+                                 source_id TEXT PRIMARY KEY,
+                                 last_read_ms INTEGER NOT NULL,
+                                 state TEXT NOT NULL,
+                                 last_error_code TEXT
+                               );
+                               """;
 }

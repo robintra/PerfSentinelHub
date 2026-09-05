@@ -70,7 +70,10 @@ public sealed record SourceResponse(
     string? EngineSubcommand,
     // The header's name, never its value. Without it the note cannot say what
     // belongs in the variable, which the engine expects as "Name: Value".
-    string? AuthHeaderName);
+    string? AuthHeaderName,
+    // What the last incidents read of this daemon came to: ok, absent (no such
+    // route, or the store is off), unauthorized, error. Null when none has run.
+    string? IncidentsState);
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 
@@ -81,6 +84,8 @@ public sealed record FindingQuery(
     int Limit,
     bool IncludeAcked = true,
     string? Status = null);
+
+public sealed record IncidentQuery(string? Service, string? SourceId, int Offset, int Limit);
 
 public sealed record SubmittedAnalysis(string Id, string Status);
 

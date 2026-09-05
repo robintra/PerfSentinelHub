@@ -396,3 +396,27 @@ test("splitByKind labels a fleet only when it holds both kinds", () => {
   assert.equal(odd.split, true);
   assert.deepEqual(odd.backends.map((e) => e.index), [1]);
 });
+
+test("incidentCapture reads oldest_finding_ms the way the daemon does", () => {
+  // At or below the window's start, the ring still reached the whole window.
+  assert.equal(PSL.incidentCapture({oldest_finding_ms: 100, window_from_ms: 100}), "complete");
+  assert.equal(PSL.incidentCapture({oldest_finding_ms: 99, window_from_ms: 100}), "complete");
+  // Above it, part of the window was already gone when the incident was frozen.
+  assert.equal(PSL.incidentCapture({oldest_finding_ms: 101, window_from_ms: 100}), "partial");
+  // Absent means the ring held nothing at all.
+  assert.equal(PSL.incidentCapture({window_from_ms: 100}), "empty");
+  assert.equal(PSL.incidentCapture({oldest_finding_ms: null, window_from_ms: 100}), "empty");
+});
+
+test("findingPhase places a finding before or after the incident by its stamp", () => {
+  const incident = {at_ms: 1000};
+  assert.equal(PSL.findingPhase({first_seen_ms: 999}, incident), "before");
+  assert.equal(PSL.findingPhase({first_seen_ms: 1000}, incident), "before");
+  assert.equal(PSL.findingPhase({first_seen_ms: 1001}, incident), "after");
+});
+
+test("every incident kind the daemon emits has a label", () => {
+  assert.deepEqual(
+    Object.keys(PSL.INCIDENT_KIND_LABEL).sort(),
+    ["deploy", "memory_saturation", "oom_kill", "other", "restart"]);
+});

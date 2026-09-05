@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace PerfSentinelHub.Api;
 
 public sealed record StatusResponse(
@@ -43,7 +45,7 @@ public sealed record DetectionKnob(
     string Kind,
     double? Min,
     double? Max,
-    System.Text.Json.JsonElement Default,
+    JsonElement Default,
     IReadOnlyList<string>? Choices);
 
 /// <summary>

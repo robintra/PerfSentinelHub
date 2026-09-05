@@ -20,7 +20,10 @@ public sealed record DetectionOverrides
     private const int MaxOccurrences = 10_000;
     private const int MaxDurationMs = 3_600_000;
 
-    /// <summary>Each integer knob: wire name, engine minimum, Hub maximum, engine default. Read by every engine the Hub can drive.</summary>
+    /// <summary>
+    ///     Each integer knob: wire name, engine minimum, Hub maximum, engine default. Read by every engine the Hub can
+    ///     drive.
+    /// </summary>
     private static readonly (string Name, int Min, int Max, int Default)[] Knobs =
     [
         ("n_plus_one_min_occurrences", 1, MaxOccurrences, 5),
@@ -49,7 +52,10 @@ public sealed record DetectionOverrides
         ("sanitizer_aware_min_cv", 0.01, 10, 0.5, "0.18.0")
     ];
 
-    /// <summary>Each choice knob, its choices with the engine default first, and the minor that first read it, null when every engine does.</summary>
+    /// <summary>
+    ///     Each choice knob, its choices with the engine default first, and the minor that first read it, null when every
+    ///     engine does.
+    /// </summary>
     private static readonly (string Name, string[] Choices, string? Since)[] Choices =
     [
         // The mode has been read since 0.5.7, before any engine this Hub drives, so
@@ -93,11 +99,13 @@ public sealed record DetectionOverrides
         }
 
         foreach (var (name, min, max, @default, since) in Decimals)
-            all.Add((new DetectionKnob(name, "decimal", min, max, JsonRead.Literal(Decimal(@default)), null), Version.Parse(since)));
+            all.Add((new DetectionKnob(name, "decimal", min, max, JsonRead.Literal(Decimal(@default)), null),
+                Version.Parse(since)));
         foreach (var (name, choices, since) in Choices)
         {
             // A copy, so the served list cannot reach back into the table.
-            var knob = new DetectionKnob(name, "choice", null, null, JsonRead.Literal(Quoted(choices[0])), [.. choices]);
+            var knob = new DetectionKnob(name, "choice", null, null, JsonRead.Literal(Quoted(choices[0])),
+                [.. choices]);
             all.Add((knob, since is null ? null : Version.Parse(since)));
         }
 
@@ -113,7 +121,7 @@ public sealed record DetectionOverrides
     // same keys as the release it precedes. System.Version knows neither suffix.
     private static Version? ParseEngineVersion(string? engineVersion)
     {
-        var release = engineVersion?.Split(['-', '+'])[0];
+        var release = engineVersion?.Split('-', '+')[0];
         return release is not null && Version.TryParse(release, out var version) ? version : null;
     }
 

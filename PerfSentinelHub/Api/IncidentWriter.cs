@@ -93,7 +93,8 @@ public static class IncidentWriter
         }
 
         JsonWrite.NumberOrNull(writer, "ended_at_ms", row.EndedAtMs);
-        var source = sources.FirstOrDefault(candidate => string.Equals(candidate.Id, row.SourceId, StringComparison.Ordinal));
+        var source =
+            sources.FirstOrDefault(candidate => string.Equals(candidate.Id, row.SourceId, StringComparison.Ordinal));
         writer.WriteString("source_id", row.SourceId);
         JsonWrite.StringOrNull(writer, "source_name", source?.Name);
         JsonWrite.StringOrNull(writer, "environment", source?.Environment);

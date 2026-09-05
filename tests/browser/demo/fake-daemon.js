@@ -1,10 +1,12 @@
-// Replays a real daemon's four responses so the launcher has something to draw.
+// Replays a real daemon's five responses so the launcher has something to draw.
 //
 // The bodies in fixtures/ are captures from a real 0.16.0 daemon, not
 // hand-written shapes: the findings come from `analyze --format json` on the
 // engine's own demo fixture, and the config is that daemon's `api/config`
 // verbatim. Only the gauge values in the status files are chosen, because an
-// idle daemon reports zeros and a screenshot of zeros teaches nothing.
+// idle daemon reports zeros and a screenshot of zeros teaches nothing. The
+// incidents body is a 0.20.0 daemon's `api/incidents` after one Alertmanager
+// delivery, read with its read key.
 //
 // Usage: node fake-daemon.js <port> <busy|calm>
 const http = require("node:http");
@@ -25,6 +27,7 @@ const routes = {
   "/api/config": fixture("daemon-config"),
   "/api/export/report": fixture("daemon-report"),
   "/api/findings": fixture("daemon-findings"),
+  "/api/incidents": fixture("daemon-incidents"),
 };
 
 http

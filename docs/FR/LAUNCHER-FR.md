@@ -5,8 +5,8 @@ qu'elle ouvre. HTML, CSS et JavaScript simples. Sans framework, sans étape de b
 sans requête réseau : les deux polices sont en base64 dans `wwwroot/fonts.css` et chaque
 icône est un SVG en ligne.
 
-Quatre écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la
-santé de la flotte.
+Cinq écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la santé
+de la flotte, lire les incidents enregistrés par les daemons.
 
 ## Le formulaire suit la source
 
@@ -136,6 +136,22 @@ lectures.
 Les réglages eux-mêmes sont un clic plus loin, groupés et repliés, chaque groupe montrant
 combien de ses valeurs s'écartent des défauts du moteur. La ligne se termine par la
 commande `perf-sentinel query monitor` pour la même vue dans un terminal.
+
+## L'écran des incidents
+
+Chaque ligne est un incident qu'un daemon a enregistré quand l'alerte de l'exploitant le
+lui a posté, dans l'ordre où le moniteur du daemon imprime ses colonnes : début, service,
+kind, fin, findings, capture, source. Le daemon en est l'auteur et le Hub copie son
+enregistrement à chaque poll, donc l'écran lit ce que le daemon a gelé et ne redérive rien.
+
+Une ligne se déplie sur les findings que le daemon a gelés pour cet incident, chacun placé
+avant l'incident ou après le redémarrage d'après son propre horodatage face à celui de
+l'incident. La colonne capture porte la lecture du daemon de jusqu'où son anneau
+remontait encore : complete, partial ou empty. Les durées sont relatives, jamais des
+dates, et l'horodatage exact est dans l'infobulle. Un sélecteur de service restreint la
+liste, et un bouton charge la centaine de lignes plus anciennes suivante. Un daemon qui a
+refusé la clé du Hub sur cette route reçoit un bandeau nommant le réglage à corriger, et
+ses findings restent collectés.
 
 ## Sûreté
 

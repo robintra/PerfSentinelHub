@@ -4,7 +4,8 @@ The Hub serves a browser interface at `/`, from the same origin as the reports i
 Plain HTML, CSS and JavaScript. No framework, no build step, no network fetch: the two
 typefaces are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
 
-Four screens: start an analysis, follow one run, list recent runs, read fleet health.
+Five screens: start an analysis, follow one run, list recent runs, read fleet health, read
+the incidents the daemons recorded.
 
 ## The form follows the source
 
@@ -122,6 +123,21 @@ Folding the row stops the reads.
 The settings themselves are one click further in, grouped and folded, each group showing
 how many of its values depart from the engine's own defaults. The row ends with the
 `perf-sentinel query monitor` command for the same view in a terminal.
+
+## The incidents screen
+
+Each row is an incident a daemon recorded when the operator's alerting posted it, in the
+order the daemon's own monitor prints the columns: started, service, kind, ended,
+findings, capture, source. The daemon is the author and the Hub copies its record on
+every poll, so the screen reads what the daemon froze and re-derives nothing.
+
+A row unfolds into the findings the daemon froze for that incident, each placed before
+the incident or after the restart from its own stamp against the incident's. The capture
+column carries the daemon's reading of how far back its ring still reached: complete,
+partial, or empty. Times are relative, never dates, and the exact stamp sits in the
+tooltip. A service select narrows the list, and a button loads the next hundred older
+rows. A daemon that refused the Hub's key on that route gets a banner naming the setting
+to fix, and its findings stay collected.
 
 ## Safety
 

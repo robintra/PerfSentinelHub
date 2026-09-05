@@ -4,6 +4,24 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- The Hub mirrors the incidents a perf-sentinel 0.20.0 daemon records when the operator's
+  alerting posts one. Every poll copies the daemon's `/api/incidents` ring, frozen findings
+  included, into a table the daemon's own restart cannot empty, and keeps the richer of two
+  captures of the same incident, because Alertmanager repeats a firing alert and a daemon
+  restarted in between would freeze a window its ring no longer reaches. The read carries
+  the source's auth header, so a daemon's `[daemon] read_api_key` goes in `AuthHeaderValue`
+  under `AuthHeaderName=X-API-Key`, and its outcome lives in an `incident_reads` row of its
+  own rather than in the source's reachability: a wrong key, or a daemon before 0.20.0
+  answering 404, never demotes the findings that daemon reported on the same poll.
+  `GET /api/incidents` lists the copies newest first without their findings and with a
+  `capture` verdict derived from the daemon's `oldest_finding_ms`, `GET /api/incidents/{id}`
+  returns one whole, `/api/sources` gains `incidents_state`, and the copies expire with the
+  findings retention on the Hub's clock. The launcher gets a fifth screen listing them in the
+  daemon monitor's column order, each row unfolding into the findings it froze, placed before
+  the incident or after the restart from their own stamp.
+
 ### Documentation
 
 - A new page, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), answers the question the rest of the

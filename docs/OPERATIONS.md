@@ -18,6 +18,14 @@ unreachable and retried with bounded exponential backoff, and a later success cl
 state. Poll bodies are limited to 16 MiB, requests have a timeout, imports are
 transactional, and logs identify only the source ID and a stable error code.
 
+The same poll copies the daemon's incidents, from 0.20.0 with `[daemon.incidents]`
+enabled, and the copy survives the daemon's own ring. What that read came to is
+`incidents_state` on `/api/sources`, kept apart from reachability: a daemon answering 404
+or 503 on that route publishes no incidents, one refusing the key is `unauthorized`, and
+neither marks the source unreachable, since its findings were just collected. Incidents
+are read on the same hourly poll as the findings, so one captured minutes before a daemon
+restart can be lost between two polls, which the daemon's own NDJSON archive covers.
+
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather

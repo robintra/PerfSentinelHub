@@ -8,19 +8,30 @@ All notable changes to PerfSentinelHub are recorded here.
 
 - The Hub mirrors the incidents a perf-sentinel 0.20.0 daemon records when the operator's
   alerting posts one. Every poll copies the daemon's `/api/incidents` ring, frozen findings
-  included, into a table the daemon's own restart cannot empty, and keeps the richer of two
-  captures of the same incident, because Alertmanager repeats a firing alert and a daemon
-  restarted in between would freeze a window its ring no longer reaches. The read carries
-  the source's auth header, so a daemon's `[daemon] read_api_key` goes in `AuthHeaderValue`
-  under `AuthHeaderName=X-API-Key`, and its outcome lives in an `incident_reads` row of its
-  own rather than in the source's reachability: a wrong key, or a daemon before 0.20.0
-  answering 404, never demotes the findings that daemon reported on the same poll.
-  `GET /api/incidents` lists the copies newest first without their findings and with a
-  `capture` verdict derived from the daemon's `oldest_finding_ms`, `GET /api/incidents/{id}`
-  returns one whole, `/api/sources` gains `incidents_state`, and the copies expire with the
-  findings retention on the Hub's clock. The launcher gets a fifth screen listing them in the
-  daemon monitor's column order, each row unfolding into the findings it froze, placed before
-  the incident or after the restart from their own stamp.
+  included, into a table the daemon's own restart cannot empty. A copy is one daemon's
+  capture, keyed on the incident's id and the source together, because the id hashes
+  nothing of the daemon and two daemons fed the same alert would otherwise collapse into
+  one row and lose one ring's findings, and of two captures by the same daemon the richer
+  one is kept, because Alertmanager repeats a firing alert and a daemon restarted in
+  between would freeze a window its ring no longer reaches. The ring is read a page at a
+  time under a 4 MiB body cap, and a page that overflows it is re-read at half the size
+  from the same offset down to a single incident, since a daemon embeds up to a thousand
+  findings per incident and a full page of a busy daemon would otherwise be filed as an
+  error on every poll and mirror nothing. The read carries the source's auth header, so a
+  daemon's `[daemon] read_api_key` goes in `AuthHeaderValue` under
+  `AuthHeaderName=X-API-Key`, and its outcome lives in an `incident_reads` row of its own
+  rather than in the source's reachability: a wrong key, or a daemon before 0.20.0
+  answering 404, never demotes the findings that daemon reported on the same poll, and a
+  page that is not a JSON array is filed as `invalid_incidents`, apart from the findings
+  leg's own code. `GET /api/incidents` lists the copies newest first without their
+  findings, which are stored apart so the listing never reads them, and with a `capture`
+  verdict derived from the daemon's `oldest_finding_ms`, `GET /api/incidents/{id}` returns
+  one whole, the richest copy when several sources hold the id, `/api/sources` gains
+  `incidents_state`, `/api/status` publishes `max_read_limit` among its limits, and the
+  copies expire with the findings retention on the Hub's clock. The launcher gets a fifth
+  screen listing them in the daemon monitor's column order, its pages sized under the
+  operator's read limit, each row unfolding into the findings it froze, placed before the
+  incident or after the restart from their own stamp.
 
 ### Documentation
 

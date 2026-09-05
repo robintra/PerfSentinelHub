@@ -92,10 +92,20 @@ when the operator's alerting posts one, and freezes the findings of the minutes 
 it. The Hub copies that record on every poll of the daemon and re-derives nothing: the
 findings inside an incident are the daemon's, frozen at capture and settled once, and the
 Hub's own finding of the same signature may since have moved on. The copy outlives the
-daemon's ring, which dies with the daemon, and of two captures of the same incident the
-richer one is kept, since Alertmanager repeats a firing alert and a daemon restarted in
-between freezes a window its ring no longer reaches. Copies expire with the findings
-retention, on the Hub's own clock and never on the alerting's `at_ms`.
+daemon's ring, which dies with the daemon. A copy is one daemon's capture, keyed on the
+incident's `id` and the `source_id` together: the id hashes the service, the kind and the
+alerting's stamp and nothing of the daemon, so two daemons fed the same alert list the same
+id and each keeps its own frozen findings. Of two captures of the same incident by one
+daemon the richer one is kept, since Alertmanager repeats a firing alert and a daemon
+restarted in between freezes a window its ring no longer reaches. Copies expire with the
+findings retention, on the Hub's own clock and never on the alerting's `at_ms`.
+
+The poll reads the daemon's ring a page at a time under a 4 MiB body cap. A page that
+overflows it is re-read at half the size from the same offset, down to a single incident,
+since the daemon embeds up to a thousand findings per incident and a full page of a busy
+daemon never fits while one incident always does. An incident that overflows the cap on
+its own is filed as `response_too_large`, and a page that is not a JSON array as
+`invalid_incidents`.
 
 The poll reads the route with the source's `AuthHeaderName` and `AuthHeaderValue`, so a
 read key is `AuthHeaderName=X-API-Key` with the daemon's `[daemon] read_api_key` as the
@@ -105,13 +115,15 @@ daemon before 0.20.0 answers 404 and one with the store disabled 503, neither a 
 source's reachability: the findings were collected on the same poll, and a refused key
 must not demote every finding that daemon reported.
 
-`GET /api/incidents` lists the copies newest first, without their findings, which can
-run to a thousand per incident. Each carries the daemon's own fields plus `source_id`,
-`source_name`, `environment`, `first_seen`, `last_seen` (Hub clock), `finding_count` and
-`capture`: `complete` when `oldest_finding_ms` is at or below `window_from_ms`, `partial`
-when the ring had already evicted part of the window, `empty` when it held nothing.
-`GET /api/incidents/{id}` returns one incident whole, findings included. A finding whose
-`first_seen_ms` is past `at_ms` fired only after the restart. Like `/api/findings`, both
+`GET /api/incidents` lists the copies newest first, one row per `(id, source_id)`, without
+their findings, which can run to a thousand per incident and are never read for the
+listing. Each carries the daemon's own fields plus `source_id`, `source_name`,
+`environment`, `first_seen`, `last_seen` (Hub clock), `finding_count` and `capture`:
+`complete` when `oldest_finding_ms` is at or below `window_from_ms`, `partial` when the
+ring had already evicted part of the window, `empty` when it held nothing.
+`GET /api/incidents/{id}` returns one incident whole, findings included, the richest copy
+when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms` fired
+only after the restart. Like `/api/findings`, both
 answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
 Hub re-exposes the frozen findings behind whatever fronts the Hub.
 

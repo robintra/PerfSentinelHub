@@ -97,10 +97,21 @@ incident quand l'alerte de l'exploitant le lui poste, et gèle les findings des 
 précèdent. Le Hub copie cet enregistrement à chaque poll du daemon et ne redérive rien :
 les findings d'un incident sont ceux du daemon, gelés à la capture et consolidés une fois,
 et le finding du Hub de même signature peut avoir évolué depuis. La copie survit à
-l'anneau du daemon, qui meurt avec lui, et de deux captures du même incident la plus riche
-est gardée, puisqu'Alertmanager répète une alerte active et qu'un daemon redémarré entre
-temps gèle une fenêtre que son anneau n'atteint plus. Les copies expirent avec la
-rétention des findings, sur l'horloge du Hub et jamais sur le `at_ms` de l'alerte.
+l'anneau du daemon, qui meurt avec lui. Une copie est la capture d'un daemon, à la clé
+de l'`id` de l'incident et du `source_id` ensemble : l'id hache le service, le genre et
+l'horodatage de l'alerte et rien du daemon, donc deux daemons nourris de la même alerte
+listent le même id et chacun garde ses propres findings gelés. De deux captures du même
+incident par un même daemon la plus riche est gardée, puisqu'Alertmanager répète une
+alerte active et qu'un daemon redémarré entre temps gèle une fenêtre que son anneau
+n'atteint plus. Les copies expirent avec la rétention des findings, sur l'horloge du Hub
+et jamais sur le `at_ms` de l'alerte.
+
+Le poll lit l'anneau du daemon page par page sous un plafond de corps de 4 Mio. Une page
+qui le dépasse est relue à la moitié de sa taille depuis le même décalage, jusqu'à un seul
+incident, puisque le daemon embarque jusqu'à mille findings par incident et qu'une page
+pleine d'un daemon chargé ne tient jamais alors qu'un incident seul tient toujours. Un
+incident qui dépasse le plafond à lui seul est classé `response_too_large`, et une page
+qui n'est pas un tableau JSON `invalid_incidents`.
 
 Le poll lit la route avec `AuthHeaderName` et `AuthHeaderValue` de la source, donc une clé
 de lecture s'écrit `AuthHeaderName=X-API-Key` avec le `[daemon] read_api_key` du daemon en
@@ -111,14 +122,16 @@ Aucun de ces états ne touche la joignabilité de la source : les findings ont �
 au même poll, et une clé refusée ne doit pas rétrograder chaque finding rapporté par ce
 daemon.
 
-`GET /api/incidents` liste les copies du plus récent au plus ancien, sans leurs findings,
-qui peuvent atteindre le millier par incident. Chacune porte les champs du daemon plus
-`source_id`, `source_name`, `environment`, `first_seen`, `last_seen` (horloge du Hub),
-`finding_count` et `capture` : `complete` quand `oldest_finding_ms` est au plus égal à
-`window_from_ms`, `partial` quand l'anneau avait déjà évincé une partie de la fenêtre,
-`empty` quand il ne tenait rien. `GET /api/incidents/{id}` renvoie un incident entier,
-findings compris. Un finding dont `first_seen_ms` dépasse `at_ms` n'a démarré qu'après le
-redémarrage. Comme `/api/findings`, les deux répondent à quiconque atteint le port du Hub :
+`GET /api/incidents` liste les copies du plus récent au plus ancien, une ligne par
+`(id, source_id)`, sans leurs findings, qui peuvent atteindre le millier par incident et
+ne sont jamais lus pour la liste. Chacune porte les champs du daemon plus `source_id`,
+`source_name`, `environment`, `first_seen`, `last_seen` (horloge du Hub), `finding_count`
+et `capture` : `complete` quand `oldest_finding_ms` est au plus égal à `window_from_ms`,
+`partial` quand l'anneau avait déjà évincé une partie de la fenêtre, `empty` quand il ne
+tenait rien. `GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
+copie la plus riche quand plusieurs sources tiennent l'id. Un finding dont `first_seen_ms`
+dépasse `at_ms` n'a démarré qu'après le redémarrage. Comme `/api/findings`, les deux
+répondent à quiconque atteint le port du Hub :
 la clé de lecture d'un daemon protège le daemon, et le Hub réexpose les findings gelés
 derrière ce qui protège le Hub.
 

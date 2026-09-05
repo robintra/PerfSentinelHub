@@ -21,7 +21,7 @@ make security
 
 `make verify-fast` restores locked tools and packages, checks formatting, runs Python and .NET tests, enforces coverage, and validates analysis and secret metadata. `make verify` adds NativeAOT, dependency audit, image scanning, and Helm validation. `make security` checks dependency vulnerabilities, temporary security exceptions, analysis configuration, and supply-chain declarations. Explain any platform-specific command you could not run; do not claim it passed.
 
-`make release-check VERSION=0.1.5` validates repository version consistency before a
+`make release-check VERSION=0.1.6` validates repository version consistency before a
 signed tag is created.
 
 The protected GitHub check is `CI / Gate`, from the dedicated PerfSentinel CI Gate App. A

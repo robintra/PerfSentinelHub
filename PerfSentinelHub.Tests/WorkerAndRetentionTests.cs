@@ -102,9 +102,12 @@ public sealed class WorkerAndRetentionTests : IDisposable
         });
         var clock = new FakeTimeProvider();
         var logger = new ListLogger<PollWorker>();
+        var client = new DaemonClient(new HttpClient(), options);
+        var database = new HubDatabase(options, clock);
         var poller = new SourcePoller(
-            new DaemonClient(new HttpClient(), options),
-            new HubDatabase(options, clock),
+            client,
+            database,
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             clock,
             NullLogger<SourcePoller>.Instance);
         using var worker = new PollWorker(poller, options, clock, logger);
@@ -137,9 +140,12 @@ public sealed class WorkerAndRetentionTests : IDisposable
             ]
         });
         var clock = new FakeTimeProvider();
+        var client = new DaemonClient(new HttpClient(), options);
+        var database = new HubDatabase(options, clock);
         var poller = new SourcePoller(
-            new DaemonClient(new HttpClient(), options),
-            new HubDatabase(options, clock),
+            client,
+            database,
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             clock,
             NullLogger<SourcePoller>.Instance);
         using var worker = new PollWorker(poller, options, clock, NullLogger<PollWorker>.Instance);

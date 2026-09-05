@@ -76,7 +76,11 @@ public sealed record SourceResponse(
     string? AuthHeaderName,
     // What the last incidents read of this daemon came to: ok, absent (no such
     // route, or the store is off), unauthorized, error. Null when none has run.
-    string? IncidentsState);
+    string? IncidentsState,
+    // When that read was taken, on the Hub's clock. Null alongside the state
+    // when none has run, which the incidents screen says as "never read": the
+    // age of the copy is what tells a quiet fleet from a stale one.
+    long? IncidentsReadMs);
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 

@@ -420,3 +420,28 @@ test("every incident kind the daemon emits has a label", () => {
     Object.keys(PSL.INCIDENT_KIND_LABEL).sort(),
     ["deploy", "memory_saturation", "oom_kill", "other", "restart"]);
 });
+
+test("incidentsCopy dates a daemon's copy and names what the read came to", () => {
+  const read = {name: "Production", incidents_read_ms: 1_000_000, incidents_state: "ok"};
+  // A successful read says nothing beyond its age: the age is the answer.
+  assert.equal(PSL.incidentsCopy(read, 1_042_000), "Production: read 42 s ago");
+  // No row at all is not the epoch, and not a quiet fleet either.
+  assert.equal(PSL.incidentsCopy({name: "Production"}, 1_042_000), "Production: never read");
+  assert.equal(
+    PSL.incidentsCopy({name: "Production", incidents_read_ms: null}, 1_042_000),
+    "Production: never read");
+  // Anything else is named beside the age, or a refused key reads as silence.
+  assert.equal(
+    PSL.incidentsCopy({name: "Edge", incidents_read_ms: 0, incidents_state: "unauthorized"}, 60_000),
+    "Edge: read 1 m ago, it refused the Hub's key");
+  assert.equal(
+    PSL.incidentsCopy({name: "Edge", incidents_read_ms: 0, incidents_state: "absent"}, 0),
+    "Edge: read 0 s ago, it publishes no incidents route");
+  // A clock that ran backwards between the read and the render is not a
+  // negative age.
+  assert.equal(PSL.incidentsCopy({name: "Edge", incidents_read_ms: 5_000}, 1_000), "Edge: read 0 s ago");
+});
+
+test("every incidents read state the Hub files has words, bar the one the age already tells", () => {
+  assert.deepEqual(Object.keys(PSL.INCIDENT_READ_STATE).sort(), ["absent", "error", "unauthorized"]);
+});

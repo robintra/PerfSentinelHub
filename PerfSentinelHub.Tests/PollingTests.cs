@@ -61,6 +61,10 @@ public sealed class PollingTests : IDisposable
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),
             database,
+            new IncidentReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<IncidentReader>.Instance),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions
@@ -130,6 +134,10 @@ public sealed class PollingTests : IDisposable
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),
             database,
+            new IncidentReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<IncidentReader>.Instance),
             TimeProvider.System,
             logger);
 
@@ -197,6 +205,10 @@ public sealed class PollingTests : IDisposable
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),
             database,
+            new IncidentReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<IncidentReader>.Instance),
             TimeProvider.System,
             logger);
         var source = new SourceOptions
@@ -253,6 +265,10 @@ public sealed class PollingTests : IDisposable
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),
             database,
+            new IncidentReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<IncidentReader>.Instance),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions

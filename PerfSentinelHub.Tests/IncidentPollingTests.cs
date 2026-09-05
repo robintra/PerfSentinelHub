@@ -90,19 +90,19 @@ public sealed class IncidentPollingTests : IDisposable
                 await Baseline(context, cancellationToken);
             }
         }, cancellationToken);
-        var logger = new ListLogger<SourcePoller>();
+        var logger = new ListLogger<IncidentReader>();
         var (poller, database) = await BuildAsync(TimeProvider.System, cancellationToken, logger);
 
         var result = await poller.PollAsync(Source(daemon), cancellationToken);
 
-        Assert.Equal(SourcePoller.IncidentsCap, result.IncidentCount);
+        Assert.Equal(IncidentReader.IncidentsCap, result.IncidentCount);
         Assert.Equal(
-            Enumerable.Range(0, SourcePoller.IncidentsCap / DaemonClient.IncidentsPageSize)
+            Enumerable.Range(0, IncidentReader.IncidentsCap / DaemonClient.IncidentsPageSize)
                 .Select(page => (page * DaemonClient.IncidentsPageSize).ToString()),
             offsets);
         Assert.Contains(logger.Messages, message => message.Contains("stopped paging", StringComparison.Ordinal));
         Assert.Equal(
-            SourcePoller.IncidentsCap,
+            IncidentReader.IncidentsCap,
             (await database.ListIncidentsAsync(new IncidentQuery(null, null, 0, 2000), cancellationToken)).Count);
     }
 
@@ -181,7 +181,7 @@ public sealed class IncidentPollingTests : IDisposable
                 await Baseline(context, cancellationToken);
             }
         }, cancellationToken);
-        var logger = new ListLogger<SourcePoller>();
+        var logger = new ListLogger<IncidentReader>();
         var (poller, database) = await BuildAsync(TimeProvider.System, cancellationToken, logger);
 
         var result = await poller.PollAsync(Source(daemon), cancellationToken);
@@ -374,16 +374,18 @@ public sealed class IncidentPollingTests : IDisposable
     private async Task<(SourcePoller Poller, HubDatabase Database)> BuildAsync(
         TimeProvider timeProvider,
         CancellationToken cancellationToken,
-        ILogger<SourcePoller>? logger = null)
+        ILogger<IncidentReader>? logger = null)
     {
         var options = new HubOptions { DatabasePath = _databasePath, HttpTimeout = TimeSpan.FromSeconds(2) };
         var database = new HubDatabase(Options.Create(options), timeProvider);
         await database.InitializeAsync(cancellationToken);
+        var client = new DaemonClient(new HttpClient(), Options.Create(options));
         var poller = new SourcePoller(
-            new DaemonClient(new HttpClient(), Options.Create(options)),
+            client,
             database,
+            new IncidentReader(client, database, logger ?? NullLogger<IncidentReader>.Instance),
             timeProvider,
-            logger ?? NullLogger<SourcePoller>.Instance);
+            NullLogger<SourcePoller>.Instance);
         return (poller, database);
     }
 

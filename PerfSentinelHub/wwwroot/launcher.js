@@ -837,6 +837,33 @@
         return finding.first_seen_ms > incident.at_ms ? "after" : "before";
     }
 
+    /**
+     * What the last incidents read of one daemon came to, in the words the
+     * incidents screen uses under its table. `ok` says nothing beyond the age,
+     * which is already there.
+     * @type {Record<string, string>}
+     */
+    const INCIDENT_READ_STATE = {
+        absent: "it publishes no incidents route",
+        unauthorized: "it refused the Hub's key",
+        error: "the read failed"
+    };
+
+    /**
+     * How fresh the Hub's copy of one daemon's incidents is. The screen lists
+     * one of these per daemon, so a quiet fleet reads differently from a stale
+     * copy: an hour-old read of nothing is not the same answer as no read.
+     * @param {{name: string, incidents_read_ms?: number | null, incidents_state?: string | null}} source
+     * @param {number} nowMs
+     * @returns {string}
+     */
+    function incidentsCopy(source, nowMs) {
+        if (source.incidents_read_ms == null) return source.name + ": never read";
+        const age = source.name + ": read " + dur(Math.max(0, nowMs - source.incidents_read_ms)) + " ago";
+        const state = INCIDENT_READ_STATE[source.incidents_state || ""];
+        return state ? age + ", " + state : age;
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -853,6 +880,6 @@
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
         hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
         gaugeTone, gaugeMove,
-        INCIDENT_KIND_LABEL, incidentCapture, findingPhase
+        INCIDENT_KIND_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy
     };
 })(globalThis);

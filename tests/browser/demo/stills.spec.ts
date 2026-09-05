@@ -25,6 +25,11 @@ try {
 const nameFor = (screen: string, project: string) =>
   join(OUT, project.endsWith("-dark") ? `${screen}-dark.png` : `${screen}.png`);
 
+// Every still fast-forwards finite CSS transitions. The fold chevron rotates
+// from > to v over 150 ms, and a panel that fills faster than that lands the
+// shot mid-rotation, where the two arms read as a check mark rather than a
+// chevron.
+
 // The launcher renders into #main after it has fetched, so a screenshot taken
 // on load catches an empty shell.
 async function settled(page: Page, marker: string | RegExp): Promise<void> {
@@ -47,13 +52,13 @@ test("run an analysis", async ({ page }, info) => {
   // The service field exists only for a trace backend, so its arrival is the
   // signal that the form has swapped.
   await expect(page.locator('input[placeholder="order-service"]')).toBeVisible();
-  await page.screenshot({ path: nameFor("launcher-new", info.project.name), fullPage: true });
+  await page.screenshot({ path: nameFor("launcher-new", info.project.name), fullPage: true, animations: "disabled" });
 });
 
 test("recent runs", async ({ page }, info) => {
   await page.goto("/#/recent");
   await settled(page, "The team's short memory");
-  await page.screenshot({ path: nameFor("launcher-recent", info.project.name), fullPage: true });
+  await page.screenshot({ path: nameFor("launcher-recent", info.project.name), fullPage: true, animations: "disabled" });
 });
 
 test("fleet health", async ({ page }, info) => {
@@ -64,7 +69,7 @@ test("fleet health", async ({ page }, info) => {
   // The gauges are what the daemon read produces, and they are the point of the
   // screen, so waiting for the first one waits for the whole panel.
   await expect(page.locator(".daemon-panel .count").first()).toBeVisible({ timeout: 15_000 });
-  await page.screenshot({ path: nameFor("launcher-sources", info.project.name), fullPage: true });
+  await page.screenshot({ path: nameFor("launcher-sources", info.project.name), fullPage: true, animations: "disabled" });
 });
 
 test("incidents", async ({ page }, info) => {
@@ -74,13 +79,13 @@ test("incidents", async ({ page }, info) => {
   // point of the screen.
   await page.locator("button.row-toggle").first().click();
   await expect(page.locator(".daemon-panel .table").first()).toBeVisible({ timeout: 15_000 });
-  await page.screenshot({ path: nameFor("launcher-incidents", info.project.name), fullPage: true });
+  await page.screenshot({ path: nameFor("launcher-incidents", info.project.name), fullPage: true, animations: "disabled" });
 });
 
 test("one run", async ({ page }, info) => {
   await page.goto(`/#/run/${state.succeeded}`);
   await settled(page, /succeeded/i);
-  await page.screenshot({ path: nameFor("launcher-run", info.project.name), fullPage: true });
+  await page.screenshot({ path: nameFor("launcher-run", info.project.name), fullPage: true, animations: "disabled" });
 });
 
 test("the rendered report", async ({ page }, info) => {
@@ -89,5 +94,5 @@ test("the rendered report", async ({ page }, info) => {
   // rather than on a delay, because a blank frame screenshots just as well.
   await expect(page.frameLocator("iframe").locator("body"))
     .toContainText("Findings", { timeout: 30_000 });
-  await page.screenshot({ path: nameFor("launcher-report", info.project.name) });
+  await page.screenshot({ path: nameFor("launcher-report", info.project.name), animations: "disabled" });
 });

@@ -3,9 +3,9 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "identity": null,
-      "engine_version": "0.19.0",
+      "engine_version": "0.20.0",
       "latest_engine_version": null,
       "latest_hub_version": null,
       "queue_depth": 0,
@@ -116,11 +116,12 @@
         "last_attempt_ms": 1756511999000,
         "last_success_ms": 1756511999000,
         "unreachable_since_ms": null,
-        "producer_version": "0.19.0",
+        "producer_version": "0.20.0",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41400",
         "engine_subcommand": null,
-        "auth_header_name": null
+        "auth_header_name": null,
+        "incidents_state": "ok"
       },
       {
         "id": "billing-stg",
@@ -132,11 +133,12 @@
         "last_attempt_ms": 1756511999000,
         "last_success_ms": 1756511999000,
         "unreachable_since_ms": null,
-        "producer_version": "0.18.0",
+        "producer_version": "0.19.0",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41401",
         "engine_subcommand": null,
-        "auth_header_name": null
+        "auth_header_name": null,
+        "incidents_state": "ok"
       },
       {
         "id": "tempo-eu",
@@ -152,7 +154,8 @@
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41402",
         "engine_subcommand": "tempo",
-        "auth_header_name": null
+        "auth_header_name": null,
+        "incidents_state": null
       },
       {
         "id": "search-prod",
@@ -168,7 +171,8 @@
         "last_error_code": "network_error",
         "base_url": "http://127.0.0.1:41403",
         "engine_subcommand": null,
-        "auth_header_name": null
+        "auth_header_name": null,
+        "incidents_state": null
       },
       {
         "id": "victoria-eu",
@@ -184,7 +188,8 @@
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41404",
         "engine_subcommand": "jaeger-query",
-        "auth_header_name": null
+        "auth_header_name": null,
+        "incidents_state": null
       }
     ],
     "/api/analyses?limit=500": [
@@ -210,38 +215,6 @@
         "result": null
       },
       {
-        "id": "0000000000000002",
-        "status": "succeeded",
-        "source_id": "billing-stg",
-        "source_name": "Billing staging",
-        "environment": "staging",
-        "kind": "daemon",
-        "request": {},
-        "requested_by": "unknown",
-        "created_at_ms": 1756511999000,
-        "started_at_ms": 1756512000000,
-        "finished_at_ms": 1756512000000,
-        "expires_at_ms": 1756598400000,
-        "producer_version": "0.19.0",
-        "error_code": null,
-        "result": {
-          "empty": false,
-          "findings": 11,
-          "critical": 1,
-          "warning": 7,
-          "info": 3,
-          "traces_analyzed": 11,
-          "quality_gate_passed": false,
-          "report_bytes": 571769,
-          "warnings": [
-            {
-              "kind": "tuning",
-              "message": "ingest queue is undersized for the observed span rate"
-            }
-          ]
-        }
-      },
-      {
         "id": "0000000000000003",
         "status": "failed",
         "source_id": "search-prod",
@@ -259,6 +232,38 @@
         "result": null
       },
       {
+        "id": "0000000000000002",
+        "status": "succeeded",
+        "source_id": "billing-stg",
+        "source_name": "Billing staging",
+        "environment": "staging",
+        "kind": "daemon",
+        "request": {},
+        "requested_by": "unknown",
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": 1756598400000,
+        "producer_version": "0.20.0",
+        "error_code": null,
+        "result": {
+          "empty": false,
+          "findings": 11,
+          "critical": 1,
+          "warning": 7,
+          "info": 3,
+          "traces_analyzed": 11,
+          "quality_gate_passed": false,
+          "report_bytes": 571771,
+          "warnings": [
+            {
+              "kind": "tuning",
+              "message": "ingest queue is undersized for the observed span rate"
+            }
+          ]
+        }
+      },
+      {
         "id": "0000000000000001",
         "status": "succeeded",
         "source_id": "checkout-prod",
@@ -271,7 +276,7 @@
         "started_at_ms": 1756512000000,
         "finished_at_ms": 1756512000000,
         "expires_at_ms": 1756598400000,
-        "producer_version": "0.19.0",
+        "producer_version": "0.20.0",
         "error_code": null,
         "result": {
           "empty": false,
@@ -281,7 +286,7 @@
           "info": 3,
           "traces_analyzed": 11,
           "quality_gate_passed": false,
-          "report_bytes": 571769,
+          "report_bytes": 571771,
           "warnings": [
             {
               "kind": "tuning",
@@ -304,7 +309,7 @@
       "started_at_ms": 1756512000000,
       "finished_at_ms": 1756512000000,
       "expires_at_ms": 1756598400000,
-      "producer_version": "0.19.0",
+      "producer_version": "0.20.0",
       "error_code": null,
       "result": {
         "empty": false,
@@ -314,7 +319,7 @@
         "info": 3,
         "traces_analyzed": 11,
         "quality_gate_passed": false,
-        "report_bytes": 571769,
+        "report_bytes": 571771,
         "warnings": [
           {
             "kind": "tuning",
@@ -336,7 +341,7 @@
       "started_at_ms": 1756512000000,
       "finished_at_ms": 1756512000000,
       "expires_at_ms": 1756598400000,
-      "producer_version": "0.19.0",
+      "producer_version": "0.20.0",
       "error_code": null,
       "result": {
         "empty": false,
@@ -346,7 +351,7 @@
         "info": 3,
         "traces_analyzed": 11,
         "quality_gate_passed": false,
-        "report_bytes": 571769,
+        "report_bytes": 571771,
         "warnings": [
           {
             "kind": "tuning",
@@ -398,7 +403,7 @@
       "observed_at_ms": 1756512000000,
       "state": "near_capacity",
       "error_code": null,
-      "version": "0.19.0",
+      "version": "0.20.0",
       "uptime_seconds": 888120,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -423,6 +428,8 @@
         "tls_configured": false,
         "ack_enabled": true,
         "ack_api_key_set": false,
+        "read_api_key_set": false,
+        "incidents_enabled": false,
         "cors_allowed_origins": [
           "http://127.0.0.1:8080"
         ],
@@ -491,7 +498,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.19.0",
+      "defaults_engine_version": "0.20.0",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -535,7 +542,7 @@
       "observed_at_ms": 1756512000000,
       "state": "advised",
       "error_code": null,
-      "version": "0.18.0",
+      "version": "0.19.0",
       "uptime_seconds": 263220,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -560,6 +567,8 @@
         "tls_configured": false,
         "ack_enabled": true,
         "ack_api_key_set": false,
+        "read_api_key_set": false,
+        "incidents_enabled": false,
         "cors_allowed_origins": [
           "http://127.0.0.1:8080"
         ],
@@ -628,7 +637,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.19.0",
+      "defaults_engine_version": "0.20.0",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -721,7 +730,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.19.0",
+      "defaults_engine_version": "0.20.0",
       "scoring_config": null,
       "energy_model": null,
       "traces": null,
@@ -730,6 +739,126 @@
       "hints_unavailable_reason": "network_error",
       "warnings_dropped": 0,
       "warnings": []
+    },
+    "/api/incidents?limit=100&offset=0": [
+      {
+        "id": "d650edad80ac5c2d99b8d1dde07100c2",
+        "service": "shop-svc",
+        "kind": "oom_kill",
+        "at_ms": 1756505260000,
+        "detail": "container memory limit reached",
+        "window_from_ms": 1756504960000,
+        "window_to_ms": 1756505264000,
+        "oldest_finding_ms": 1756505259000,
+        "ended_at_ms": null,
+        "source_id": "billing-stg",
+        "source_name": "Billing staging",
+        "environment": "staging",
+        "first_seen": 1788614177947,
+        "last_seen": 1788614177947,
+        "finding_count": 2,
+        "capture": "partial"
+      },
+      {
+        "id": "d650edad80ac5c2d99b8d1dde07100c2",
+        "service": "shop-svc",
+        "kind": "oom_kill",
+        "at_ms": 1756505260000,
+        "detail": "container memory limit reached",
+        "window_from_ms": 1756504960000,
+        "window_to_ms": 1756505264000,
+        "oldest_finding_ms": 1756505259000,
+        "ended_at_ms": null,
+        "source_id": "checkout-prod",
+        "source_name": "Checkout production",
+        "environment": "production",
+        "first_seen": 1788614177943,
+        "last_seen": 1788614177943,
+        "finding_count": 2,
+        "capture": "partial"
+      }
+    ],
+    "/api/incidents/d650edad80ac5c2d99b8d1dde07100c2": {
+      "id": "d650edad80ac5c2d99b8d1dde07100c2",
+      "service": "shop-svc",
+      "kind": "oom_kill",
+      "at_ms": 1756505260000,
+      "detail": "container memory limit reached",
+      "window_from_ms": 1756504960000,
+      "window_to_ms": 1756505264000,
+      "oldest_finding_ms": 1756505259000,
+      "findings": [
+        {
+          "finding": {
+            "type": "n_plus_one_sql",
+            "severity": "warning",
+            "trace_id": "huba0000000000000000000000000000",
+            "service": "shop-svc",
+            "source_endpoint": "GET /orders",
+            "pattern": {
+              "template": "SELECT * FROM orders WHERE owner_id = ?",
+              "occurrences": 8,
+              "window_ms": 0,
+              "distinct_params": 8,
+              "span_duration_us_p50": 1500,
+              "span_duration_us_p99": 1500,
+              "span_duration_cv_x1000": 0
+            },
+            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+            "first_timestamp": "2026-09-05T11:23:54.987Z",
+            "last_timestamp": "2026-09-05T11:23:54.987Z",
+            "green_impact": {
+              "estimated_extra_io_ops": 7,
+              "io_intensity_score": 8,
+              "io_intensity_band": "high"
+            },
+            "confidence": "daemon_staging",
+            "signature": "n_plus_one_sql:shop-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
+          },
+          "stored_at_ms": 1756505259000,
+          "first_seen_ms": 1756505259000,
+          "seen_count": 1
+        },
+        {
+          "finding": {
+            "type": "n_plus_one_sql",
+            "severity": "warning",
+            "trace_id": "hubb0000000000000000000000000000",
+            "service": "shop-svc",
+            "source_endpoint": "GET /invoices",
+            "pattern": {
+              "template": "SELECT * FROM invoices WHERE owner_id = ?",
+              "occurrences": 8,
+              "window_ms": 0,
+              "distinct_params": 8,
+              "span_duration_us_p50": 1500,
+              "span_duration_us_p99": 1500,
+              "span_duration_cv_x1000": 0
+            },
+            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+            "first_timestamp": "2026-09-05T11:23:59.095Z",
+            "last_timestamp": "2026-09-05T11:23:59.095Z",
+            "green_impact": {
+              "estimated_extra_io_ops": 7,
+              "io_intensity_score": 8,
+              "io_intensity_band": "high"
+            },
+            "confidence": "daemon_staging",
+            "signature": "n_plus_one_sql:shop-svc:GET__invoices:e1e0bf0f3636b95b2421e5e4a3c0832c"
+          },
+          "stored_at_ms": 1756505263000,
+          "first_seen_ms": 1756505263000,
+          "seen_count": 1
+        }
+      ],
+      "ended_at_ms": null,
+      "source_id": "billing-stg",
+      "source_name": "Billing staging",
+      "environment": "staging",
+      "first_seen": 1788614177947,
+      "last_seen": 1788614177947,
+      "finding_count": 2,
+      "capture": "partial"
     }
   }
 }

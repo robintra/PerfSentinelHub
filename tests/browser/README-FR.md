@@ -49,7 +49,7 @@ l'aise.
 ## Deux choses qu'elle attend de l'extérieur
 
 **Un binaire perf-sentinel.** Sans lui le Hub répond `503` à
-`POST /api/analyses` et trois écrans sur cinq sont morts. La mise en place
+`POST /api/analyses` et trois écrans sur six sont morts. La mise en place
 cherche un dépôt `perf-sentinel` voisin avec une compilation release, ou prend
 `HUB_ENGINE_BINARY`.
 

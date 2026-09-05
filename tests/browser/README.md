@@ -46,7 +46,7 @@ its cap so the toning shows, the other is comfortable.
 ## Two things it needs from outside
 
 **A perf-sentinel binary.** Without one the Hub answers `503` to
-`POST /api/analyses` and three of the five screens are dead. The setup looks
+`POST /api/analyses` and three of the six screens are dead. The setup looks
 for a sibling `perf-sentinel` checkout with a release build, or takes
 `HUB_ENGINE_BINARY`.
 

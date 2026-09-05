@@ -131,6 +131,11 @@ order the daemon's own monitor prints the columns: started, service, kind, ended
 findings, capture, source. The daemon is the author and the Hub copies its record on
 every poll, so the screen reads what the daemon froze and re-derives nothing.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">
+  <img alt="The incidents screen with a row unfolded on its frozen findings" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents.png">
+</picture>
+
 A row unfolds into the findings the daemon froze for that incident, each placed before
 the incident or after the restart from its own stamp against the incident's. The capture
 column carries the daemon's reading of how far back its ring still reached: complete,

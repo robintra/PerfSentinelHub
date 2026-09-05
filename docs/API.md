@@ -132,7 +132,8 @@ exactly, and an unknown one is an empty page. `kind`, `environment` and `source_
 closed sets, the daemon's five kinds and the Hub's configured sources, and a value outside
 them is a `400` rather than an empty page, because a typo must not read as "no incidents".
 `environment` resolves to every source configured with it. Given together with
-`source_id`, `source_id` wins as the narrower of the two, and there is no intersection.
+`source_id` the two intersect, so a source outside the named environment lists nothing,
+the answer a pair of filters that exclude each other has.
 
 `GET /api/incidents/{id}` returns one incident whole, findings included, the richest copy
 when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms` fired

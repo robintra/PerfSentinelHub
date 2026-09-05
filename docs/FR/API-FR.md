@@ -139,8 +139,9 @@ pagine avec `offset` et `limit`. `service` et `namespace` sont des chaînes libr
 `source_id` sont des ensembles fermés, les cinq genres du daemon et les sources configurées
 du Hub, et une valeur hors de ces ensembles répond `400` plutôt qu'une page vide, parce
 qu'une faute de frappe ne doit pas se lire "aucun incident". `environment` se résout en
-chaque source configurée avec lui. Donné avec `source_id`, c'est `source_id` qui l'emporte,
-le plus étroit des deux, sans intersection.
+chaque source configurée avec lui. Donné avec `source_id`, les deux s'intersectent, donc
+une source hors de l'environnement nommé ne liste rien, la réponse d'une paire de filtres
+qui s'excluent.
 
 `GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
 copie la plus riche quand plusieurs sources tiennent l'id. Un finding dont `first_seen_ms`

@@ -17,7 +17,9 @@ garde dix minutes.
 
 Un lien depuis l'écran des incidents arrive ici avec le formulaire rempli : le service de
 l'incident, et sa fenêtre en plage absolue dont la fin est retenue à maintenant. Un bandeau
-au-dessus des paramètres nomme l'incident. La source ne fait pas partie du lien, puisqu'un
+au-dessus des paramètres nomme l'incident, sous la forme `ns/service` quand il portait un
+namespace, et dit qu'une analyse prend un service et aucun namespace, donc qu'elle couvre
+ce service dans chacun d'eux. La source ne fait pas partie du lien, puisqu'un
 daemon ne prend aucune fenêtre : sous un daemon le bandeau le dit et demande un backend de
 traces.
 
@@ -177,7 +179,8 @@ daemons, suivent le même filtre. Sous le tableau, une ligne par daemon dit quan
 copie périmée. Un daemon qui a refusé la clé du Hub sur cette route reçoit un bandeau
 nommant le réglage à corriger, et ses findings restent collectés.
 
-Une ligne dépliée porte un bouton Analyse this window à côté de son en-tête, qui ouvre New
+Une ligne dépliée porte un bouton Analyse this window sous la note qui décrit la fenêtre,
+qui ouvre New
 analysis sur le service et la fenêtre de l'incident, décrit sous Le formulaire suit la
 source. La source reste au choix de l'exploitant, parce qu'un daemon ne prend aucune
 fenêtre et que le daemon de l'incident lui-même analyserait son instantané en mémoire

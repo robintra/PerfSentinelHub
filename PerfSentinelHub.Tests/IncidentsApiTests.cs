@@ -89,10 +89,31 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.Equal([CompleteId], (await ListAsync("/api/incidents?namespace=checkout")).EnumerateArray().Select(Id));
         Assert.Empty((await ListAsync("/api/incidents?namespace=nowhere")).EnumerateArray());
         Assert.Equal(all, (await ListAsync("/api/incidents?environment=test")).EnumerateArray().Select(Id));
-        // source_id wins over environment, and the one source is in that environment.
+        // The filters intersect rather than override: the one source is in that
+        // environment, so the pair narrows to it.
         Assert.Equal(
             all,
             (await ListAsync("/api/incidents?environment=test&source_id=test")).EnumerateArray().Select(Id));
+        // And they AND with the others rather than replacing them.
+        Assert.Equal(
+            [CompleteId],
+            (await ListAsync("/api/incidents?namespace=checkout&source_id=test")).EnumerateArray().Select(Id));
+        Assert.Empty((await ListAsync("/api/incidents?kind=deploy&namespace=checkout")).EnumerateArray());
+    }
+
+    /// <summary>
+    ///     A source outside the named environment leaves the intersection empty,
+    ///     which is a page with nothing on it and not the whole fleet. Asserted on
+    ///     the store, the one source of the test Hub being in its one environment.
+    /// </summary>
+    [Fact]
+    public async Task An_empty_source_set_lists_nothing()
+    {
+        await SeedAsync();
+        var rows = await factory.Database.ListIncidentsAsync(
+            new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: [], Offset: 0, Limit: 100),
+            TestContext.Current.CancellationToken);
+        Assert.Empty(rows);
     }
 
     [Theory]

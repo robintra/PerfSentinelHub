@@ -1026,8 +1026,18 @@
      * holds it, for the banner's wording. Anything else on the form stays.
      */
     function applyHandoff(handoff) {
+        // A route without the query does not end the handoff: the tab points at
+        // the bare `#/new`, and dropping the banner there would leave the form
+        // holding a window the operator never typed with nothing explaining it.
+        // The banner goes when the form stops holding that window.
+        if (!handoff) {
+            const kept = state.handoff;
+            const intact = kept && state.form.rangeMode === "absolute" && state.form.fromMs === kept.fromMs
+                && state.form.toMs === kept.toMs && state.form.service === kept.service;
+            if (!intact) state.handoff = null;
+            return;
+        }
         state.handoff = handoff;
-        if (!handoff) return;
         state.form.mode = "service";
         state.form.service = handoff.service;
         state.form.traceId = "";
@@ -1040,7 +1050,7 @@
         });
         if (!row) return;
         handoff.kind = row.kind;
-        handoff.source_name = row.source_name;
+        handoff.namespace = row.namespace;
         handoff.atMs = row.at_ms;
     }
 
@@ -2454,11 +2464,19 @@
             ? PSL.dur(handoff.toMs - handoff.fromMs) + " long."
             : PSL.dur(handoff.atMs - handoff.fromMs) + " before it to "
                 + PSL.dur(handoff.toMs - handoff.atMs) + " after.";
+        // Named the way the incidents screen names it, then the reach of the run
+        // said plainly: an analysis takes a service and no namespace, so one
+        // taken from a namespaced incident is wider than the row it came from.
+        const name = handoff.namespace ? handoff.namespace + "/" + handoff.service : handoff.service;
         return el("div", {class: "banner", "data-tone": daemon ? "warn" : "info"}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el("div", {
                 text: "Window of the " + (PSL.INCIDENT_KIND_LABEL[handoff.kind] || "incident") + " of "
-                    + handoff.service + " from the incidents screen, " + span
+                    + name + " from the incidents screen, " + span
+                    + (handoff.namespace
+                        ? " An analysis takes a service and no namespace, so this one covers "
+                            + handoff.service + " in every namespace."
+                        : "")
                     + (daemon ? " A daemon takes no window. Pick a trace backend on the left to run it." : "")
             })
         ]);
@@ -4244,8 +4262,8 @@
                     + "and re-derives nothing, and keeps the copy after the daemon's own ring has let it go. Opening "
                     + "this screen reads every daemon, so the rows are what the fleet holds now rather than what the "
                     + "last poll left. Under the table, when each daemon was last read. A deploy is posted for the "
-                    + "same reason as a restart: what was already firing before the rollout, so a restart it causes "
-                    + "is not read as a crash."
+                    + "same reason as a restart: to freeze what was already firing before the rollout, so a restart "
+                    + "it causes is not read as a crash."
             })
         ]);
 

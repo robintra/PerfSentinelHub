@@ -71,7 +71,8 @@ All notable changes to PerfSentinelHub are recorded here.
   is a `400` rather than an empty page: an empty incidents screen is the answer an operator
   hopes for, so a typo in a filter that configuration could have checked must not be able
   to produce it. `environment` resolves to every source configured with it, and given
-  together with `source_id` the narrower `source_id` wins with no intersection. The
+  together with `source_id` the two intersect, so a pair that excludes itself lists
+  nothing rather than one of the two quietly ceasing to apply. The
   filters narrow the answer, never the read: a refresh still reads the whole fleet whatever
   the query asks for.
 - An unfolded incident carries an Analyse this window button, which opens New analysis

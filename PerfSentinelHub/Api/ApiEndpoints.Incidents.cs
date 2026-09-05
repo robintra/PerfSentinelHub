@@ -179,8 +179,9 @@ public static partial class ApiEndpoints
     /// <summary>
     ///     The closed filters. A kind, a source id or an environment is
     ///     configuration, so an unknown one is a bad request rather than an empty
-    ///     page: a typo would otherwise read as "no incidents". Given together,
-    ///     source_id wins over environment as the narrower of the two.
+    ///     page: a typo would otherwise read as "no incidents". Given together they
+    ///     intersect, and a source outside the named environment leaves the empty
+    ///     set, since the screen offers the two as filters that both apply.
     /// </summary>
     private static bool TryReadIncidentFilters(
         HttpRequest request,
@@ -210,7 +211,7 @@ public static partial class ApiEndpoints
         }
 
         if (sourceId is not null)
-            sourceIds = [sourceId];
+            sourceIds = sourceIds is null || sourceIds.Contains(sourceId) ? [sourceId] : [];
         return true;
     }
 

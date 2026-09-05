@@ -243,12 +243,27 @@
     }
 
     /**
+     * The first segment where two versions differ, and by how much.
+     *
+     * `vcmp` decides the direction on all three segments, so the label has to
+     * name the segment it decided on. Reading the minor alone worded a patch
+     * gap as "0 minor behind" and a major gap in minors.
+     *
      * @param {string | null | undefined} a
      * @param {string | null | undefined} b
-     * @returns {number}
+     * @returns {{count: number, unit: string}}
      */
-    function minorGap(a, b) {
-        return Math.abs((vparts(b)[1] ?? 0) - (vparts(a)[1] ?? 0));
+    function versionGap(a, b) {
+        const units = ["major", "minor", "patch"];
+        const pa = vparts(a);
+        const pb = vparts(b);
+        for (let i = 0; i < units.length; i++) {
+            const d = Math.abs((pb[i] ?? 0) - (pa[i] ?? 0));
+            if (d !== 0) return { count: d, unit: units[i] };
+        }
+        // `vcmp` reads the same three segments, so a caller that already
+        // ruled out equality never lands here.
+        return { count: 0, unit: "patch" };
     }
 
     /**
@@ -268,18 +283,18 @@
         if (!producer || !ENGINE) return null;
         const c = vcmp(producer, ENGINE);
         if (c === 0) return null;
-        const g = minorGap(producer, ENGINE);
+        const g = versionGap(producer, ENGINE);
         return c < 0
             ? {
                 dir: "behind",
-                label: g + " minor behind",
+                label: g.count + " " + g.unit + " behind",
                 fg: "var(--warn-fg)",
                 bg: "var(--warn-bg)",
                 bd: "var(--warn-bd)"
             }
             : {
                 dir: "ahead",
-                label: g + " minor ahead",
+                label: g.count + " " + g.unit + " ahead",
                 fg: "var(--info-fg)",
                 bg: "var(--info-bg)",
                 bd: "var(--info-bd)"
@@ -914,7 +929,7 @@
         },
         ERRORS, READ_ERRORS, ERROR_TITLES, KIND_LABEL,
         dur, durPrecise, durMinutes, durParts, splitByKind, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
-        vparts, vcmp, minorGap, skew, detector, statusKey, argsLine, weightBand,
+        vparts, vcmp, versionGap, skew, detector, statusKey, argsLine, weightBand,
         shq, psq, SHELLS, shellById, defaultShell, exportLine,
         analysisCommand, monitorCommand, detectionToml, quotedForShell,
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,

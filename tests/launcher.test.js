@@ -483,3 +483,17 @@ test("a handoff the form cannot take reads as null", () => {
   // The id is along for the banner, never a condition.
   assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).incidentId, "");
 });
+
+test("skew names the segment it compared on", () => {
+  // The direction comes from all three segments, so the noun has to follow the
+  // same one. Reading the minor alone called a patch gap "0 minor behind".
+  PSL.setVersions("0.1.6", "0.20.1");
+  assert.equal(PSL.skew("0.20.0").label, "1 patch behind");
+  assert.equal(PSL.skew("0.20.0").dir, "behind");
+  assert.equal(PSL.skew("0.19.0").label, "1 minor behind");
+  assert.equal(PSL.skew("0.20.2").label, "1 patch ahead");
+  assert.equal(PSL.skew("1.0.0").label, "1 major ahead");
+  // Equal versions carry no pill at all, whatever the extra segments.
+  assert.equal(PSL.skew("0.20.1"), null);
+  assert.equal(PSL.skew(null), null);
+});

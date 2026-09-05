@@ -12,7 +12,7 @@ public sealed class IncidentParserTests
         "daemon-incidents-0.20.0.json");
 
     [Fact]
-    public async Task The_capture_parses_into_columns_and_keeps_the_document_whole()
+    public async Task The_capture_parses_into_columns_and_splits_the_findings_out()
     {
         var payload = await File.ReadAllBytesAsync(FixturePath, TestContext.Current.CancellationToken);
 
@@ -28,8 +28,12 @@ public sealed class IncidentParserTests
         Assert.True(incident.WindowToMs > incident.AtMs);
         Assert.NotNull(incident.OldestFindingMs);
         Assert.Equal(2, incident.FindingCount);
+        // The document keeps every other daemon field and loses only the array.
         using var document = JsonDocument.Parse(incident.IncidentJson);
-        Assert.Equal(2, document.RootElement.GetProperty("findings").GetArrayLength());
+        Assert.False(document.RootElement.TryGetProperty("findings", out _));
+        Assert.Equal("container memory limit reached", document.RootElement.GetProperty("detail").GetString());
+        using var findings = JsonDocument.Parse(incident.FindingsJson);
+        Assert.Equal(2, findings.RootElement.GetArrayLength());
     }
 
     [Theory]

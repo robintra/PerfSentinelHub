@@ -104,8 +104,8 @@ function rebase(value: unknown, capturedAt: number): unknown {
   return value;
 }
 
-// Records what the Hub answers on the five routes the launcher reads, so the
-// site can serve a populated launcher with no Hub behind it. Captured here
+// Records what the Hub answers on the routes the launcher reads, so the site
+// can serve a populated launcher with no Hub behind it. Captured here
 // rather than in a script of its own because this is the only place a populated
 // Hub exists, and capturing beside the screenshots keeps the two in step.
 async function captureEmbedFixtures(runs: string[]): Promise<void> {
@@ -133,6 +133,13 @@ async function captureEmbedFixtures(runs: string[]): Promise<void> {
   // is not something the embed needs to replay.
   for (const id of ["checkout-prod", "billing-stg", "search-prod"]) {
     await read(`/api/sources/${id}/daemon`);
+  }
+  // The incidents screen reads the first page, then one record per unfolded
+  // row. The id is the daemon's own hash, so it is stable across captures.
+  const incidents = "/api/incidents?limit=100&offset=0";
+  await read(incidents);
+  for (const incident of routes[incidents] as { id: string }[]) {
+    await read(`/api/incidents/${incident.id}`);
   }
 
   writeFileSync(join(__dirname, "demo", "fixtures", "hub-embed.json"),

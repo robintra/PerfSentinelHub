@@ -37,7 +37,8 @@ public static partial class ApiEndpoints
                     analysis.MaxTracesCap,
                     (int)analysis.Timeout.TotalSeconds,
                     (int)analysis.ReportRetention.TotalHours,
-                    analysis.MaxTracesEmbedded),
+                    analysis.MaxTracesEmbedded,
+                    hubOptions.Value.MaxReadLimit),
                 [.. DetectionOverrides.SchemaFor(engine.Version)]);
         });
         app.MapGet("/api/sources", GetSourcesAsync);

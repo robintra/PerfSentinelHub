@@ -4061,9 +4061,15 @@
         empty: "The ring held nothing when the incident was frozen."
     };
 
+    /** The page size, held under the operator's read limit, which the Hub rejects above rather than clamps. */
+    function incidentPage() {
+        const limits = state.status && state.status.limits;
+        return Math.min(INCIDENT_PAGE, (limits && limits.max_read_limit) || INCIDENT_PAGE);
+    }
+
     function incidentsPath(offset) {
         const service = state.incidentFilter.service;
-        return "/api/incidents?limit=" + INCIDENT_PAGE + "&offset=" + offset
+        return "/api/incidents?limit=" + incidentPage() + "&offset=" + offset
             + (service ? "&service=" + encodeURIComponent(service) : "");
     }
 
@@ -4086,6 +4092,7 @@
     function loadOlderIncidents(button) {
         button.disabled = true;
         getJson(incidentsPath(state.incidents.length)).then(function (rows) {
+            state.incidentsError = false;
             adoptIncidents(rows, state.incidents);
         }).catch(function () {
             state.incidentsError = true;
@@ -4094,9 +4101,16 @@
         });
     }
 
+    /**
+     * Pages are offsets into a table the polls keep growing at the top, so an
+     * older page can repeat the row the first one ended on. A row already held
+     * is dropped, the end of the listing is still read from the raw page, and
+     * the next offset re-reads that boundary row, which this drops again.
+     */
     function adoptIncidents(rows, previous) {
-        state.incidents = previous.concat(rows);
-        state.incidentsDone = rows.length < INCIDENT_PAGE;
+        const seen = new Set(previous.map(incidentKey));
+        state.incidents = previous.concat(rows.filter(function (incident) { return !seen.has(incidentKey(incident)); }));
+        state.incidentsDone = rows.length < incidentPage();
         rows.forEach(function (incident) {
             if (state.incidentServices.indexOf(incident.service) < 0) state.incidentServices.push(incident.service);
         });
@@ -4255,7 +4269,7 @@
         ]));
 
         const cell = el("td", {
-            id: "incident-detail-" + incident.id,
+            id: "incident-detail-" + incidentKey(incident),
             colspan: String(INCIDENT_COLUMNS.length)
         }, [incidentPanel(incident)]);
         const detail = el("tr", {class: "daemon-detail"}, [cell]);
@@ -4272,8 +4286,13 @@
         return PSL.dur(Date.now() - incident.at_ms) + " ago";
     }
 
+    /** A row is one daemon's capture: two sources fed the same alert list the same id, once each. */
+    function incidentKey(incident) {
+        return incident.id + "-" + incident.source_id;
+    }
+
     function foldKey(incident) {
-        return "incident:" + incident.id;
+        return "incident:" + incidentKey(incident);
     }
 
     function incidentNameCell(incident) {
@@ -4281,7 +4300,7 @@
             type: "button",
             class: "row-toggle",
             "aria-expanded": state.panelOpen[foldKey(incident)] === true ? "true" : "false",
-            "aria-controls": "incident-detail-" + incident.id
+            "aria-controls": "incident-detail-" + incidentKey(incident)
         }, [el("span", {text: incident.service})]);
         button.addEventListener("click", function () {
             toggleIncident(incident, button);
@@ -4295,7 +4314,7 @@
         button.setAttribute("aria-expanded", open ? "true" : "false");
         state.panelOpen[foldKey(incident)] = open;
         saveFolds();
-        const cell = document.getElementById("incident-detail-" + incident.id);
+        const cell = document.getElementById("incident-detail-" + incidentKey(incident));
         if (cell) cell.parentNode.hidden = !open;
         const detail = state.incidentDetails[incident.id];
         if (open && (detail === undefined || (detail !== "loading" && detail.error_code))) loadIncident(incident);
@@ -4303,7 +4322,7 @@
 
     function loadIncident(incident) {
         state.incidentDetails[incident.id] = "loading";
-        const cell = document.getElementById("incident-detail-" + incident.id);
+        const cell = document.getElementById("incident-detail-" + incidentKey(incident));
         if (cell) cell.replaceChildren(incidentPanel(incident));
         getJson("/api/incidents/" + encodeURIComponent(incident.id))
             .then(function (record) {
@@ -4315,7 +4334,7 @@
                 };
             })
             .finally(function () {
-                const target = document.getElementById("incident-detail-" + incident.id);
+                const target = document.getElementById("incident-detail-" + incidentKey(incident));
                 if (target) target.replaceChildren(incidentPanel(incident));
             });
     }

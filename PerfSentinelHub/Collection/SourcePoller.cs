@@ -26,7 +26,7 @@ public sealed partial class SourcePoller(
 {
     // Ten daemon pages. The daemon's ring defaults to 200, so this stops a
     // misconfigured daemon rather than bounding anything a fleet should reach.
-    internal const int IncidentsCap = 1000;
+    public const int IncidentsCap = 1000;
 
     public async Task<PollResult> PollAsync(
         SourceOptions source,
@@ -114,7 +114,9 @@ public sealed partial class SourcePoller(
         }
         catch (Exception exception) when (exception is not SqliteException)
         {
-            var errorCode = ErrorCode(exception);
+            // The shared switch names the findings leg for a malformed body, and
+            // this leg has its own parser.
+            var errorCode = exception is InvalidDataException ? "invalid_incidents" : ErrorCode(exception);
             await database.RecordIncidentReadAsync(
                 source.Id, observedAtMs, IncidentReadStates.Error, errorCode, cancellationToken);
             LogIncidentsFailed(logger, source.Id, errorCode);
@@ -123,14 +125,30 @@ public sealed partial class SourcePoller(
     }
 
     // Null when the first page says the daemon has no incidents surface at all.
+    // A page over the body cap is re-read at half the size from the same
+    // offset: the daemon embeds up to a thousand findings per incident, so a
+    // full page of a busy daemon never fits, while one incident always does.
+    // At a single incident the overflow is the daemon's and is filed as such.
     private async Task<List<ParsedIncident>?> ReadIncidentPagesAsync(
         SourceOptions source,
         CancellationToken cancellationToken)
     {
         var incidents = new List<ParsedIncident>();
-        for (var offset = 0; offset < IncidentsCap; offset += DaemonClient.IncidentsPageSize)
+        var limit = DaemonClient.IncidentsPageSize;
+        var offset = 0;
+        while (offset < IncidentsCap)
         {
-            var payload = await client.FetchIncidentsPageAsync(source, offset, cancellationToken);
+            byte[]? payload;
+            try
+            {
+                payload = await client.FetchIncidentsPageAsync(source, offset, limit, cancellationToken);
+            }
+            catch (ResponseTooLargeException) when (limit > 1)
+            {
+                limit /= 2;
+                continue;
+            }
+
             if (payload is null)
                 return offset == 0 ? null : incidents;
 
@@ -138,8 +156,9 @@ public sealed partial class SourcePoller(
             incidents.AddRange(page.Incidents);
             if (page.RejectedCount > 0)
                 LogRejectedIncidents(logger, source.Id, page.RejectedCount);
-            if (page.Incidents.Count + page.RejectedCount < DaemonClient.IncidentsPageSize)
+            if (page.Incidents.Count + page.RejectedCount < limit)
                 return incidents;
+            offset += limit;
         }
 
         LogIncidentsCapped(logger, source.Id, IncidentsCap);

@@ -64,8 +64,8 @@ public sealed class WorkerAndRetentionTests : IDisposable
                                     ('retired',500),
                                     ('active',1500);
                                   INSERT INTO incidents VALUES
-                                    ('old-incident','a','svc','restart',100,NULL,0,200,NULL,0,'{}',100,500),
-                                    ('kept-incident','a','svc','restart',100,NULL,0,200,NULL,0,'{}',100,1500);
+                                    ('old-incident','a','svc','restart',100,NULL,0,200,NULL,0,'{}',100,500,'[]'),
+                                    ('kept-incident','a','svc','restart',100,NULL,0,200,NULL,0,'{}',100,1500,'[]');
                                   """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }

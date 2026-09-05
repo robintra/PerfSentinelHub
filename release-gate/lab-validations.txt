@@ -25,3 +25,12 @@ v0.1.2	0e57121	2026-09-02	PASS
 # stylesheet, so the lab cannot tell the two builds apart, and the version in
 # column one has to be the one about to be tagged for the gate to find it.
 v0.1.3	0e57121	2026-09-02	PASS
+# v0.1.6 targeted pass rather than the six hub-* scenarios: hub-incidents-mirror
+# end to end, 13 verdicts over six legs, which is the scope this tag adds. It ran
+# against Hub image 0.1.6-2cef45f, this tag minus the engine repin to perf-sentinel
+# 0.20.1 that landed after the run. That repin changes the binary a backend analysis
+# shells out to, not the incident poll, the mirror or the filters the scenario
+# exercises, so the lab cannot tell the two builds apart. The daemon side ran a
+# local 0.20.1 build, the run having also served to prove its archive permission fix
+# on a real fsGroup volume.
+v0.1.6	dadd839	2026-09-05	PASS

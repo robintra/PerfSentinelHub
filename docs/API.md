@@ -31,7 +31,7 @@ the Hub's route to the daemon, which a push does not exercise.
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                            |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
-| `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `source_id`, `offset`, `limit`. Without their findings, see below                                            |
+| `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
 | `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
 | `POST /api/incidents/refresh`        | Reads every daemon's incidents ring now, then answers exactly as `GET /api/incidents`. Same parameters. See below                                                                          |
 | `GET /metrics`                       | Prometheus text format, see [OPERATIONS.md](OPERATIONS.md#metrics)                                                                                                                         |
@@ -121,7 +121,19 @@ their findings, which can run to a thousand per incident and are never read for 
 listing. Each carries the daemon's own fields plus `source_id`, `source_name`,
 `environment`, `first_seen`, `last_seen` (Hub clock), `finding_count` and `capture`:
 `complete` when `oldest_finding_ms` is at or below `window_from_ms`, `partial` when the
-ring had already evicted part of the window, `empty` when it held nothing.
+ring had already evicted part of the window, `empty` when it held nothing. Among the
+daemon's fields, `namespace` is the alert label a 0.20.0 daemon carries when the alert
+named one, relayed as the daemon wrote it and absent when it did not: a tag for reading
+and filtering, never a key.
+
+The listing filters on `service`, `kind`, `namespace`, `environment` and `source_id`, and
+pages with `offset` and `limit`. `service` and `namespace` are free strings matched
+exactly, and an unknown one is an empty page. `kind`, `environment` and `source_id` are
+closed sets, the daemon's five kinds and the Hub's configured sources, and a value outside
+them is a `400` rather than an empty page, because a typo must not read as "no incidents".
+`environment` resolves to every source configured with it. Given together with
+`source_id`, `source_id` wins as the narrower of the two, and there is no intersection.
+
 `GET /api/incidents/{id}` returns one incident whole, findings included, the richest copy
 when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms` fired
 only after the restart. Like `/api/findings`, both
@@ -135,8 +147,9 @@ the only path: an operator paged about an OOM kill opens the screen within the m
 A POST because it writes to the store, and because a GET would be cached and prefetched,
 which a fleet read must never be. It fans out over every source of kind `daemon`, bounded
 by `Hub:MaxConcurrentPolls` exactly as the poll worker is, and answers the same body as
-`GET /api/incidents` with the same `service`, `source_id`, `offset` and `limit`, validated
-identically, so a screen needs one round trip. It shares the poll's failure isolation: a
+`GET /api/incidents` with the same parameters, validated identically, so a screen needs
+one round trip. The filters narrow the answer, never the read: the fan-out covers the
+whole fleet whatever the query asks for. It shares the poll's failure isolation: a
 401, a 404, a 503 or an oversized page files its own `incidents_state` and never touches
 the source's reachability, and one refusing daemon costs the others nothing.
 

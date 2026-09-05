@@ -94,7 +94,15 @@ public sealed record FindingQuery(
     bool IncludeAcked = true,
     string? Status = null);
 
-public sealed record IncidentQuery(string? Service, string? SourceId, int Offset, int Limit);
+// SourceIds is the resolved set: one id from source_id, every id of an
+// environment from environment, null for the whole fleet.
+public sealed record IncidentQuery(
+    string? Service,
+    string? Namespace,
+    string? Kind,
+    IReadOnlyList<string>? SourceIds,
+    int Offset,
+    int Limit);
 
 public sealed record SubmittedAnalysis(string Id, string Status);
 

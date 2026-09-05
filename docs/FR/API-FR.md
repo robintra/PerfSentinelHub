@@ -33,7 +33,7 @@ push n'exerce pas.
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                                             |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                              |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                    |
-| `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas                                  |
+| `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
 | `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                      |
 | `POST /api/incidents/refresh`        | Lit maintenant l'anneau d'incidents de chaque daemon, puis répond exactement comme `GET /api/incidents`. Mêmes paramètres. Voir plus bas                                                                        |
 | `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                    |
@@ -129,7 +129,20 @@ ne sont jamais lus pour la liste. Chacune porte les champs du daemon plus `sourc
 `source_name`, `environment`, `first_seen`, `last_seen` (horloge du Hub), `finding_count`
 et `capture` : `complete` quand `oldest_finding_ms` est au plus égal à `window_from_ms`,
 `partial` quand l'anneau avait déjà évincé une partie de la fenêtre, `empty` quand il ne
-tenait rien. `GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
+tenait rien. Parmi les champs du daemon, `namespace` est le label de l'alerte qu'un daemon
+0.20.0 porte quand l'alerte en nommait un, relayé tel que le daemon l'a écrit et absent
+sinon : une étiquette pour la lecture et le filtrage, jamais une clé.
+
+La liste filtre sur `service`, `kind`, `namespace`, `environment` et `source_id`, et
+pagine avec `offset` et `limit`. `service` et `namespace` sont des chaînes libres comparées
+à l'identique, et une valeur inconnue donne une page vide. `kind`, `environment` et
+`source_id` sont des ensembles fermés, les cinq genres du daemon et les sources configurées
+du Hub, et une valeur hors de ces ensembles répond `400` plutôt qu'une page vide, parce
+qu'une faute de frappe ne doit pas se lire "aucun incident". `environment` se résout en
+chaque source configurée avec lui. Donné avec `source_id`, c'est `source_id` qui l'emporte,
+le plus étroit des deux, sans intersection.
+
+`GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
 copie la plus riche quand plusieurs sources tiennent l'id. Un finding dont `first_seen_ms`
 dépasse `at_ms` n'a démarré qu'après le redémarrage. Comme `/api/findings`, les deux
 répondent à quiconque atteint le port du Hub :
@@ -144,8 +157,9 @@ jusqu'au suivant. Un POST parce que la route écrit dans le magasin, et parce qu
 serait mis en cache et préchargé, ce qu'une lecture de flotte ne doit jamais être. Elle
 s'étale sur chaque source de kind `daemon`, bornée par `Hub:MaxConcurrentPolls` exactement
 comme le worker de poll, et répond le même corps que `GET /api/incidents` avec les mêmes
-`service`, `source_id`, `offset` et `limit`, validés à l'identique, de sorte qu'un écran
-n'a besoin que d'un aller-retour. Elle partage l'isolation des pannes du poll : un 401, un
+paramètres, validés à l'identique, de sorte qu'un écran n'a besoin que d'un aller-retour.
+Les filtres resserrent la réponse, jamais la lecture : l'éventail couvre toute la flotte
+quoi que demande la requête. Elle partage l'isolation des pannes du poll : un 401, un
 404, un 503 ou une page trop grosse classe son propre `incidents_state` et ne touche jamais
 la joignabilité de la source, et un daemon qui refuse ne coûte rien aux autres.
 

@@ -85,6 +85,14 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.Equal([EmptyId], (await ListAsync("/api/incidents?service=other-svc")).EnumerateArray().Select(Id));
         Assert.Equal([EmptyId], (await ListAsync("/api/incidents?limit=1&offset=1")).EnumerateArray().Select(Id));
         Assert.Empty((await ListAsync("/api/incidents?service=missing")).EnumerateArray());
+        Assert.Equal([EmptyId], (await ListAsync("/api/incidents?kind=deploy")).EnumerateArray().Select(Id));
+        Assert.Equal([CompleteId], (await ListAsync("/api/incidents?namespace=checkout")).EnumerateArray().Select(Id));
+        Assert.Empty((await ListAsync("/api/incidents?namespace=nowhere")).EnumerateArray());
+        Assert.Equal(all, (await ListAsync("/api/incidents?environment=test")).EnumerateArray().Select(Id));
+        // source_id wins over environment, and the one source is in that environment.
+        Assert.Equal(
+            all,
+            (await ListAsync("/api/incidents?environment=test&source_id=test")).EnumerateArray().Select(Id));
     }
 
     [Theory]
@@ -95,6 +103,8 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     [InlineData("/api/incidents?service=a&service=b")]
     [InlineData("/api/incidents?service=%FF")]
     [InlineData("/api/incidents?source_id=nope")]
+    [InlineData("/api/incidents?kind=bogus")]
+    [InlineData("/api/incidents?environment=nope")]
     public async Task Invalid_query_is_rejected(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
@@ -173,6 +183,8 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         complete["service"] = "complete-svc";
         complete["at_ms"] = atMs + 2000;
         complete["oldest_finding_ms"] = complete["window_from_ms"]!.GetValue<long>() - 1;
+        // The one field a 0.20.0 daemon adds when the alert named a namespace.
+        complete["namespace"] = "checkout";
 
         // And one whose end arrived on a poorer re-capture: the column takes
         // the end, the richer document is kept without it.

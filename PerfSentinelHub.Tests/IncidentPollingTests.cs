@@ -63,7 +63,7 @@ public sealed class IncidentPollingTests : IDisposable
 
         Assert.Equal(205, result.IncidentCount);
         Assert.Equal(["0", "100", "200"], offsets);
-        Assert.Equal(205, (await database.ListIncidentsAsync(new IncidentQuery(null, null, 0, 1000), cancellationToken)).Count);
+        Assert.Equal(205, (await database.ListIncidentsAsync(new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: null, Offset: 0, Limit: 1000), cancellationToken)).Count);
         var read = Assert.Contains("prod", await database.QueryIncidentReadsAsync(cancellationToken));
         Assert.Equal(IncidentReadStates.Ok, read.State);
         Assert.Null(read.LastErrorCode);
@@ -103,7 +103,7 @@ public sealed class IncidentPollingTests : IDisposable
         Assert.Contains(logger.Messages, message => message.Contains("stopped paging", StringComparison.Ordinal));
         Assert.Equal(
             IncidentReader.IncidentsCap,
-            (await database.ListIncidentsAsync(new IncidentQuery(null, null, 0, 2000), cancellationToken)).Count);
+            (await database.ListIncidentsAsync(new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: null, Offset: 0, Limit: 2000), cancellationToken)).Count);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public sealed class IncidentPollingTests : IDisposable
         // that did, at the cost of one probe per oversized page. Kept narrow,
         // a single fat incident would walk the rest of the ring at that width.
         Assert.Equal(["100@0", "50@0", "100@50", "50@50"], requests);
-        Assert.Equal(held, (await database.ListIncidentsAsync(new IncidentQuery(null, null, 0, 1000), cancellationToken)).Count);
+        Assert.Equal(held, (await database.ListIncidentsAsync(new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: null, Offset: 0, Limit: 1000), cancellationToken)).Count);
         await AssertReachableAsync(database, IncidentReadStates.Ok, null, cancellationToken);
     }
 
@@ -272,9 +272,9 @@ public sealed class IncidentPollingTests : IDisposable
         await poller.PollAsync(Source(second, "b"), cancellationToken);
 
         var fromSecond = Assert.Single(
-            await database.ListIncidentsAsync(new IncidentQuery(null, "b", 0, 10), cancellationToken));
+            await database.ListIncidentsAsync(new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: ["b"], Offset: 0, Limit: 10), cancellationToken));
         Assert.Equal(1, fromSecond.FindingCount);
-        Assert.Equal(2, (await database.ListIncidentsAsync(new IncidentQuery(null, null, 0, 10), cancellationToken)).Count);
+        Assert.Equal(2, (await database.ListIncidentsAsync(new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: null, Offset: 0, Limit: 10), cancellationToken)).Count);
         // One id on the single-incident route reads as the richest capture.
         var richest = await database.FindIncidentAsync(FixtureId, cancellationToken);
         Assert.NotNull(richest);

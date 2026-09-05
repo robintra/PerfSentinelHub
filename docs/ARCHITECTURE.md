@@ -74,7 +74,8 @@ None of the three is derivable from the others, and they are enforced by three
 different mechanisms.
 
 Findings expire on a worker that runs once a day and purges in chunks, so a long purge
-cannot reject imports for its whole duration. The status window is not a worker at all,
+cannot reject imports for its whole duration. Incidents copied from a daemon ride that
+same clock, purged on the Hub's own `last_seen_ms` and never on the alerting's `at_ms`. The status window is not a worker at all,
 it is a `CASE` evaluated at read time, which is why a finding's status can change
 without anything having been written. Rendered reports expire on a sweep that runs
 every sixty seconds, finer than the lifetime it enforces, so the countdown a reader
@@ -143,6 +144,7 @@ is wrong the first time anyone edits above it.
 | Hub to daemon, poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` and `FetchFindingsAsync`                          |
 | Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                           |
 | Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                   |
+| Hub to daemon, incidents                  | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paged by `SourcePoller` into `UpsertIncidentsAsync` |
 | Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                    |
 | Hub to SQLite                             | `Storage/Schema.cs`                                                                                |
 | Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                        |

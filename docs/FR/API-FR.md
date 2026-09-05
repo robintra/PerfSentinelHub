@@ -1,8 +1,8 @@
 # API HTTP
 
 Trois surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
-greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse
-et n'appelle jamais `/api/findings`.
+greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse,
+lit `/api/incidents` pour son écran d'incidents, et n'appelle jamais `/api/findings`.
 
 ## API d'import
 
@@ -87,6 +87,38 @@ réactifs, les tics de statut ne prennent aucune place de lecture au Hub, et les
 complètes sont bornées à deux à la fois sur des connexions mutualisées. La surface de
 query du daemon est HTTP(S) seulement par conception, son port gRPC étant l'ingestion
 OTLP, donc le Hub ne lui parle aucun RPC.
+
+### Incidents
+
+Un daemon perf-sentinel à partir de 0.20.0 avec `[daemon.incidents]` activé enregistre un
+incident quand l'alerte de l'exploitant le lui poste, et gèle les findings des minutes qui
+précèdent. Le Hub copie cet enregistrement à chaque poll du daemon et ne redérive rien :
+les findings d'un incident sont ceux du daemon, gelés à la capture et consolidés une fois,
+et le finding du Hub de même signature peut avoir évolué depuis. La copie survit à
+l'anneau du daemon, qui meurt avec lui, et de deux captures du même incident la plus riche
+est gardée, puisqu'Alertmanager répète une alerte active et qu'un daemon redémarré entre
+temps gèle une fenêtre que son anneau n'atteint plus. Les copies expirent avec la
+rétention des findings, sur l'horloge du Hub et jamais sur le `at_ms` de l'alerte.
+
+Le poll lit la route avec `AuthHeaderName` et `AuthHeaderValue` de la source, donc une clé
+de lecture s'écrit `AuthHeaderName=X-API-Key` avec le `[daemon] read_api_key` du daemon en
+valeur. Le résultat de la lecture est `incidents_state` sur `/api/sources` : `ok`, `absent`
+(un daemon antérieur à 0.20.0 répond 404 et un daemon au magasin désactivé 503, aucun des
+deux n'est une panne), `unauthorized`, `error`, ou null tant qu'aucun poll n'a tourné.
+Aucun de ces états ne touche la joignabilité de la source : les findings ont été collectés
+au même poll, et une clé refusée ne doit pas rétrograder chaque finding rapporté par ce
+daemon.
+
+`GET /api/incidents` liste les copies du plus récent au plus ancien, sans leurs findings,
+qui peuvent atteindre le millier par incident. Chacune porte les champs du daemon plus
+`source_id`, `source_name`, `environment`, `first_seen`, `last_seen` (horloge du Hub),
+`finding_count` et `capture` : `complete` quand `oldest_finding_ms` est au plus égal à
+`window_from_ms`, `partial` quand l'anneau avait déjà évincé une partie de la fenêtre,
+`empty` quand il ne tenait rien. `GET /api/incidents/{id}` renvoie un incident entier,
+findings compris. Un finding dont `first_seen_ms` dépasse `at_ms` n'a démarré qu'après le
+redémarrage. Comme `/api/findings`, les deux répondent à quiconque atteint le port du Hub :
+la clé de lecture d'un daemon protège le daemon, et le Hub réexpose les findings gelés
+derrière ce qui protège le Hub.
 
 ### Ce que le Hub ajoute à un finding
 

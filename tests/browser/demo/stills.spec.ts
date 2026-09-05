@@ -67,6 +67,16 @@ test("fleet health", async ({ page }, info) => {
   await page.screenshot({ path: nameFor("launcher-sources", info.project.name), fullPage: true });
 });
 
+test("incidents", async ({ page }, info) => {
+  await page.goto("/#/incidents");
+  await settled(page, "What was already burning");
+  // A folded row shows none of the findings the daemon froze, which are the
+  // point of the screen.
+  await page.locator("button.row-toggle").first().click();
+  await expect(page.locator(".daemon-panel .table").first()).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({ path: nameFor("launcher-incidents", info.project.name), fullPage: true });
+});
+
 test("one run", async ({ page }, info) => {
   await page.goto(`/#/run/${state.succeeded}`);
   await settled(page, /succeeded/i);

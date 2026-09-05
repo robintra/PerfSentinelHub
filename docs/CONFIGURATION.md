@@ -46,7 +46,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Sources[].Kind`                 | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled, and only a daemon may carry an import key |
 | `Sources[].RetentionHours`       | none     | Trace backends only, 1 hour to 10 years                                                                      |
 | `Sources[].BaseUrl`              | none     | Required. Absolute HTTP(S), no credentials, query, or fragment                                               |
-| `Sources[].AuthHeaderName/Value` | none     | Both absent or both present, no newlines                                                                     |
+| `Sources[].AuthHeaderName/Value` | none     | Both absent or both present, no newlines. A daemon's `[daemon] read_api_key` goes here as `X-API-Key`        |
 | `Sources[].ImportApiKey`         | none     | Optional push credential, at least 32 characters, supplied through a Secret                                  |
 
 `Hub:DatabasePath` and `Hub:Analysis:ReportDirectory` default to `/data/hub.db` and

@@ -19,6 +19,15 @@ cet état. Les corps de poll sont limités à 16 Mio, les requêtes ont un timeo
 imports sont transactionnels, et les logs n'identifient que l'identifiant de source et un
 code d'erreur stable.
 
+Le même poll copie les incidents du daemon, à partir de 0.20.0 avec `[daemon.incidents]`
+activé, et la copie survit à l'anneau du daemon. Le résultat de cette lecture est
+`incidents_state` sur `/api/sources`, tenu à l'écart de la joignabilité : un daemon qui
+répond 404 ou 503 sur cette route ne publie pas d'incidents, un daemon qui refuse la clé
+est `unauthorized`, et aucun des deux ne marque la source injoignable, puisque ses
+findings viennent d'être collectés. Les incidents sont lus au même poll horaire que les
+findings, donc un incident capturé quelques minutes avant un redémarrage du daemon peut
+se perdre entre deux polls, ce que l'archive NDJSON du daemon lui-même couvre.
+
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt

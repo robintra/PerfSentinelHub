@@ -76,7 +76,9 @@ Aucune des trois ne se déduit des autres, et elles sont appliquées par trois m
 différents.
 
 Les findings expirent sur un worker qui tourne une fois par jour et purge par tranches,
-de sorte qu'une purge longue ne puisse pas rejeter les imports pendant toute sa durée.
+de sorte qu'une purge longue ne puisse pas rejeter les imports pendant toute sa durée. Les
+incidents copiés depuis un daemon suivent cette même horloge, purgés sur le `last_seen_ms`
+du Hub et jamais sur le `at_ms` de l'alerte.
 La fenêtre de statut n'est pas un worker du tout, c'est un `CASE` évalué à la lecture,
 ce qui explique que le statut d'un finding puisse changer sans que rien n'ait été écrit.
 Les rapports rendus expirent sur un balayage qui tourne toutes les soixante secondes,
@@ -146,6 +148,7 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers le daemon, le poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` et `FetchFindingsAsync`                                |
 | Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                |
 | Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                        |
+| Hub vers le daemon, les incidents                 | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paginé par `SourcePoller` vers `UpsertIncidentsAsync` |
 | La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                        |
 | Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                     |
 | Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                         |

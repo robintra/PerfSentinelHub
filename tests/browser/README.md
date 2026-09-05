@@ -10,7 +10,7 @@ npx playwright install chromium
 npm run demo
 ```
 
-Output lands in `docs/img/hub/`: five screens as `<name>.png` (light) and
+Output lands in `docs/img/hub/`: six screens as `<name>.png` (light) and
 `<name>-dark.png` (dark), plus `launcher_light.gif` and `launcher_dark.gif`.
 
 ## What global-setup has to build first

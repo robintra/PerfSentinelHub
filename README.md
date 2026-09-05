@@ -67,7 +67,8 @@ helm upgrade --install perf-sentinel-hub deploy/helm/perf-sentinel-hub \
 ```
 
 Credentials never go in Helm values. For an authenticated poll, put the value in a Secret
-and set `sources[].authHeaderName`, `authSecretName` and `authSecretKey`. For daemon push,
+and set `sources[].authHeaderName`, `authSecretName` and `authSecretKey`. The same header
+carries a daemon's `[daemon] read_api_key` as `X-API-Key` for its incidents. For daemon push,
 set `sources[].importSecretName` and `importSecretKey`, with at least 32 characters.
 
 For a public release, install by digest rather than by tag. A version tag is a discovery

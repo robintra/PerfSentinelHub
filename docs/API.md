@@ -1,8 +1,8 @@
 # HTTP API
 
 Three surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
-plugin or a CI job reads the read API. The browser uses the analysis API and never calls
-`/api/findings`.
+plugin or a CI job reads the read API. The browser uses the analysis API, reads
+`/api/incidents` for its incidents screen, and never calls `/api/findings`.
 
 ## Import API
 
@@ -31,6 +31,8 @@ the Hub's route to the daemon, which a push does not exercise.
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                            |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
+| `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `source_id`, `offset`, `limit`. Without their findings, see below                                            |
+| `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
 | `GET /metrics`                       | Prometheus text format, see [OPERATIONS.md](OPERATIONS.md#metrics)                                                                                                                         |
 | `GET /health/live`                   | Whether the process is up                                                                                                                                                                  |
 | `GET /health/ready`                  | Successful after SQLite initialization                                                                                                                                                     |
@@ -82,6 +84,36 @@ its OTLP ingest route precisely so `/api` and `/health` stay responsive, status 
 no Hub read slot, and full reads are bounded at two at a time over pooled connections. The
 daemon's query surface is HTTP(S) only by design, its gRPC port being OTLP ingest, so the
 Hub speaks no RPC to it.
+
+### Incidents
+
+A perf-sentinel daemon from 0.20.0 with `[daemon.incidents]` enabled records an incident
+when the operator's alerting posts one, and freezes the findings of the minutes before
+it. The Hub copies that record on every poll of the daemon and re-derives nothing: the
+findings inside an incident are the daemon's, frozen at capture and settled once, and the
+Hub's own finding of the same signature may since have moved on. The copy outlives the
+daemon's ring, which dies with the daemon, and of two captures of the same incident the
+richer one is kept, since Alertmanager repeats a firing alert and a daemon restarted in
+between freezes a window its ring no longer reaches. Copies expire with the findings
+retention, on the Hub's own clock and never on the alerting's `at_ms`.
+
+The poll reads the route with the source's `AuthHeaderName` and `AuthHeaderValue`, so a
+read key is `AuthHeaderName=X-API-Key` with the daemon's `[daemon] read_api_key` as the
+value. What the read came to is `incidents_state` on `/api/sources`: `ok`, `absent` (a
+daemon before 0.20.0 answers 404 and one with the store disabled 503, neither a failure),
+`unauthorized`, `error`, or null when no poll has run yet. None of these touches the
+source's reachability: the findings were collected on the same poll, and a refused key
+must not demote every finding that daemon reported.
+
+`GET /api/incidents` lists the copies newest first, without their findings, which can
+run to a thousand per incident. Each carries the daemon's own fields plus `source_id`,
+`source_name`, `environment`, `first_seen`, `last_seen` (Hub clock), `finding_count` and
+`capture`: `complete` when `oldest_finding_ms` is at or below `window_from_ms`, `partial`
+when the ring had already evicted part of the window, `empty` when it held nothing.
+`GET /api/incidents/{id}` returns one incident whole, findings included. A finding whose
+`first_seen_ms` is past `at_ms` fired only after the restart. Like `/api/findings`, both
+answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
+Hub re-exposes the frozen findings behind whatever fronts the Hub.
 
 ### What the Hub adds to a finding
 

@@ -2468,10 +2468,13 @@
         // said plainly: an analysis takes a service and no namespace, so one
         // taken from a namespaced incident is wider than the row it came from.
         const name = handoff.namespace ? handoff.namespace + "/" + handoff.service : handoff.service;
+        // `other` is the daemon's catch-all, and "the other of cart-svc" is not
+        // a sentence, so it reads as the incident a missing kind reads as.
+        const kind = handoff.kind === "other" ? null : PSL.INCIDENT_KIND_LABEL[handoff.kind];
         return el("div", {class: "banner", "data-tone": daemon ? "warn" : "info"}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el("div", {
-                text: "Window of the " + (PSL.INCIDENT_KIND_LABEL[handoff.kind] || "incident") + " of "
+                text: "Window of the " + (kind || "incident") + " of "
                     + name + " from the incidents screen, " + span
                     + (handoff.namespace
                         ? " An analysis takes a service and no namespace, so this one covers "

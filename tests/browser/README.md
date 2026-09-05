@@ -11,7 +11,8 @@ npm run demo
 ```
 
 Output lands in `docs/img/hub/`: six screens as `<name>.png` (light) and
-`<name>-dark.png` (dark), plus `launcher_light.gif` and `launcher_dark.gif`.
+`<name>-dark.png` (dark), plus `launcher-handoff.png`, New analysis as an incident
+link fills it, and `launcher_light.gif` and `launcher_dark.gif`.
 
 ## What global-setup has to build first
 

@@ -11,7 +11,8 @@ npm run demo
 ```
 
 Le résultat arrive dans `docs/img/hub/` : six écrans en `<nom>.png` (clair) et
-`<nom>-dark.png` (sombre), plus `launcher_light.gif` et `launcher_dark.gif`.
+`<nom>-dark.png` (sombre), plus `launcher-handoff.png`, New analysis tel qu'un lien
+d'incident le remplit, et `launcher_light.gif` et `launcher_dark.gif`.
 
 ## Ce que global-setup doit monter d'abord
 

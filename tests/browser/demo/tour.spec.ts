@@ -4,9 +4,11 @@ import { test, expect, Locator, Page } from "@playwright/test";
 // step lingers long enough to read what it just revealed, because a reader
 // cannot pause a GIF.
 //
-// Three acts: shaping a run against a trace backend, running one against a
-// daemon, then reading the fleet. The folds are the point of several screens,
-// so the tour opens them rather than describing them.
+// Four acts: shaping a run against a trace backend, running one against a
+// daemon, reading the fleet, then reading what was already burning when the
+// alerting posted an incident and handing that window back to a run. The folds
+// are the point of several screens, so the tour opens them rather than
+// describing them.
 
 const beat = (page: Page, ms: number) => page.waitForTimeout(ms);
 
@@ -98,4 +100,36 @@ test("launcher tour", async ({ page }) => {
   await unfold(page, page.locator("button.settings-card-head").nth(1), 3000);
   await unfold(page, page.locator("button.terminal-more").first(), 3600);
   await beat(page, 1500);
+
+  // --- what was already burning ---
+  await page.goto("/#/incidents");
+  await expect(page.locator("#main")).toContainText("What was already burning", { timeout: 15_000 });
+  await beat(page, 3000);
+
+  // The kind select narrows a fleet that flapped all night to the one event
+  // worth opening, and the row it leaves is the one the tour then opens.
+  const kind = page.locator("select.refresh-select").first();
+  if (await kind.count()) {
+    await kind.selectOption("oom_kill");
+    await beat(page, 3000);
+  }
+
+  await unfold(page, page.locator("button.row-toggle", { hasText: "checkout-svc" }), 4000);
+
+  // The findings are frozen, so the last step is the one that reads them
+  // against live traces: the same window, handed to a run that can take it.
+  const analyse = page.getByRole("button", { name: "Analyse this window" }).first();
+  if (await analyse.count()) {
+    await analyse.scrollIntoViewIfNeeded();
+    await beat(page, 900);
+    await analyse.click();
+    await expect(page.locator(".banner")).toContainText("from the incidents screen", { timeout: 15_000 });
+    // The source that arrives selected is the daemon of act two, which takes no
+    // window, so the banner asks for a backend. Answering it is the last beat:
+    // the window and the service survive the switch, and the run can go.
+    await hold(page, page.locator(".banner").first(), 3600);
+    await page.locator("button.source-row", { hasText: "Tempo EU" }).click();
+    await expect(page.locator('input[placeholder="order-service"]')).toHaveValue(/\S/);
+    await hold(page, page.locator("button.range-pill").first(), 4200);
+  }
 });

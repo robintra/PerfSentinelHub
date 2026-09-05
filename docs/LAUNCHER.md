@@ -15,8 +15,10 @@ as a three-hour window against a daemon that keeps ten minutes.
 
 A link from the incidents screen arrives here with the form filled in: the incident's
 service, and its window as an absolute range with its end held at now. A banner above the
-parameters names the incident. The source is not part of the link, since a daemon takes no
-window: under a daemon the banner says so and asks for a trace backend.
+parameters names the incident, as `ns/service` when it carried a namespace, and says that
+an analysis takes a service and no namespace, so the run covers that service in every one
+of them. The source is not part of the link, since a daemon takes no window: under a
+daemon the banner says so and asks for a trace backend.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
@@ -160,7 +162,8 @@ or that it was never read, so a quiet fleet never reads as a stale copy. A daemo
 refused the Hub's key on that route gets a banner naming the setting to fix, and its
 findings stay collected.
 
-An unfolded row carries an Analyse this window button beside its heading, which opens New
+An unfolded row carries an Analyse this window button under the note describing the
+window, which opens New
 analysis on the incident's service and window, described under The form follows the
 source. The source stays the operator's choice, because a daemon takes no window and the
 incident's own daemon would run its in-memory snapshot rather than the window. The link

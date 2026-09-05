@@ -798,6 +798,45 @@
         });
     }
 
+    /**
+     * The daemon's closed set of incident kinds, as the incidents screen labels
+     * them. Anything else was already folded to `other` by the Hub's parser.
+     * @type {Record<string, string>}
+     */
+    const INCIDENT_KIND_LABEL = {
+        oom_kill: "OOM kill",
+        memory_saturation: "memory saturation",
+        restart: "restart",
+        deploy: "deploy",
+        other: "other"
+    };
+
+    /**
+     * The daemon's own reading of `oldest_finding_ms`: at or below the window's
+     * start the ring still reached the whole window, above it part of the window
+     * had already been evicted when the incident was frozen, and absent means the
+     * ring was empty. The Hub publishes the same verdict as `capture`, this is the
+     * page's copy of the rule for a row it has not asked the Hub about.
+     * @param {{oldest_finding_ms?: number | null, window_from_ms: number}} incident
+     * @returns {"complete" | "partial" | "empty"}
+     */
+    function incidentCapture(incident) {
+        if (incident.oldest_finding_ms == null) return "empty";
+        return incident.oldest_finding_ms <= incident.window_from_ms ? "complete" : "partial";
+    }
+
+    /**
+     * Whether a frozen finding was already burning before the incident or fired
+     * only after it. A finding is stamped when its trace is analysed, one TTL
+     * after its last span, so a stamp past `at_ms` belongs to the replacement.
+     * @param {{first_seen_ms: number}} finding
+     * @param {{at_ms: number}} incident
+     * @returns {"before" | "after"}
+     */
+    function findingPhase(finding, incident) {
+        return finding.first_seen_ms > incident.at_ms ? "after" : "before";
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -813,6 +852,7 @@
         analysisCommand, monitorCommand, detectionToml, quotedForShell,
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
         hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
-        gaugeTone, gaugeMove
+        gaugeTone, gaugeMove,
+        INCIDENT_KIND_LABEL, incidentCapture, findingPhase
     };
 })(globalThis);

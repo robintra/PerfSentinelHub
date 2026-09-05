@@ -25,9 +25,14 @@ public sealed record DaemonStatus(
 
 public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> options)
 {
-    private const int MaxBodyBytes = 16 * 1024 * 1024;
+    internal const int MaxBodyBytes = 16 * 1024 * 1024;
     private const int ConfigMaxBytes = 64 * 1024;
+
+    // Smaller than the findings cap on purpose: a page carries up to 100
+    // incidents of up to 1000 findings each, and four polls may run at once.
+    public const int IncidentsMaxBytes = 4 * 1024 * 1024;
     internal const int FindingsLimit = 1000;
+    public const int IncidentsPageSize = 100;
     private readonly TimeSpan _timeout = options.Value.HttpTimeout;
 
     public async Task<DaemonStatus> FetchStatusAsync(
@@ -124,6 +129,37 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         return SendAsync(source, $"api/findings?limit={FindingsLimit}&include_acked=true", cancellationToken);
     }
 
+    /// <summary>
+    ///     One page of the daemon's incident ring, newest first. Null when the
+    ///     route is absent (a daemon before 0.20.0) or the store is disabled
+    ///     (503): both say "this daemon publishes no incidents", which is not a
+    ///     failure. A 401 is its own exception, so a wrong read key is never
+    ///     filed as http_error against the daemon's reachability.
+    /// </summary>
+    public async Task<byte[]?> FetchIncidentsPageAsync(
+        SourceOptions source,
+        int offset,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SendAsync(
+                source,
+                $"api/incidents?limit={IncidentsPageSize}&offset={offset}",
+                cancellationToken,
+                maxBytes: IncidentsMaxBytes);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.ServiceUnavailable)
+        {
+            return null;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new IncidentsUnauthorizedException(exception);
+        }
+    }
+
     private async Task<byte[]> SendAsync(
         SourceOptions source,
         string path,
@@ -145,7 +181,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
                 timeout.Token);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > maxBytes)
-                throw new ResponseTooLargeException();
+                throw new ResponseTooLargeException(maxBytes);
 
             await using var input = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var output = new MemoryStream();
@@ -156,7 +192,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
                 if (read == 0)
                     break;
                 if (output.Length + read > maxBytes)
-                    throw new ResponseTooLargeException();
+                    throw new ResponseTooLargeException(maxBytes);
                 await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
             }
 
@@ -182,8 +218,11 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
 public sealed class DaemonTimeoutException(Exception innerException)
     : IOException("The daemon request timed out.", innerException);
 
-public sealed class ResponseTooLargeException()
-    : IOException("The daemon response exceeds 16 MiB.");
+public sealed class ResponseTooLargeException(int maxBytes)
+    : IOException($"The daemon response exceeds {maxBytes / (1024 * 1024)} MiB.");
+
+public sealed class IncidentsUnauthorizedException(Exception innerException)
+    : IOException("The daemon refused the key on its incidents route.", innerException);
 
 public sealed class InvalidStatusException : IOException
 {

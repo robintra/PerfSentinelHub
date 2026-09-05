@@ -35,6 +35,9 @@ public sealed class PollingTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var fixture = await File.ReadAllBytesAsync(FixturePath, cancellationToken);
+        var incidents = await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-incidents-0.20.0.json"),
+            cancellationToken);
         var requests = new List<(string Path, string? Auth)>();
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
@@ -44,6 +47,8 @@ public sealed class PollingTests : IDisposable
                 await context.Response.WriteAsJsonAsync(new { version = "0.11.2" }, cancellationToken);
             else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(fixture, cancellationToken);
+            else if (context.Request.Path == "/api/incidents")
+                await context.Response.Body.WriteAsync(incidents, cancellationToken);
             else
                 // The catch-all fake lost app.Map's free 404: without this, a
                 // future client read would be fed the findings body and pass.
@@ -74,10 +79,12 @@ public sealed class PollingTests : IDisposable
         Assert.Equal(0, result.RejectedCount);
         Assert.Equal("0.11.2", result.ProducerVersion);
         Assert.False(result.IsPossiblyTruncated);
+        Assert.Equal(1, result.IncidentCount);
         Assert.Equal(
             [
                 ("/api/status", "Bearer test-secret"),
-                ("/api/findings?limit=1000&include_acked=true", "Bearer test-secret")
+                ("/api/findings?limit=1000&include_acked=true", "Bearer test-secret"),
+                ("/api/incidents?limit=100&offset=0", "Bearer test-secret")
             ],
             requests);
         Assert.Single(await database.QueryFindingsAsync(

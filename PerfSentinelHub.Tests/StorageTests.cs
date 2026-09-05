@@ -33,7 +33,7 @@ public sealed class StorageTests
         Assert.Equal(
             [
                 "analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_sources", "findings",
-                "schema_migrations", "source_imports", "source_state"
+                "incident_reads", "incidents", "schema_migrations", "source_imports", "source_state"
             ],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);

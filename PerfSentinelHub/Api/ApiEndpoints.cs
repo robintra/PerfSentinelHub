@@ -44,6 +44,8 @@ public static partial class ApiEndpoints
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
         app.MapGet("/api/findings", GetFindingsAsync);
         app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
+        app.MapGet("/api/incidents", GetIncidentsAsync);
+        app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync);
         app.MapGet("/health/live", TypedResults.Ok);
         app.MapGet("/health/ready", (HubDatabase database) =>
@@ -56,11 +58,13 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         var states = await database.QuerySourceStatesAsync(cancellationToken);
+        var reads = await database.QueryIncidentReadsAsync(cancellationToken);
         return
         [
             .. options.Value.Sources.Select(source =>
             {
                 states.TryGetValue(source.Id, out var state);
+                reads.TryGetValue(source.Id, out var read);
                 return new SourceResponse(
                     source.Id,
                     source.Name,
@@ -78,7 +82,8 @@ public static partial class ApiEndpoints
                     state?.LastErrorCode,
                     source.EndpointArgument,
                     source.EngineSubcommand,
-                    source.AuthHeaderName);
+                    source.AuthHeaderName,
+                    read?.State);
             })
         ];
     }

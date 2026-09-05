@@ -63,6 +63,9 @@ public sealed class WorkerAndRetentionTests : IDisposable
                                   INSERT INTO source_state(source_id, last_attempt_ms) VALUES
                                     ('retired',500),
                                     ('active',1500);
+                                  INSERT INTO incidents VALUES
+                                    ('old-incident','a','svc','restart',100,NULL,0,200,NULL,0,'{}',100,500),
+                                    ('kept-incident','a','svc','restart',100,NULL,0,200,NULL,0,'{}',100,1500);
                                   """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -74,6 +77,9 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Assert.Equal(1L, await CountAsync(reopened, "endpoint_heartbeats", cancellationToken));
         Assert.Equal(1L, await CountAsync(reopened, "finding_sources", cancellationToken));
         Assert.Equal(1L, await CountAsync(reopened, "source_state", cancellationToken));
+        // On the Hub clock, like a finding: at_ms is the alerting clock and says
+        // nothing about when this copy was last refreshed.
+        Assert.Equal(1L, await CountAsync(reopened, "incidents", cancellationToken));
     }
 
     [Fact]

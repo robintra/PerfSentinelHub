@@ -56,6 +56,37 @@ public sealed record SourceState(
     string? ProducerVersion,
     string? LastErrorCode);
 
+/// <summary>
+///     One daemon incident as the Hub keeps it: the daemon's document whole,
+///     the columns the listing filters and orders by, and the Hub's own clock
+///     for when the copy was first and last refreshed.
+/// </summary>
+public sealed record StoredIncident(
+    string Id,
+    string SourceId,
+    string Service,
+    string Kind,
+    long AtMs,
+    long? EndedAtMs,
+    long WindowFromMs,
+    long WindowToMs,
+    long? OldestFindingMs,
+    int FindingCount,
+    string IncidentJson,
+    long FirstSeenMs,
+    long LastSeenMs);
+
+/// <summary>The outcome of the last incidents read of one source.</summary>
+public sealed record IncidentRead(long LastReadMs, string State, string? LastErrorCode);
+
+public static class IncidentReadStates
+{
+    public const string Ok = "ok";
+    public const string Absent = "absent";
+    public const string Unauthorized = "unauthorized";
+    public const string Error = "error";
+}
+
 public static class AnalysisStatuses
 {
     public const string Pending = "pending";

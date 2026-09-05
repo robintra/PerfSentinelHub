@@ -1770,6 +1770,12 @@ body[data-screen="report"] .shell-footer {
     height: calc(100vh - 61px);
 }
 
+.refresh .pill-button {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11px;
+}
+
 .report-bar .pill-button {
     height: 30px;
     padding: 0 13px 0 10px;

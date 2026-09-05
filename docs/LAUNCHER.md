@@ -147,8 +147,10 @@ the incident or after the restart from its own stamp against the incident's. The
 column carries the daemon's reading of how far back its ring still reached: complete,
 partial, or empty. Times are relative, never dates, and the exact stamp sits in the
 tooltip. A service select narrows the list, and a button loads the next hundred older
-rows. A daemon that refused the Hub's key on that route gets a banner naming the setting
-to fix, and its findings stay collected.
+rows, from the store rather than from the daemons. Under the table, one line per daemon
+says when its copy was read, or that it was never read, so a quiet fleet never reads as a
+stale copy. A daemon that refused the Hub's key on that route gets a banner naming the
+setting to fix, and its findings stay collected.
 
 ## Safety
 

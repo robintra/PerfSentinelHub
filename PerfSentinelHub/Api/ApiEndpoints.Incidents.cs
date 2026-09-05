@@ -45,7 +45,19 @@ public static partial class ApiEndpoints
 
         try
         {
-            await ReadFleetAsync(database, reader, options.Value, timeProvider, cancellationToken);
+            // The fan-out runs inside the request an operator is waiting on and
+            // holds one of two gate slots, so it gets a deadline of its own: one
+            // hung daemon costs a slow read, never a screen that never paints
+            // and a slot nobody else can take.
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(options.Value.HttpTimeout * 3);
+            await ReadFleetAsync(database, reader, options.Value, timeProvider, deadline.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Whatever landed before the deadline is in the store, and the
+            // listing below answers with it, the contract a partially read
+            // fleet already has.
         }
         finally
         {
@@ -81,7 +93,11 @@ public static partial class ApiEndpoints
             // poll worker skips one.
             if (source.Kind != SourceKinds.Daemon)
                 continue;
-            if (reads.TryGetValue(source.Id, out var read) && readAtMs - read.LastReadMs < RefreshDebounceMs)
+            // Bounded below as well: an NTP correction that steps the clock back
+            // makes the age negative, and an unbounded test would then skip that
+            // source on every refresh while the screen prints it as freshly read.
+            if (reads.TryGetValue(source.Id, out var read)
+                && readAtMs - read.LastReadMs is >= 0 and < RefreshDebounceMs)
                 continue;
             tasks.Add(ReadOneAsync(reader, source, readAtMs, concurrency, cancellationToken));
         }
@@ -183,7 +199,7 @@ public static partial class ApiEndpoints
 /// </summary>
 public sealed class IncidentRefreshGate() : RequestGate(MaxReads)
 {
-    // Public because IncidentsApiTests pins it, the same reason
+    // Public because IncidentRefreshApiTests pins it, the same reason
     // DaemonViewGate.MaxReads is: the cap is a contract, not a detail.
     public const int MaxReads = 2;
 }

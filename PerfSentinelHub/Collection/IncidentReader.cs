@@ -105,9 +105,15 @@ public sealed partial class IncidentReader(
             incidents.AddRange(page.Incidents);
             if (page.RejectedCount > 0)
                 LogRejectedIncidents(logger, source.Id, page.RejectedCount);
-            if (page.Incidents.Count + page.RejectedCount < limit)
+            var fetched = limit;
+            // Widen back after a page that fits. Halving is how one oversized
+            // page is survived, not a verdict on the ring: kept narrow, a single
+            // fat incident would walk the rest of it one row per request, on the
+            // path of every screen open.
+            limit = Math.Min(limit * 2, DaemonClient.IncidentsPageSize);
+            if (page.Incidents.Count + page.RejectedCount < fetched)
                 return incidents;
-            offset += limit;
+            offset += fetched;
         }
 
         LogIncidentsCapped(logger, source.Id, IncidentsCap);

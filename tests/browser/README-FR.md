@@ -46,6 +46,14 @@ daemon au repos rapporte des zéros, et une capture de zéros n'apprend rien. Un
 daemon est proche de son plafond pour que la coloration se voie, l'autre est à
 l'aise.
 
+Les incidents sont capturés de la même façon, depuis un daemon nourri de cinq
+livraisons Alertmanager, et le faux daemon glisse leurs horodatages jusqu'au
+présent au moment de les servir. L'écran affiche chaque instant comme une
+durée, donc un corps capturé le trimestre dernier mettrait "il y a 3 mois" sur
+un OOM kill et se lirait comme un écran cassé. Un seul décalage sur chaque
+champ en millisecondes, pour que les fenêtres, les findings figés et la lecture
+avant ou après le redémarrage gardent les distances mesurées par le daemon.
+
 ## Deux choses qu'elle attend de l'extérieur
 
 **Un binaire perf-sentinel.** Sans lui le Hub répond `503` à

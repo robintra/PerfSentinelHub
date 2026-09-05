@@ -1,0 +1,99 @@
+[
+  {
+    "id": "bf934d09c8dd089aa93695feb4f38fb8",
+    "service": "cache-svc",
+    "kind": "other",
+    "at_ms": 1788614686037,
+    "detail": "node under memory pressure, pod evicted",
+    "window_from_ms": 1788614683037,
+    "window_to_ms": 1788614688037,
+    "oldest_finding_ms": 1788614686495,
+    "findings": [
+      {
+        "finding": {
+          "type": "n_plus_one_sql",
+          "severity": "warning",
+          "trace_id": "hubb0000000000000000000000000000",
+          "service": "cache-svc",
+          "source_endpoint": "GET /sessions",
+          "pattern": {
+            "template": "SELECT * FROM sessions WHERE owner_id = ?",
+            "occurrences": 8,
+            "window_ms": 0,
+            "distinct_params": 8,
+            "span_duration_us_p50": 1500,
+            "span_duration_us_p99": 1500,
+            "span_duration_cv_x1000": 0
+          },
+          "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+          "first_timestamp": "2026-09-05T13:24:45.028Z",
+          "last_timestamp": "2026-09-05T13:24:45.028Z",
+          "green_impact": {
+            "estimated_extra_io_ops": 7,
+            "io_intensity_score": 8.0,
+            "io_intensity_band": "high"
+          },
+          "confidence": "daemon_staging",
+          "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
+        },
+        "stored_at_ms": 1788614686495,
+        "first_seen_ms": 1788614686495,
+        "seen_count": 1
+      }
+    ]
+  },
+  {
+    "id": "41816e63147a5a10675718516e417b79",
+    "service": "order-svc",
+    "kind": "restart",
+    "at_ms": 1788614686037,
+    "ended_at_ms": 1788614731037,
+    "detail": "pod restarted by the kubelet",
+    "window_from_ms": 1788614683037,
+    "window_to_ms": 1788614688037,
+    "oldest_finding_ms": 1788614686495,
+    "findings": [
+      {
+        "finding": {
+          "type": "n_plus_one_sql",
+          "severity": "warning",
+          "trace_id": "huba0000000000000000000000000000",
+          "service": "order-svc",
+          "source_endpoint": "GET /orders",
+          "pattern": {
+            "template": "SELECT * FROM orders WHERE owner_id = ?",
+            "occurrences": 8,
+            "window_ms": 0,
+            "distinct_params": 8,
+            "span_duration_us_p50": 1500,
+            "span_duration_us_p99": 1500,
+            "span_duration_cv_x1000": 0
+          },
+          "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+          "first_timestamp": "2026-09-05T13:24:45.027Z",
+          "last_timestamp": "2026-09-05T13:24:45.027Z",
+          "green_impact": {
+            "estimated_extra_io_ops": 7,
+            "io_intensity_score": 8.0,
+            "io_intensity_band": "high"
+          },
+          "confidence": "daemon_staging",
+          "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
+        },
+        "stored_at_ms": 1788614686495,
+        "first_seen_ms": 1788614686495,
+        "seen_count": 1
+      }
+    ]
+  },
+  {
+    "id": "50e082538296ce0c7b06ccaf98345f21",
+    "service": "gateway-svc",
+    "kind": "deploy",
+    "at_ms": 1788614680521,
+    "detail": "rollout 4f21c8 reached every replica",
+    "window_from_ms": 1788614677521,
+    "window_to_ms": 1788614682521,
+    "findings": []
+  }
+]

@@ -294,7 +294,7 @@
         "window_ms": 300,
         "distinct_params": 16
       },
-      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET ranking-svc/api/ranking/current x1, GET trade-svc/api/trades/pending x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
+      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET leaderboard-svc/api/leaderboard/weekly x1, GET mail-svc/api/mail/inbox x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
       "first_timestamp": "2025-07-10T14:32:12.000Z",
       "last_timestamp": "2025-07-10T14:32:12.300Z",
       "green_impact": {
@@ -554,7 +554,7 @@
       "io_ops": 3
     }
   ],
-  "binary_version": "0.19.0",
+  "binary_version": "0.20.0",
   "detection_config": {
     "n_plus_one_threshold": 5,
     "window_ms": 500,

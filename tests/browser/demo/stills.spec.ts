@@ -80,11 +80,24 @@ test("incidents", async ({ page }, info) => {
   await page.locator("button.row-toggle").first().click();
   await expect(page.locator(".daemon-panel .table").first()).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: nameFor("launcher-incidents", info.project.name), fullPage: true, animations: "disabled" });
-  // Not a still: the button in the unfolded row must open New analysis on the
-  // incident's window, with the banner that names where the form came from.
+});
+
+test("the window handed to a new analysis", async ({ page }, info) => {
+  await page.goto("/#/incidents");
+  await settled(page, "What was already burning");
+  // Named on purpose: this row carries both a kind the banner can say and a
+  // namespace, which is the pair the sentence is built for.
+  await page.locator("button.row-toggle", { hasText: "checkout-svc" }).click();
+  await expect(page.locator(".daemon-panel .table").first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Analyse this window" }).first().click();
   await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=[^&]+&incident=[0-9a-f]{32}$/);
   await expect(page.locator(".banner", { hasText: "from the incidents screen" })).toBeVisible();
+  // A daemon takes no window, so the shot is the form that can run it. The
+  // service the link carried has to survive the source switch, which is the
+  // half of the prefill a still cannot show on its own.
+  await page.locator("button.source-row", { hasText: "Tempo EU" }).click();
+  await expect(page.locator('input[placeholder="order-service"]')).toHaveValue(/\S/);
+  await page.screenshot({ path: nameFor("launcher-handoff", info.project.name), fullPage: true, animations: "disabled" });
 });
 
 test("one run", async ({ page }, info) => {

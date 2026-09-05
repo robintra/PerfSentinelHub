@@ -163,11 +163,16 @@ refused the Hub's key on that route gets a banner naming the setting to fix, and
 findings stay collected.
 
 An unfolded row carries an Analyse this window button under the note describing the
-window, which opens New
-analysis on the incident's service and window, described under The form follows the
-source. The source stays the operator's choice, because a daemon takes no window and the
-incident's own daemon would run its in-memory snapshot rather than the window. The link
-keeps its parameters, so it can be shared or reloaded, and the New tab itself carries none.
+window, which opens New analysis on the incident's service and window, described under The
+form follows the source. The source stays the operator's choice, because a daemon takes no
+window and the incident's own daemon would run its in-memory snapshot rather than the
+window. The link keeps its parameters, so it can be shared or reloaded, and the New tab
+itself carries none.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
+  <img alt="New analysis opened on an incident's window, under the banner naming it" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
+</picture>
 
 ## Safety
 

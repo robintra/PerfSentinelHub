@@ -180,12 +180,16 @@ copie périmée. Un daemon qui a refusé la clé du Hub sur cette route reçoit 
 nommant le réglage à corriger, et ses findings restent collectés.
 
 Une ligne dépliée porte un bouton Analyse this window sous la note qui décrit la fenêtre,
-qui ouvre New
-analysis sur le service et la fenêtre de l'incident, décrit sous Le formulaire suit la
-source. La source reste au choix de l'exploitant, parce qu'un daemon ne prend aucune
-fenêtre et que le daemon de l'incident lui-même analyserait son instantané en mémoire
-plutôt que la fenêtre. Le lien garde ses paramètres, donc il se partage et se recharge, et
-l'onglet New lui-même n'en porte aucun.
+qui ouvre New analysis sur le service et la fenêtre de l'incident, décrit sous Le
+formulaire suit la source. La source reste au choix de l'exploitant, parce qu'un daemon ne
+prend aucune fenêtre et que le daemon de l'incident lui-même analyserait son instantané en
+mémoire plutôt que la fenêtre. Le lien garde ses paramètres, donc il se partage et se
+recharge, et l'onglet New lui-même n'en porte aucun.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
+  <img alt="New analysis ouvert sur la fenêtre d'un incident, sous le bandeau qui le nomme" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
+</picture>
 
 ## Sûreté
 

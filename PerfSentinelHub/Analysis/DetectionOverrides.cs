@@ -117,11 +117,16 @@ public sealed record DetectionOverrides
         return since is null || (engine is not null && engine >= since);
     }
 
+    // A named array rather than either inline form: `Split('-', '+')` reads as a
+    // partial match for `Split(char, int)`, and `Split(['-', '+'])` allocates on
+    // every call for a separator set that never changes.
+    private static readonly char[] VersionSuffixSeparators = ['-', '+'];
+
     // clap prints `0.18.0`, or `0.18.0-rc.1` for a pre-release, which reads the
     // same keys as the release it precedes. System.Version knows neither suffix.
     private static Version? ParseEngineVersion(string? engineVersion)
     {
-        var release = engineVersion?.Split('-', '+')[0];
+        var release = engineVersion?.Split(VersionSuffixSeparators)[0];
         return release is not null && Version.TryParse(release, out var version) ? version : null;
     }
 

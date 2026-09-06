@@ -3519,6 +3519,12 @@ body[data-screen="report"] .shell-footer {
     margin-bottom: 12px;
 }
 
+/* A banner carries no margin of its own, so the filter line under one would
+   sit flush against it. Matches the margin the line already has below. */
+.banner + .refresh {
+    margin-top: 12px;
+}
+
 .refresh-next {
     font-family: var(--font-mono);
 }

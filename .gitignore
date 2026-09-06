@@ -27,3 +27,4 @@ __pycache__/
 /tests/browser/demo-videos/
 /tests/browser/test-results/
 /tests/browser/playwright-report/
+/node_modules/

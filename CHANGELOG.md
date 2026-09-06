@@ -4,6 +4,10 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Fixed
+
+- The launcher's type annotations are checked rather than decorative. Its header has said since it was written that the file is type-checked with `tsc --noEmit` against `types.d.ts`, and none of that existed: no `types.d.ts`, no TypeScript anywhere in the repository, and no job running either. So 122 annotations across 967 lines were read by nobody. The six types they name are now declared from the API records they describe, and `npm run typecheck` at the root runs the check the header promised. It found one real defect on its first pass, `monitorCommand` documenting two of its three parameters and marking the second optional, which left the undocumented third reading as a required parameter after an optional one.
+
 ### Changed
 
 - The findings a mirrored incident froze read as labels rather than as wire values. The type column printed the engine's identifier verbatim, so a row announced `n_plus_one_sql` where the engine's own dashboard says `N+1 SQL`, and the severity sat in the same grey chip whatever it said. The twelve types now carry the wording the dashboard uses, and the severity chip takes the engine's three tones from the `--crit`, `--warn` and `--info` variables this Hub already mirrors, so a critical row is legible before it is read. The mapping is display only: `finding_type` stays a stored column, an index key and a public parameter of `GET /api/findings`, and the raw string is what the API still filters on. A type outside the twelve renders as itself rather than as a blank, since the Hub accepts any string on ingest and a newer engine can send one it has never heard of.

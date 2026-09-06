@@ -4,7 +4,8 @@
  * Classic script, no module syntax, no build step: the page loads it with a plain
  * <script src> and reads it off `window.PSL`. Brief §3.5 forbids a build stage in
  * the shipped app, so this file is authored as runnable JavaScript and type-checked
- * separately with `tsc --noEmit` against `types.d.ts`.
+ * separately with `tsc --noEmit` against `types.d.ts`, which `npm run typecheck`
+ * at the repository root runs.
  *
  * Everything here is a pure function or a frozen table. Rendering, state and DOM
  * live in the page.
@@ -595,7 +596,8 @@
      * copy should not contradict the screen they copied it from.
      *
      * @param {any} source
-     * @param {number} [refreshSeconds] omitted, or 0, leaves the engine's own default
+     * @param {number | undefined} refreshSeconds omitted, or 0, leaves the engine's own default
+     * @param {string} shellId
      * @returns {string}
      */
     function monitorCommand(source, refreshSeconds, shellId) {

@@ -37,6 +37,20 @@
         <LinkerArg Include="/Brepro" />
     </ItemGroup>
 
+    <!-- ILC compiles with one thread per core by default, and the order it emits some
+         symbols follows the order those threads finish. Two runners on one image then
+         produce binaries differing by a few bytes in an indirection table, which the
+         release workflow's byte-for-byte check rejects. Measured on osx-arm64: a
+         parallel and a single-threaded build of one commit differ by 82 bytes, and the
+         two release candidates differed by 83, sixteen of them the LC_UUID the linker
+         derives from that content and the rest the ad-hoc signature over it. Applied to
+         every RID rather than the one that failed: the cause is not platform specific,
+         so the others are stable by luck. The jobs run in parallel, so the slower
+         compile costs the release one job's worth of wall clock, not eight. -->
+    <PropertyGroup>
+        <IlcSingleThreaded>true</IlcSingleThreaded>
+    </PropertyGroup>
+
     <!-- Every endpoint in this manifest carries a Last-Modified read from the mtime of
          the .gz/.br the build regenerates each run, so the file can never be byte stable.
          Nothing reads it: wwwroot is served by UseStaticFiles, which ETags from the file

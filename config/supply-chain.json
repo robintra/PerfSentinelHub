@@ -111,6 +111,15 @@
       "reason": "Latest stable checkout action, pinned to its release commit."
     },
     {
+      "name": "actions/setup-node",
+      "kind": "github-action",
+      "version": "7.0.0",
+      "digest_or_sha": "820762786026740c76f36085b0efc47a31fe5020",
+      "released_at": "2026-07-14T02:46:05Z",
+      "source": "https://github.com/actions/setup-node/releases/tag/v7.0.0",
+      "reason": "Runs the launcher's typecheck and unit tests, the only Node the CI needs."
+    },
+    {
       "name": "actions/setup-dotnet",
       "kind": "github-action",
       "version": "6.0.0",

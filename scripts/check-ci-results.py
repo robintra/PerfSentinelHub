@@ -18,6 +18,7 @@ ALWAYS_REQUIRED = {
 EXPENSIVE = {
     "dependency-review",
     "helm",
+    "launcher-js",
     "native-aot",
     "oci",
     "quality-tests-coverage",

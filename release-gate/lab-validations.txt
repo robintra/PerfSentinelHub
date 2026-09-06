@@ -34,3 +34,16 @@ v0.1.3	0e57121	2026-09-02	PASS
 # local 0.20.1 build, the run having also served to prove its archive permission fix
 # on a real fsGroup volume.
 v0.1.6	dadd839	2026-09-05	PASS
+# v0.1.7 carries the v0.1.6 lab evidence above, on the same lab commit, and
+# runs no pass of its own. Everything this tag adds is presentation or
+# tooling: the finding type reads as a label, the severity and the kind chips
+# take the engine's tones, two CSS spacing fixes on the incidents screen, a
+# types.d.ts with the typecheck its header had promised, and the CI job that
+# runs it. No route, no schema, no stored value moves. No hub-* scenario reads
+# the launcher's rendering: they assert API payloads and stored rows, which is
+# why the lab cannot tell the two builds apart. Worth naming rather than
+# leaving to inference: the v0.1.6 line it leans on is itself a targeted
+# single-scenario pass, hub-incidents-mirror, and the newest full six-scenario
+# hub-* run in this ledger is still the v0.1.2 and v0.1.3 one on lab commit
+# 0e57121.
+v0.1.7	dadd839	2026-09-06	PASS

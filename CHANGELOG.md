@@ -108,16 +108,18 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
-- The image ships perf-sentinel `0.20.1` as its analysis engine, repinned by digest from
+- The image ships perf-sentinel `0.20.2` as its analysis engine, repinned by digest from
   `0.19.0`. That is the binary the Hub runs for a backend analysis, so a run gets the
   0.20 detectors, and it is also the version the launcher compares a polled daemon's
   `producer_version` against, so a fleet still on `0.19.0` now reads one minor behind
   where it read level. The engine is copied from the published image rather than
   downloaded, so the build reaches no host outside the registry, and
-  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The `0.20.1`
-  patch it lands on repairs a daemon that would not restart once a Kubernetes `fsGroup`
-  had weakened its incident archive, which the Hub never meets in a backend analysis
-  since it runs the binary as a subprocess, but which a daemon this Hub polls does.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. Two patches
+  land with it. `0.20.1` repairs a daemon that would not restart once a Kubernetes
+  `fsGroup` had weakened its incident archive, which the Hub never meets in a backend
+  analysis since it runs the binary as a subprocess, but which a daemon this Hub polls
+  does. `0.20.2` stops the report's detail cards hiding a long endpoint behind an
+  ellipsis, which the Hub does meet: a backend analysis renders that report.
 
 ### Documentation
 

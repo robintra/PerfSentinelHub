@@ -116,7 +116,7 @@
         "last_attempt_ms": 1756511999000,
         "last_success_ms": 1756511999000,
         "unreachable_since_ms": null,
-        "producer_version": "0.20.0",
+        "producer_version": "0.20.2",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41400",
         "engine_subcommand": null,
@@ -199,23 +199,6 @@
     ],
     "/api/analyses?limit=500": [
       {
-        "id": "0000000000000003",
-        "status": "failed",
-        "source_id": "search-prod",
-        "source_name": "Search production",
-        "environment": "production",
-        "kind": "daemon",
-        "request": {},
-        "requested_by": "unknown",
-        "created_at_ms": 1756511999000,
-        "started_at_ms": 1756512000000,
-        "finished_at_ms": 1756512000000,
-        "expires_at_ms": null,
-        "producer_version": null,
-        "error_code": "source_unreachable",
-        "result": null
-      },
-      {
         "id": "0000000000000004",
         "status": "failed",
         "source_id": "tempo-eu",
@@ -234,6 +217,23 @@
         "expires_at_ms": null,
         "producer_version": null,
         "error_code": "source_rejected_request",
+        "result": null
+      },
+      {
+        "id": "0000000000000003",
+        "status": "failed",
+        "source_id": "search-prod",
+        "source_name": "Search production",
+        "environment": "production",
+        "kind": "daemon",
+        "request": {},
+        "requested_by": "unknown",
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": null,
+        "producer_version": null,
+        "error_code": "source_unreachable",
         "result": null
       },
       {
@@ -408,7 +408,7 @@
       "observed_at_ms": 1756512000000,
       "state": "near_capacity",
       "error_code": null,
-      "version": "0.20.0",
+      "version": "0.20.2",
       "uptime_seconds": 888120,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -754,13 +754,13 @@
         "detail": "node under memory pressure, pod evicted",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511875000,
+        "oldest_finding_ms": 1756511876000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
-        "first_seen": 1788697479546,
-        "last_seen": 1788697479546,
+        "first_seen": 1788724218968,
+        "last_seen": 1788724218968,
         "finding_count": 1,
         "capture": "partial"
       },
@@ -773,13 +773,13 @@
         "detail": "pod restarted by the kubelet",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511875000,
+        "oldest_finding_ms": 1756511876000,
         "ended_at_ms": 1756511920000,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
-        "first_seen": 1788697479546,
-        "last_seen": 1788697479546,
+        "first_seen": 1788724218968,
+        "last_seen": 1788724218968,
         "finding_count": 1,
         "capture": "partial"
       },
@@ -792,13 +792,13 @@
         "detail": "container exceeded its memory limit",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511871000,
+        "oldest_finding_ms": 1756511872000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
         "environment": "production",
-        "first_seen": 1788697479541,
-        "last_seen": 1788697479541,
+        "first_seen": 1788724218963,
+        "last_seen": 1788724218963,
         "finding_count": 1,
         "capture": "complete"
       },
@@ -811,13 +811,13 @@
         "detail": "working set at 94 percent of the limit",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511871000,
+        "oldest_finding_ms": 1756511872000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
         "environment": "production",
-        "first_seen": 1788697479541,
-        "last_seen": 1788697479541,
+        "first_seen": 1788724218963,
+        "last_seen": 1788724218963,
         "finding_count": 1,
         "capture": "complete"
       },
@@ -826,16 +826,16 @@
         "service": "gateway-svc",
         "namespace": "edge",
         "kind": "deploy",
-        "at_ms": 1756511869000,
+        "at_ms": 1756511870000,
         "detail": "rollout 4f21c8 reached every replica",
-        "window_from_ms": 1756511866000,
-        "window_to_ms": 1756511871000,
+        "window_from_ms": 1756511867000,
+        "window_to_ms": 1756511872000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
-        "first_seen": 1788697479546,
-        "last_seen": 1788697479546,
+        "first_seen": 1788724218968,
+        "last_seen": 1788724218968,
         "finding_count": 0,
         "capture": "empty"
       }
@@ -848,7 +848,7 @@
       "detail": "node under memory pressure, pod evicted",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511875000,
+      "oldest_finding_ms": 1756511876000,
       "findings": [
         {
           "finding": {
@@ -877,8 +877,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
           },
-          "stored_at_ms": 1756511875000,
-          "first_seen_ms": 1756511875000,
+          "stored_at_ms": 1756511876000,
+          "first_seen_ms": 1756511876000,
           "seen_count": 1
         }
       ],
@@ -886,8 +886,8 @@
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
-      "first_seen": 1788697479546,
-      "last_seen": 1788697479546,
+      "first_seen": 1788724218968,
+      "last_seen": 1788724218968,
       "finding_count": 1,
       "capture": "partial"
     },
@@ -900,7 +900,7 @@
       "detail": "pod restarted by the kubelet",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511875000,
+      "oldest_finding_ms": 1756511876000,
       "findings": [
         {
           "finding": {
@@ -929,8 +929,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
           },
-          "stored_at_ms": 1756511875000,
-          "first_seen_ms": 1756511875000,
+          "stored_at_ms": 1756511876000,
+          "first_seen_ms": 1756511876000,
           "seen_count": 1
         }
       ],
@@ -938,8 +938,8 @@
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
-      "first_seen": 1788697479546,
-      "last_seen": 1788697479546,
+      "first_seen": 1788724218968,
+      "last_seen": 1788724218968,
       "finding_count": 1,
       "capture": "partial"
     },
@@ -952,7 +952,7 @@
       "detail": "container exceeded its memory limit",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511871000,
+      "oldest_finding_ms": 1756511872000,
       "findings": [
         {
           "finding": {
@@ -990,8 +990,8 @@
       "source_id": "checkout-prod",
       "source_name": "Checkout production",
       "environment": "production",
-      "first_seen": 1788697479541,
-      "last_seen": 1788697479541,
+      "first_seen": 1788724218963,
+      "last_seen": 1788724218963,
       "finding_count": 1,
       "capture": "complete"
     },
@@ -1004,7 +1004,7 @@
       "detail": "working set at 94 percent of the limit",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511871000,
+      "oldest_finding_ms": 1756511872000,
       "findings": [
         {
           "finding": {
@@ -1042,8 +1042,8 @@
       "source_id": "checkout-prod",
       "source_name": "Checkout production",
       "environment": "production",
-      "first_seen": 1788697479541,
-      "last_seen": 1788697479541,
+      "first_seen": 1788724218963,
+      "last_seen": 1788724218963,
       "finding_count": 1,
       "capture": "complete"
     },
@@ -1052,17 +1052,17 @@
       "service": "gateway-svc",
       "namespace": "edge",
       "kind": "deploy",
-      "at_ms": 1756511869000,
+      "at_ms": 1756511870000,
       "detail": "rollout 4f21c8 reached every replica",
-      "window_from_ms": 1756511866000,
-      "window_to_ms": 1756511871000,
+      "window_from_ms": 1756511867000,
+      "window_to_ms": 1756511872000,
       "findings": [],
       "ended_at_ms": null,
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
-      "first_seen": 1788697479546,
-      "last_seen": 1788697479546,
+      "first_seen": 1788724218968,
+      "last_seen": 1788724218968,
       "finding_count": 0,
       "capture": "empty"
     }

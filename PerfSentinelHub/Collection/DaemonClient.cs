@@ -25,7 +25,7 @@ public sealed record DaemonStatus(
 
 public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> options)
 {
-    internal const int MaxBodyBytes = 16 * 1024 * 1024;
+    private const int MaxBodyBytes = 16 * 1024 * 1024;
     private const int ConfigMaxBytes = 64 * 1024;
 
     // Smaller than the findings cap on purpose, four polls may run at once. A

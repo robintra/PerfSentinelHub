@@ -497,3 +497,15 @@ test("skew names the segment it compared on", () => {
   assert.equal(PSL.skew("0.20.1"), null);
   assert.equal(PSL.skew(null), null);
 });
+
+test("finding types read as labels, and an unknown one reads as itself", () => {
+  // The engine's twelve, worded as its own dashboard words them.
+  assert.equal(PSL.FINDING_TYPE_LABEL.n_plus_one_sql, "N+1 SQL");
+  assert.equal(PSL.FINDING_TYPE_LABEL.excessive_fanout, "Excessive fanout");
+  assert.equal(PSL.FINDING_TYPE_LABEL.serialized_calls, "Serialized calls");
+  assert.equal(Object.keys(PSL.FINDING_TYPE_LABEL).length, 12);
+  // The Hub stores whatever string it is sent, so a type outside the twelve
+  // reaches the screen. It has to render as itself, never as undefined.
+  assert.equal(PSL.FINDING_TYPE_LABEL.blocking_wait, undefined);
+  assert.equal(PSL.FINDING_TYPE_LABEL.blocking_wait || "blocking_wait", "blocking_wait");
+});

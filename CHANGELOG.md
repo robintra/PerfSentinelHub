@@ -2,6 +2,12 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The findings a mirrored incident froze read as labels rather than as wire values. The type column printed the engine's identifier verbatim, so a row announced `n_plus_one_sql` where the engine's own dashboard says `N+1 SQL`, and the severity sat in the same grey chip whatever it said. The twelve types now carry the wording the dashboard uses, and the severity chip takes the engine's three tones from the `--crit`, `--warn` and `--info` variables this Hub already mirrors, so a critical row is legible before it is read. The mapping is display only: `finding_type` stays a stored column, an index key and a public parameter of `GET /api/findings`, and the raw string is what the API still filters on. A type outside the twelve renders as itself rather than as a blank, since the Hub accepts any string on ingest and a newer engine can send one it has never heard of.
+
 ## [0.1.6] - 2026-09-05
 
 ### Added

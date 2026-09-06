@@ -839,6 +839,7 @@
      * thirteenth type, and it belongs on screen as itself.
      * @type {Record<string, string>}
      */
+    // Throwaway edit to exercise the launcher-js job. Revert before merging.
     const FINDING_TYPE_LABEL = {
         n_plus_one_sql: "N+1 SQL",
         n_plus_one_http: "N+1 HTTP",

@@ -140,10 +140,10 @@
     {
       "name": "docker/setup-qemu-action",
       "kind": "github-action",
-      "version": "4.2.0",
-      "digest_or_sha": "96fe6ef7f33517b61c61be40b68a1882f3264fb8",
-      "released_at": "2026-07-01T12:04:56Z",
-      "source": "https://github.com/docker/setup-qemu-action/releases/tag/v4.2.0",
+      "version": "4.3.0",
+      "digest_or_sha": "1f40c72289eff860ee54a304f1438e3cff362e0a",
+      "released_at": "2026-09-01T10:40:59Z",
+      "source": "https://github.com/docker/setup-qemu-action/releases/tag/v4.3.0",
       "reason": "Latest stable Docker QEMU setup action, pinned to its release commit."
     },
     {
@@ -203,10 +203,10 @@
     {
       "name": "step-security/harden-runner",
       "kind": "github-action",
-      "version": "2.21.0",
-      "digest_or_sha": "05e31511f85b41b11d1cf0ef85d0992719546e2c",
-      "released_at": "2026-08-15T05:52:25Z",
-      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.21.0",
+      "version": "2.21.1",
+      "digest_or_sha": "e14015d583714f6e62063499dc959a02595150a1",
+      "released_at": "2026-08-30T23:29:47Z",
+      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.21.1",
       "reason": "Latest stable Harden-Runner release."
     },
     {

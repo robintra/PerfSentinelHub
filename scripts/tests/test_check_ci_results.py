@@ -299,7 +299,8 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertEqual(ALL_JOBS, names)
 
     def test_every_job_has_explicit_permissions_timeout_and_hardening_first(self):
-        harden_sha = "05e31511f85b41b11d1cf0ef85d0992719546e2c"
+        inventory = json.loads((ROOT / "config" / "supply-chain.json").read_text(encoding="utf-8"))["inventory"]
+        harden_sha = next(item["digest_or_sha"] for item in inventory if item["name"] == "step-security/harden-runner")
         for name in ALL_JOBS:
             with self.subTest(job=name):
                 body = job_body(name)

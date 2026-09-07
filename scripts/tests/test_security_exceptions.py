@@ -287,7 +287,7 @@ class SecurityWorkflowContractTests(unittest.TestCase):
         # cannot grow without a second, deliberate edit.
         expected = {
             ("SQLite", "3.53.4", "NuGet"): ("override", ["blessing"]),
-            ("Microsoft.Testing.Extensions.CodeCoverage", "18.10.0", "NuGet"): (
+            ("Microsoft.Testing.Extensions.CodeCoverage", "18.11.0", "NuGet"): (
                 "ignore",
                 True,
             ),

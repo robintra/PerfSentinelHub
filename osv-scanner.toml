@@ -10,7 +10,7 @@ reason = "SQLite is distributed under the SPDX-listed SQLite Blessing."
 # rewritten to something it is not: the scan simply skips it.
 [[PackageOverrides]]
 name = "Microsoft.Testing.Extensions.CodeCoverage"
-version = "18.10.0"
+version = "18.11.0"
 ecosystem = "NuGet"
 license.ignore = true
 reason = """Ships under MICROSOFT SOFTWARE LICENSE TERMS (Microsoft .NET Library) \

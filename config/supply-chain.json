@@ -95,10 +95,10 @@
     {
       "name": "dotnet-sonarscanner",
       "kind": "dotnet-tool",
-      "version": "11.2.1",
-      "digest_or_sha": "sha512-base64:GGLhuNOiN4XdQkrFCd0AXLW4qoc3AjYcxGZxsqmn5Lvys/Bso18y64m0tIFGSb4uAEvVSMAqjz3P6vXBGI2tFg==",
-      "released_at": "2026-04-02T13:11:28.497Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/11.2.1.json",
+      "version": "11.3.0",
+      "digest_or_sha": "sha512-base64:abta3b09UTqrrdpITMmk7uyUFDDcvmihpZukz59zyb6zyS3RpRnPDY4T7yIP+DAObhLB0LUF7vG9UTUua3cLlA==",
+      "released_at": "2026-09-02T09:44:15.947Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/11.3.0.json",
       "reason": "Latest stable Sonar .NET scanner tool."
     },
     {
@@ -437,21 +437,21 @@
     {
       "name": "Microsoft.Testing.Extensions.CodeCoverage",
       "kind": "nuget",
-      "version": "18.10.0",
-      "digest_or_sha": "sha512-base64:AQUZq4ntiw5Nj35Vqd/2xLBR3b7YQsXGVyxgGJVlTZogP8DPML+tpkWDi0rqh7WmTZLcx3sGyPkBHJGcWlCbzQ==",
-      "lock_content_hash": "elUX4tKloHh2VCxagbmhV1039xBuE3lKXITtt/hUYU286hl+ja8poOUsF9OnevKoFKt7+p9vLb1LqqW7rFGi9Q==",
-      "released_at": "2026-08-12T17:01:25.7Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.10.0.json",
+      "version": "18.11.0",
+      "digest_or_sha": "sha512-base64:FSDLFVb9GgTc00XLWdub+Qeg4IX9jj/x7WhgqoKddIOmxodBe01/2TTAngCYQnzxURIVFcTdXsQUVnBwtKO9eA==",
+      "lock_content_hash": "Kqzpt/I7tmXn5qudrmMj4GMGNuFOtN591KqSOTB+rPfWXS/l3I9o742YKiqagQuXzmydX+6BiI9yINZu05vmxA==",
+      "released_at": "2026-09-02T17:52:35.927Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.11.0.json",
       "reason": "Coverage collector for Microsoft.Testing.Platform, replacing the VSTest coverlet collector."
     },
     {
       "name": "Microsoft.Testing.Extensions.TrxReport",
       "kind": "nuget",
-      "version": "2.3.3",
-      "digest_or_sha": "sha512-base64:VlP6H4wII1oZ3zbHMxKCewH3YRroUbLrugdbXYKzbmUAB1igWFG3W9Edl1GpGiWSPoNaPuTDLjAevhvZtivofw==",
-      "lock_content_hash": "vYBqGSlT94B8d6d4PRdPQ83ogn3kK4kXcnI3SlHBHZu1XsU01IDTMnWoto5v5wXN/Mz4XsVM3Do/sJdGRgH29g==",
-      "released_at": "2026-07-28T07:32:41.38Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.3.3.json",
+      "version": "2.4.0",
+      "digest_or_sha": "sha512-base64:aFPJTJOyRXMNRNVSyQSKdW4v74NohLBbdQQyWW7WtS1CYKQqIt/rn181Mr5tcGP5iKvbaA/tP8uaXsO5gNtAUQ==",
+      "lock_content_hash": "WkOaIp/ivwcaF34rmUAIjafnWJ/chI/2hvH/wLQlLXKNDDvaRYvjkxWC7l0+Ib+C4dGrylUonM4kHwJujlkVKw==",
+      "released_at": "2026-09-02T20:59:50.67Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.4.0.json",
       "reason": "TRX reporter for Microsoft.Testing.Platform, feeding sonar.cs.vstest.reportsPaths."
     }
   ]

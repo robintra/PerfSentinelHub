@@ -12,15 +12,16 @@ All notable changes to PerfSentinelHub are recorded here.
   still on `0.20.2` now reads one minor behind where it read level. The engine is copied
   from the published image rather than downloaded, so the build reaches no host outside
   the registry, and `config/supply-chain.json` carries the same digest as the
-  `Dockerfile`. What the release adds is a findings listing that filters on `grouping`
-  and pages past its 1000-row cap, which the Hub does not call: it reads a daemon
-  through `GET /api/findings` with `service` and `since_ms`, and mirrors incidents
-  through `GET /api/incidents`, none of which changes shape. Two things it does meet.
-  An empty filter value now means no filter where it was an exact match on the empty
-  string, so a Hub source configured with a blank service would list everything instead
-  of nothing, and a `serialized_calls` suggestion names three templates instead of every
-  call of the sequence, which shortens what a backend analysis renders and stores for
-  that finding type.
+  `Dockerfile`. The release adds `grouping` and `offset` to the findings listing, and
+  the Hub sends neither: it polls `GET /api/findings?limit=1000&include_acked=true`,
+  with no filter at all, and mirrors incidents through `GET /api/incidents`, where it
+  already pages with `offset`. That `limit=1000` is the daemon's own cap, so a source
+  whose distinct signatures outgrow it is truncated for the Hub, and `offset` is now
+  the way to read past it. Nothing here does that yet. What this engine does change for
+  the Hub is a `serialized_calls` suggestion that names three templates instead of
+  every call of the sequence, which shortens what a backend analysis renders and stores
+  for that finding type, and a folded read that clones only the page it returns, which
+  is the read every poll makes.
 
 ## [0.1.7] - 2026-09-06
 

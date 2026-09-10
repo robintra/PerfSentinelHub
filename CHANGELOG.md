@@ -2,6 +2,26 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.1.8] - 2026-09-10
+
+### Changed
+
+- The image ships perf-sentinel `0.21.0` as its analysis engine, repinned by digest from
+  `0.20.2`. That is the binary the Hub runs for a backend analysis, and it is also the
+  version the launcher compares a polled daemon's `producer_version` against, so a fleet
+  still on `0.20.2` now reads one minor behind where it read level. The engine is copied
+  from the published image rather than downloaded, so the build reaches no host outside
+  the registry, and `config/supply-chain.json` carries the same digest as the
+  `Dockerfile`. What the release adds is a findings listing that filters on `grouping`
+  and pages past its 1000-row cap, which the Hub does not call: it reads a daemon
+  through `GET /api/findings` with `service` and `since_ms`, and mirrors incidents
+  through `GET /api/incidents`, none of which changes shape. Two things it does meet.
+  An empty filter value now means no filter where it was an exact match on the empty
+  string, so a Hub source configured with a blank service would list everything instead
+  of nothing, and a `serialized_calls` suggestion names three templates instead of every
+  call of the sequence, which shortens what a backend analysis renders and stores for
+  that finding type.
+
 ## [0.1.7] - 2026-09-06
 
 ### Fixed

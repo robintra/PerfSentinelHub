@@ -9,6 +9,8 @@ namespace PerfSentinelHub.Api;
 /// </summary>
 internal static class JsonRead
 {
+    private const long MinPlausibleEpochMs = 1_000_000_000_000;
+
     /// <summary>One JSON value detached from its document, so the pooled buffer goes back.</summary>
     public static JsonElement Literal(string json)
     {
@@ -29,6 +31,18 @@ internal static class JsonRead
                value.ValueKind == JsonValueKind.Number &&
                value.TryGetInt64(out var number)
             ? number
+            : null;
+    }
+
+    /// <summary>
+    ///     A Unix-ms timestamp, or null when it is missing, unreadable, or older than the
+    ///     sanity floor (2001-09-09): that rejects seconds-unit bugs and pre-epoch garbage
+    ///     which would poison the irreversible MIN(first_seen_ms).
+    /// </summary>
+    public static long? ReadEpochMs(JsonElement element, string name)
+    {
+        return ReadLong(element, name) is { } value and >= MinPlausibleEpochMs
+            ? value
             : null;
     }
 }

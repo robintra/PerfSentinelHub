@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using PerfSentinelHub.Api;
 
 namespace PerfSentinelHub.Collection;
 
@@ -28,10 +29,6 @@ public sealed record ParsedFinding(
 // ReSharper disable ConvertIfStatementToReturnStatement
 public static class FindingParser
 {
-    // Unix-ms sanity floor (2001-09-09). Rejects seconds-unit bugs and
-    // pre-epoch garbage that would poison the irreversible MIN(first_seen_ms).
-    private const long MinPlausibleEpochMs = 1_000_000_000_000;
-
     public static ParsedBatch Parse(ReadOnlyMemory<byte> payload)
     {
         JsonDocument document;
@@ -131,18 +128,8 @@ public static class FindingParser
             traceId,
             confidence,
             ConfidenceRank(confidence),
-            TryEpochMs(envelope, "first_seen_ms"));
+            JsonRead.ReadEpochMs(envelope, "first_seen_ms"));
         return true;
-    }
-
-    private static long? TryEpochMs(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var property) &&
-               property.ValueKind == JsonValueKind.Number &&
-               property.TryGetInt64(out var value) &&
-               value >= MinPlausibleEpochMs
-            ? value
-            : null;
     }
 
     private static bool TryString(JsonElement element, string propertyName, out string value)

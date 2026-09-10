@@ -30,9 +30,6 @@ public sealed record ParsedIncidentPage(IReadOnlyList<ParsedIncident> Incidents,
 
 public static class IncidentParser
 {
-    // Unix-ms sanity floor (2001-09-09), the same one the finding parser applies.
-    private const long MinPlausibleEpochMs = 1_000_000_000_000;
-
     /// <summary>
     ///     The daemon's closed set of kinds. Anything else folds to `other`, as
     ///     the daemon itself does, so a label can never carry a free string.
@@ -75,9 +72,9 @@ public static class IncidentParser
             JsonRead.ReadString(element, "id") is not { } id ||
             !IsIncidentId(id) ||
             JsonRead.ReadString(element, "service") is not { Length: > 0 } service ||
-            TryEpochMs(element, "at_ms") is not { } atMs ||
-            TryEpochMs(element, "window_from_ms") is not { } windowFromMs ||
-            TryEpochMs(element, "window_to_ms") is not { } windowToMs ||
+            JsonRead.ReadEpochMs(element, "at_ms") is not { } atMs ||
+            JsonRead.ReadEpochMs(element, "window_from_ms") is not { } windowFromMs ||
+            JsonRead.ReadEpochMs(element, "window_to_ms") is not { } windowToMs ||
             !element.TryGetProperty("findings", out var findings) ||
             findings.ValueKind != JsonValueKind.Array)
             return false;
@@ -87,10 +84,10 @@ public static class IncidentParser
             service,
             FoldKind(element),
             atMs,
-            TryEpochMs(element, "ended_at_ms"),
+            JsonRead.ReadEpochMs(element, "ended_at_ms"),
             windowFromMs,
             windowToMs,
-            TryEpochMs(element, "oldest_finding_ms"),
+            JsonRead.ReadEpochMs(element, "oldest_finding_ms"),
             findings.GetArrayLength(),
             WithoutFindings(element),
             findings.GetRawText());
@@ -122,12 +119,5 @@ public static class IncidentParser
     {
         var kind = JsonRead.ReadString(element, "kind");
         return kind is not null && Array.IndexOf(Kinds, kind) >= 0 ? kind : "other";
-    }
-
-    private static long? TryEpochMs(JsonElement element, string propertyName)
-    {
-        return JsonRead.ReadLong(element, propertyName) is { } value && value >= MinPlausibleEpochMs
-            ? value
-            : null;
     }
 }

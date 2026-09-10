@@ -47,3 +47,18 @@ v0.1.6	dadd839	2026-09-05	PASS
 # hub-* run in this ledger is still the v0.1.2 and v0.1.3 one on lab commit
 # 0e57121.
 v0.1.7	dadd839	2026-09-06	PASS
+# v0.1.8 is the first full six-scenario hub-* run in this ledger since v0.1.2
+# and v0.1.3: hub-ingestion, hub-derived-status, hub-lineage-mutation,
+# hub-retention-purge, hub-plugin-contract and hub-source-reachability all
+# green, plus hub-incidents-mirror, inside the perf-sentinel v0.21.0 lab pass
+# on lab commit 070998a. The Hub was built by seed-hub-local from ddd4093,
+# this tag's parent, and polled a daemon running the 0.21.0 engine, which is
+# what the tag is about: it repins the embedded engine from 0.20.2 to 0.21.0.
+# Two reservations, since the run predates the tag. The image the scenarios
+# exercised still carried the 0.20.2 engine binary, so what is proven is the
+# Hub against a 0.21.0 daemon, not the 0.21.0 binary run as a subprocess by a
+# backend analysis. And the three hub-* scenarios that build an isolated pair
+# failed first on ErrImageNeverPull, seed-hub-local not having been run yet,
+# then passed on rerun once it had, which is a lab prerequisite rather than a
+# Hub defect.
+v0.1.8	070998a	2026-09-10	PASS

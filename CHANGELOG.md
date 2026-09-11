@@ -2,6 +2,31 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.22.1` as its analysis engine, repinned by digest from
+  `0.21.0`. That is the binary the Hub runs for a backend analysis, and it is also the
+  version the launcher compares a polled daemon's `producer_version` against, so a fleet
+  still on `0.21.0` now reads one patch and one minor behind where it read level. The
+  engine is copied from the published image rather than downloaded, so the build reaches
+  no host outside the registry, and `config/supply-chain.json` carries the same digest as
+  the `Dockerfile`.
+
+  Two engine releases are behind this pin and neither changes what the Hub does.
+  `0.22.0` lets every key-gated daemon route take `Authorization: Bearer` beside
+  `X-API-Key`, which widens what a deployment can send without touching the Hub: it keeps
+  sending the single header value `AuthHeaderValue` holds, and that header still decides
+  on its own. The same release ships ready-made alert rules and receivers for both
+  Kubernetes operators, which feed `POST /api/incidents` on the daemon and reach the Hub
+  only as incidents it already mirrors. `0.22.1` moves the daemon's blocking file
+  operations off its runtime workers, so a daemon on a slow disk keeps answering the
+  polls this Hub sends, and nothing it writes changes shape.
+
+  No detection knob is added by either release, so `DetectionOverrides` is untouched and
+  the launcher still gates `sanitizer_aware_min_cv` alone, on engines `0.18.0` or later.
+
 ## [0.1.8] - 2026-09-10
 
 ### Changed

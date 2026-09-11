@@ -37,6 +37,21 @@
         <LinkerArg Include="/Brepro" />
     </ItemGroup>
 
+    <!-- ld allocates two interchangeable __got slots for _objc_msgSend, one for the
+         classic __stubs path and one for the __objc_stubs it synthesizes, and which
+         consumer gets which slot is unstable across runs. Measured on the two v0.1.9
+         release candidates: everything ILC emits is byte-identical, __text,
+         __managedcode, __const, the __got itself and the whole symbol table, and the
+         only three differing bytes are the imm12 of `ldr x16, [x16, #off]` in __stubs
+         and __objc_stubs, choosing 0x820 against 0x828. The other 111 bytes follow
+         mechanically: ld derives LC_UUID from the content, and the linker-signed ad-hoc
+         CodeDirectory hashes the pages that moved. -objc_stubs_small collapses the
+         duplicate, so the choice disappears. IlcSingleThreaded below fixed a different
+         incident and is working, it simply never reaches the linker. -->
+    <ItemGroup Condition="'$(RuntimeIdentifier)' != '' and $(RuntimeIdentifier.StartsWith('osx'))">
+        <ExtraLinkerArg Include="-objc_stubs_small" />
+    </ItemGroup>
+
     <!-- ILC compiles with one thread per core by default, and the order it emits some
          symbols follows the order those threads finish. Two runners on one image then
          produce binaries differing by a few bytes in an indirection table, which the

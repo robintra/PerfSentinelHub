@@ -4,6 +4,28 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [0.1.9] - 2026-09-11
 
+### Fixed
+
+- The `osx-arm64` native binary is reproducible again. The release workflow builds every
+  binary twice and compares the two byte for byte, and that gate had been failing
+  intermittently on this one RID, taking the whole release down with it: v0.1.7 failed it
+  twice before passing on a fresh run, and v0.1.9 failed it outright.
+
+  The cause is in the linker, not in the compiler. Everything ILC emits is byte-identical
+  between two builds of one commit: `__text`, `__managedcode`, `__const`, the `__got`
+  itself and the entire symbol table. `ld` allocates two interchangeable `__got` slots for
+  `_objc_msgSend`, one for the classic `__stubs` path and one for the `__objc_stubs` it
+  synthesizes, and which consumer gets which slot is unstable across runs. That is three
+  bytes, the `imm12` of `ldr x16, [x16, #off]` picking `0x820` against `0x828`. The other
+  111 bytes of the 114 that differed follow mechanically, since `ld` derives `LC_UUID`
+  from the content and the linker-signed ad-hoc `CodeDirectory` hashes the pages that
+  moved. Passing `-objc_stubs_small` collapses the duplicate slot, so there is nothing
+  left to choose. Measured after the change: the duplicate is gone from the indirect
+  symbol table, and two consecutive local builds are byte-identical.
+
+  `IlcSingleThreaded`, added in v0.1.7 for an earlier and different incident, was working
+  the whole time. It simply never reaches the linker.
+
 ### Changed
 
 - The image ships perf-sentinel `0.22.1` as its analysis engine, repinned by digest from

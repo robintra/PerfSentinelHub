@@ -26,7 +26,7 @@ envelopes stay read-compatible for 180 days by default.
 
 ## Run locally in five minutes
 
-Requirements: .NET SDK 10.0.400 and a reachable perf-sentinel daemon.
+Requirements: .NET SDK 10.0.401 and a reachable perf-sentinel daemon.
 
 ```bash
 Hub__DatabasePath=/tmp/perf-sentinel-hub.db \

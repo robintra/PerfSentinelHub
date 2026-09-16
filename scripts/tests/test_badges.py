@@ -62,7 +62,7 @@ def write_root(
     (workflows / "ci.yml").write_text(
         f"name: CI\nsonar.projectKey={CHECKER_MODULE.SONAR_KEY}\n", encoding="utf-8"
     )
-    (root / "global.json").write_text('{"sdk": {"version": "10.0.400"}}\n', encoding="utf-8")
+    (root / "global.json").write_text('{"sdk": {"version": "10.0.401"}}\n', encoding="utf-8")
     (root / "LICENSE").write_text(license_text, encoding="utf-8")
     (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
     (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")

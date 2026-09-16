@@ -63,7 +63,7 @@ avant ou après le redémarrage gardent les distances mesurées par le daemon.
 cherche un dépôt `perf-sentinel` voisin avec une compilation release, ou prend
 `HUB_ENGINE_BINARY`.
 
-**Le SDK épinglé.** `global.json` épingle 10.0.400 en `rollForward: disable`,
+**Le SDK épinglé.** `global.json` épingle 10.0.401 en `rollForward: disable`,
 qui n'est en général pas le `dotnet` du `PATH`. La mise en place appelle
 `/usr/local/share/dotnet/dotnet` par son nom quand il est présent, plutôt que de
 placer ce répertoire devant le `PATH` : l'ordre de recherche décide mal quelle

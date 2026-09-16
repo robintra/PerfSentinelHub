@@ -4,7 +4,7 @@ Thank you for contributing. Keep changes focused, preserve the AGPL-3.0-only lic
 
 ## Before you start
 
-Use .NET SDK 10.0.400, Python 3, Docker, Helm 4, and the security tools used by the relevant Make targets. Package restores are locked. Do not edit generated `bin`, `obj`, coverage, or release output.
+Use .NET SDK 10.0.401, Python 3, Docker, Helm 4, and the security tools used by the relevant Make targets. Package restores are locked. Do not edit generated `bin`, `obj`, coverage, or release output.
 
 For a defect or behavior change, write a test that demonstrates the failure before changing production code. Run the narrow test during development, then run:
 
@@ -27,7 +27,7 @@ signed tag is created.
 The protected GitHub check is `CI / Gate`, from the dedicated PerfSentinel CI Gate App. A
 GitHub Actions check of the same name does not satisfy that App-backed boundary.
 
-The toolchain is pinned: .NET SDK 10.0.400, ASP.NET and SQLite 10.0.11, SQLitePCLRaw
+The toolchain is pinned: .NET SDK 10.0.401, ASP.NET and SQLite 10.0.12, SQLitePCLRaw
 3.0.5, Helm 4.2.3, and SHA-pinned GitHub Actions (checkout 7.0.1, setup-dotnet 6.0.0,
 setup-helm 5.0.1, Trivy Action 0.36.0). Runtime containers are non-root, read-only, and
 based on digest-pinned official NativeAOT and chiseled images.

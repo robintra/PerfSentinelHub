@@ -26,7 +26,7 @@ enveloppes de findings restent compatibles en lecture pendant 180 jours par déf
 
 ## Démarrer en local en cinq minutes
 
-Prérequis : le SDK .NET 10.0.400 et un daemon perf-sentinel joignable.
+Prérequis : le SDK .NET 10.0.401 et un daemon perf-sentinel joignable.
 
 ```bash
 Hub__DatabasePath=/tmp/perf-sentinel-hub.db \

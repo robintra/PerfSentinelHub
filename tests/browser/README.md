@@ -59,7 +59,7 @@ the before-or-after-the-restart reading keep the distances the daemon measured.
 for a sibling `perf-sentinel` checkout with a release build, or takes
 `HUB_ENGINE_BINARY`.
 
-**The pinned SDK.** `global.json` pins 10.0.400 with `rollForward: disable`,
+**The pinned SDK.** `global.json` pins 10.0.401 with `rollForward: disable`,
 which is usually not the `dotnet` on `PATH`. The setup runs
 `/usr/local/share/dotnet/dotnet` by name when it is there, rather than putting
 that directory in front of `PATH`: search order is a poor way to decide which

@@ -50,6 +50,16 @@ All notable changes to PerfSentinelHub are recorded here.
   No detection knob is added by this release, so `DetectionOverrides` is untouched and the
   launcher still gates `sanitizer_aware_min_cv` alone, on engines `0.18.0` or later.
 
+- The toolchain moves to .NET 10.0.12, which is one release rather than a set of bumps:
+  the build image to `sdk:10.0.401-noble-aot`, the runtime image to
+  `runtime-deps:10.0.12-noble-chiseled-extra`, and `global.json` to SDK `10.0.401` with it.
+  The SDK decides the NativeAOT toolchain, so `Microsoft.DotNet.ILCompiler` and
+  `Microsoft.NET.ILLink.Tasks` follow to `10.0.12` in the lock across all five runtime
+  identifiers. They carry no explicit version, which is why the lock has to be regenerated
+  by the new SDK rather than edited. `Microsoft.AspNetCore.Mvc.Testing` and
+  `Microsoft.Data.Sqlite` were already on `10.0.12`, so this realigns the images and the
+  compiler with the packages rather than moving them.
+
 ## [0.1.9] - 2026-09-11
 
 ### Fixed

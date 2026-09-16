@@ -275,10 +275,10 @@
     {
       "name": "github/codeql-action",
       "kind": "github-action",
-      "version": "4.37.9",
-      "digest_or_sha": "cdf488f595d80d6e07e03d4674febd5ab45fa938",
-      "released_at": "2026-08-26T14:41:23Z",
-      "source": "https://github.com/github/codeql-action/releases/tag/v4.37.9",
+      "version": "4.38.0",
+      "digest_or_sha": "b96794f015dfd88f77b49b1c93e0fa7110f94c63",
+      "released_at": "2026-09-09T14:04:03Z",
+      "source": "https://github.com/github/codeql-action/releases/tag/v4.38.0",
       "reason": "Latest stable CodeQL action release."
     },
     {

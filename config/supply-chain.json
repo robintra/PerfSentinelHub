@@ -76,11 +76,11 @@
     {
       "name": "xunit.v3",
       "kind": "nuget",
-      "version": "4.0.0",
-      "digest_or_sha": "sha512-base64:9IJcyGm2SDTKtPIQGaqGw9W1xE4MHjXKuakxh8Q2nDJtqLTuEYv66H1UY3PA/3wD+vb6WIemJVrP+loLkxXXKQ==",
-      "lock_content_hash": "czH4MaZ2k2eLjetuN5W1fUEnNVADsTOeYxDvrqIFh04XO6H3Y8Yu1FrSy3psF1q06DZV33wftjqZVv4acwIp9Q==",
-      "released_at": "2026-08-15T01:50:55.493Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.0.json",
+      "version": "4.0.1",
+      "digest_or_sha": "sha512-base64:20X21QzOidd8u+A0gXm8kJmxa622kaQvFJ7f4oCRMznZ0q8dAbXLSyTqSdp2LZc4uQ0tgX8yc2hW/mxnAfY8SQ==",
+      "lock_content_hash": "KpDYf6jFjYfOchuRJOAXPOpwN03hLE1AF4kWzCUSnhr8JZMiGH4BT1YidCcm6BE1H4E90GyJzuKoCwXbg9PXmA==",
+      "released_at": "2026-09-12T19:07:27.03Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.1.json",
       "reason": "Latest stable xUnit v3 meta-package."
     },
     {
@@ -437,11 +437,11 @@
     {
       "name": "Microsoft.Testing.Extensions.CodeCoverage",
       "kind": "nuget",
-      "version": "18.11.0",
-      "digest_or_sha": "sha512-base64:FSDLFVb9GgTc00XLWdub+Qeg4IX9jj/x7WhgqoKddIOmxodBe01/2TTAngCYQnzxURIVFcTdXsQUVnBwtKO9eA==",
-      "lock_content_hash": "Kqzpt/I7tmXn5qudrmMj4GMGNuFOtN591KqSOTB+rPfWXS/l3I9o742YKiqagQuXzmydX+6BiI9yINZu05vmxA==",
-      "released_at": "2026-09-02T17:52:35.927Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.11.0.json",
+      "version": "18.11.2",
+      "digest_or_sha": "sha512-base64:z2q/d2gEGZ4Q7j8BpBBbcPI1DXq3FD6OgQ3jJOK2rFQSmZbz//zzgegeNipe8YBEXuSSYNtegoXFesPLZZik7w==",
+      "lock_content_hash": "bT6awBEUR+fjPpeLAN++4qx5q0sgA9SeJt6QfijnFFPxNSr68BYsYFMQH8L8kY6vMJd3fuvFAFBht4JtWQcWtQ==",
+      "released_at": "2026-09-11T11:49:51.833Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.11.2.json",
       "reason": "Coverage collector for Microsoft.Testing.Platform, replacing the VSTest coverlet collector."
     },
     {

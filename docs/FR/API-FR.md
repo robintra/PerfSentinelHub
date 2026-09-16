@@ -217,6 +217,12 @@ telle mutation à son prédécesseur à l'import, quand exactement un finding st
 - a été vu dans les 30 derniers jours et strictement avant le lot entrant,
 - et n'est pas lui-même déjà supplanté.
 
+Une signature change aussi quand l'**endpoint** change, et ce chemin-là n'est pas relié.
+La règle ci-dessus fige l'endpoint et cherche un template qui a bougé, donc l'inverse, un
+template stable sur un endpoint renommé, ne trouve aucun candidat et le successeur ne
+porte pas de bloc `lineage`. Une montée de version du moteur qui lui apprend à résoudre un
+endpoint qu'il rendait jusque-là en `unknown` produit exactement ce cas.
+
 L'ambiguïté n'enregistre rien, nommer l'un de plusieurs candidats serait une supposition.
 
 Une enveloppe reliée porte un objet `lineage` avec `original_first_seen`, la naissance la

@@ -31,7 +31,8 @@ All notable changes to PerfSentinelHub are recorded here.
   an `endpoint_heartbeats` row on the same endpoint and nothing resolves to `unknown` any
   more, and it ages out on the usual retention. A `first_seen` that restarts is the cost
   of the engine learning where those findings came from, and it is paid once per consumer
-  endpoint per source.
+  endpoint per source. `docs/API.md` and its French mirror now say so under Lineage, which
+  until this release described the template path alone.
 
   One caveat on the same release's route-attribution fix, which stops I/O spans on a
   sibling branch inheriting the outermost route. A finding re-attributed that way lands on

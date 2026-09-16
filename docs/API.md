@@ -204,6 +204,12 @@ predecessor at import time, when exactly one stored finding:
 - was seen within the last 30 days and strictly before the incoming batch,
 - and is not itself already superseded.
 
+A signature also changes when the **endpoint** changes, and that path is not linked. The
+rule above holds the endpoint fixed and looks for a moved template, so the reverse, a
+stable template on a renamed endpoint, finds no candidate and the successor carries no
+`lineage` block. An engine upgrade that teaches the daemon to resolve an endpoint it used
+to report as `unknown` is the case that produces this.
+
 Ambiguity records nothing, because naming one of several candidates would be a guess.
 
 A linked envelope carries a `lineage` object with `original_first_seen`, the earliest birth

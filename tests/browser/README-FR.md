@@ -64,10 +64,13 @@ cherche un dépôt `perf-sentinel` voisin avec une compilation release, ou prend
 `HUB_ENGINE_BINARY`.
 
 **Le SDK épinglé.** `global.json` épingle 10.0.401 en `rollForward: disable`,
-qui n'est en général pas le `dotnet` du `PATH`. La mise en place appelle
-`/usr/local/share/dotnet/dotnet` par son nom quand il est présent, plutôt que de
-placer ce répertoire devant le `PATH` : l'ordre de recherche décide mal quelle
-chaîne d'outils construit ce qu'on s'apprête à photographier.
+qui n'est en général pas le `dotnet` du `PATH`. La mise en place appelle le
+`dotnet` épinglé par son nom, `$DOTNET_ROOT/dotnet` quand la variable est
+posée et `/usr/local/share/dotnet/dotnet` sinon, plutôt que de placer l'un de
+ces répertoires devant le `PATH` : l'ordre de recherche décide mal quelle
+chaîne d'outils construit ce qu'on s'apprête à photographier. Posez
+`DOTNET_ROOT` quand l'installation système est restée en retrait de
+l'épinglage.
 
 `ffmpeg` n'est nécessaire que pour les GIF. `build-gif.sh` sort en erreur quand
 il ne trouve aucun enregistrement, pour qu'une exécution sans effet ne puisse

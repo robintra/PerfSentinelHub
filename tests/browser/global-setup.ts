@@ -23,8 +23,9 @@ const DEAD_PORT = 41403;
 const BASE = `http://127.0.0.1:${HUB_PORT}`;
 
 // global.json pins the SDK with rollForward: disable, and it is usually not
-// the dotnet on PATH.
-const PINNED_SDK = "/usr/local/share/dotnet";
+// the dotnet on PATH. DOTNET_ROOT names the install that carries it when the
+// system-wide one has fallen behind the pin.
+const PINNED_SDK = process.env.DOTNET_ROOT || "/usr/local/share/dotnet";
 // The pinned SDK is reached by naming its binary outright rather than by putting
 // its directory in front of PATH. Prepending would decide which `dotnet` runs by
 // search order, and any writable directory later on that PATH could shadow it.

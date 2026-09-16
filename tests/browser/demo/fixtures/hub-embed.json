@@ -3,9 +3,9 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.1.7",
+      "version": "0.1.10",
       "identity": null,
-      "engine_version": "0.20.2",
+      "engine_version": "0.22.2",
       "latest_engine_version": null,
       "latest_hub_version": null,
       "queue_depth": 0,
@@ -503,7 +503,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.20.2",
+      "defaults_engine_version": "0.22.2",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -642,7 +642,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.20.2",
+      "defaults_engine_version": "0.22.2",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -735,7 +735,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.20.2",
+      "defaults_engine_version": "0.22.2",
       "scoring_config": null,
       "energy_model": null,
       "traces": null,
@@ -754,13 +754,13 @@
         "detail": "node under memory pressure, pod evicted",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511876000,
+        "oldest_finding_ms": 1756511875000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
-        "first_seen": 1788724218968,
-        "last_seen": 1788724218968,
+        "first_seen": 1789565014733,
+        "last_seen": 1789565014733,
         "finding_count": 1,
         "capture": "partial"
       },
@@ -773,13 +773,13 @@
         "detail": "pod restarted by the kubelet",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511876000,
+        "oldest_finding_ms": 1756511875000,
         "ended_at_ms": 1756511920000,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
-        "first_seen": 1788724218968,
-        "last_seen": 1788724218968,
+        "first_seen": 1789565014733,
+        "last_seen": 1789565014733,
         "finding_count": 1,
         "capture": "partial"
       },
@@ -792,13 +792,13 @@
         "detail": "container exceeded its memory limit",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511872000,
+        "oldest_finding_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
         "environment": "production",
-        "first_seen": 1788724218963,
-        "last_seen": 1788724218963,
+        "first_seen": 1789565014732,
+        "last_seen": 1789565014732,
         "finding_count": 1,
         "capture": "complete"
       },
@@ -811,13 +811,13 @@
         "detail": "working set at 94 percent of the limit",
         "window_from_ms": 1756511872000,
         "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511872000,
+        "oldest_finding_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
         "environment": "production",
-        "first_seen": 1788724218963,
-        "last_seen": 1788724218963,
+        "first_seen": 1789565014732,
+        "last_seen": 1789565014732,
         "finding_count": 1,
         "capture": "complete"
       },
@@ -826,16 +826,16 @@
         "service": "gateway-svc",
         "namespace": "edge",
         "kind": "deploy",
-        "at_ms": 1756511870000,
+        "at_ms": 1756511869000,
         "detail": "rollout 4f21c8 reached every replica",
-        "window_from_ms": 1756511867000,
-        "window_to_ms": 1756511872000,
+        "window_from_ms": 1756511866000,
+        "window_to_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
-        "first_seen": 1788724218968,
-        "last_seen": 1788724218968,
+        "first_seen": 1789565014733,
+        "last_seen": 1789565014733,
         "finding_count": 0,
         "capture": "empty"
       }
@@ -848,7 +848,7 @@
       "detail": "node under memory pressure, pod evicted",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511876000,
+      "oldest_finding_ms": 1756511875000,
       "findings": [
         {
           "finding": {
@@ -877,8 +877,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
           },
-          "stored_at_ms": 1756511876000,
-          "first_seen_ms": 1756511876000,
+          "stored_at_ms": 1756511875000,
+          "first_seen_ms": 1756511875000,
           "seen_count": 1
         }
       ],
@@ -886,8 +886,8 @@
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
-      "first_seen": 1788724218968,
-      "last_seen": 1788724218968,
+      "first_seen": 1789565014733,
+      "last_seen": 1789565014733,
       "finding_count": 1,
       "capture": "partial"
     },
@@ -900,7 +900,7 @@
       "detail": "pod restarted by the kubelet",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511876000,
+      "oldest_finding_ms": 1756511875000,
       "findings": [
         {
           "finding": {
@@ -929,8 +929,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
           },
-          "stored_at_ms": 1756511876000,
-          "first_seen_ms": 1756511876000,
+          "stored_at_ms": 1756511875000,
+          "first_seen_ms": 1756511875000,
           "seen_count": 1
         }
       ],
@@ -938,8 +938,8 @@
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
-      "first_seen": 1788724218968,
-      "last_seen": 1788724218968,
+      "first_seen": 1789565014733,
+      "last_seen": 1789565014733,
       "finding_count": 1,
       "capture": "partial"
     },
@@ -952,7 +952,7 @@
       "detail": "container exceeded its memory limit",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511872000,
+      "oldest_finding_ms": 1756511871000,
       "findings": [
         {
           "finding": {
@@ -990,8 +990,8 @@
       "source_id": "checkout-prod",
       "source_name": "Checkout production",
       "environment": "production",
-      "first_seen": 1788724218963,
-      "last_seen": 1788724218963,
+      "first_seen": 1789565014732,
+      "last_seen": 1789565014732,
       "finding_count": 1,
       "capture": "complete"
     },
@@ -1004,7 +1004,7 @@
       "detail": "working set at 94 percent of the limit",
       "window_from_ms": 1756511872000,
       "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511872000,
+      "oldest_finding_ms": 1756511871000,
       "findings": [
         {
           "finding": {
@@ -1042,8 +1042,8 @@
       "source_id": "checkout-prod",
       "source_name": "Checkout production",
       "environment": "production",
-      "first_seen": 1788724218963,
-      "last_seen": 1788724218963,
+      "first_seen": 1789565014732,
+      "last_seen": 1789565014732,
       "finding_count": 1,
       "capture": "complete"
     },
@@ -1052,17 +1052,17 @@
       "service": "gateway-svc",
       "namespace": "edge",
       "kind": "deploy",
-      "at_ms": 1756511870000,
+      "at_ms": 1756511869000,
       "detail": "rollout 4f21c8 reached every replica",
-      "window_from_ms": 1756511867000,
-      "window_to_ms": 1756511872000,
+      "window_from_ms": 1756511866000,
+      "window_to_ms": 1756511871000,
       "findings": [],
       "ended_at_ms": null,
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
-      "first_seen": 1788724218968,
-      "last_seen": 1788724218968,
+      "first_seen": 1789565014733,
+      "last_seen": 1789565014733,
       "finding_count": 0,
       "capture": "empty"
     }

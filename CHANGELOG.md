@@ -2,6 +2,53 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.22.2` as its analysis engine, repinned by digest from
+  `0.22.1`. That is the binary the Hub runs for a backend analysis, and it is also the
+  version the launcher compares a polled daemon's `producer_version` against, so a fleet
+  still on `0.22.1` now reads one patch behind where it read level. The engine is copied
+  from the published image rather than downloaded, so the build reaches no host outside
+  the registry, and `config/supply-chain.json` carries the same digest as the
+  `Dockerfile`.
+
+  Unlike the last two repins, this one is visible in the Hub's own data, and the reason is
+  that the Hub does not compute a finding's identity, it takes the daemon's. A signature is
+  `type:service:endpoint:template-hash`, `findings.signature` is the primary key, and
+  `UpsertFindingAsync` resolves `ON CONFLICT(signature)`. `0.22.2` makes a trace rooted in
+  a message consumer report its destination where it used to report `unknown`, so once a
+  source upgrades, the same recurring problem arrives under a signature the Hub has never
+  seen. It lands as a second row with today's `first_seen_ms` beside the `unknown` one,
+  and the per-source window in `finding_sources` starts over with it.
+
+  `finding_lineage` cannot join the two, and not by accident: its probe looks for a
+  candidate on the same `endpoint` with a different `template_hash`, which is a renamed
+  query on a stable route. This is the reverse, a stable query on a renamed endpoint, so
+  the probe finds nothing and the successor carries no `lineage` block. The abandoned row
+  then settles on `not_observed` rather than `likely_resolved`, because that status wants
+  an `endpoint_heartbeats` row on the same endpoint and nothing resolves to `unknown` any
+  more, and it ages out on the usual retention. A `first_seen` that restarts is the cost
+  of the engine learning where those findings came from, and it is paid once per consumer
+  endpoint per source.
+
+  One caveat on the same release's route-attribution fix, which stops I/O spans on a
+  sibling branch inheriting the outermost route. A finding re-attributed that way lands on
+  a route that already exists, so unlike the consumer case it can satisfy the lineage
+  probe: if that route holds exactly one recent finding of the same type with a different
+  template hash, the Hub links them and serves an `original_first_seen` that belongs to an
+  unrelated finding. Narrow, and worth knowing before trusting a lineage block dated to
+  this upgrade.
+
+  What this does not touch: incidents, keyed on an id that hashes service, kind and
+  `at_ms` and nothing of the endpoint, a launched analysis, which stores a run row and
+  never a finding, and acknowledgments, which the Hub does not own. The image also picks
+  up `rustls` 0.23.45 against RUSTSEC-2026-0285 through the engine layer.
+
+  No detection knob is added by this release, so `DetectionOverrides` is untouched and the
+  launcher still gates `sanitizer_aware_min_cv` alone, on engines `0.18.0` or later.
+
 ## [0.1.9] - 2026-09-11
 
 ### Fixed

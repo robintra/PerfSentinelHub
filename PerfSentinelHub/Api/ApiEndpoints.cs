@@ -43,15 +43,18 @@ public static partial class ApiEndpoints
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
-        app.MapGet("/api/findings", GetFindingsAsync);
-        app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
+        // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
+        // machine calls: IDE plugins and CI read findings, a daemon pushes with its key.
+        app.MapGet("/api/findings", GetFindingsAsync).AllowAnonymous();
+        app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync).AllowAnonymous();
         app.MapGet("/api/incidents", GetIncidentsAsync);
         app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
-        app.MapPost("/api/import/findings", ImportFindingsAsync);
-        app.MapGet("/health/live", TypedResults.Ok);
+        app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
+        app.MapGet("/health/live", TypedResults.Ok).AllowAnonymous();
         app.MapGet("/health/ready", (HubDatabase database) =>
-            database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+                database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable))
+            .AllowAnonymous();
     }
 
     private static async Task<IReadOnlyList<SourceResponse>> GetSourcesAsync(

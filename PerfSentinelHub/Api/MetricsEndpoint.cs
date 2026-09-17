@@ -32,7 +32,7 @@ public static class MetricsEndpoint
             var body = await RenderAsync(
                 database, options.Value, imports, timeProvider, version, cancellationToken);
             return Results.Text(body, ContentType);
-        });
+        }).AllowAnonymous();
     }
 
     private static async Task<string> RenderAsync(

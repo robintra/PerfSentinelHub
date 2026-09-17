@@ -202,8 +202,17 @@
 
     // ----------------------------------------------------------------- data
 
+    /**
+     * Under Hub:Auth a lapsed session answers 401 rather than a redirect a fetch
+     * cannot follow to the provider. Reloading the page is what signs back in.
+     */
+    function signInOn401(response) {
+        if (response.status === 401) location.reload();
+        return response;
+    }
+
     function fetchJson(path, method) {
-        return fetch(path, {method: method, headers: {accept: "application/json"}}).then(function (response) {
+        return fetch(path, {method: method, headers: {accept: "application/json"}}).then(signInOn401).then(function (response) {
             if (!response.ok) throw new Error(path + " answered " + response.status);
             return response.json();
         });
@@ -3432,7 +3441,7 @@
             method: "POST",
             headers: {"content-type": "application/json"},
             body: JSON.stringify({source_id: source.id, request: buildRequest(source)})
-        }).then(function (response) {
+        }).then(signInOn401).then(function (response) {
             return response.json().then(function (payload) {
                 return {ok: response.ok, payload: payload};
             });
@@ -3893,7 +3902,7 @@
             method: "POST",
             headers: {"content-type": "application/json"},
             body: JSON.stringify({source_id: run.source_id, request: run.request || {}})
-        }).then(function (response) {
+        }).then(signInOn401).then(function (response) {
             return response.json().then(function (payload) {
                 return {ok: response.ok, payload: payload};
             });

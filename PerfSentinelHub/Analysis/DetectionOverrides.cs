@@ -70,6 +70,11 @@ public sealed record DetectionOverrides
     /// </summary>
     private static readonly (DetectionKnob Knob, Version? Since)[] All = BuildAll();
 
+    // A named array rather than either inline form: `Split('-', '+')` reads as a
+    // partial match for `Split(char, int)`, and `Split(['-', '+'])` allocates on
+    // every call for a separator set that never changes.
+    private static readonly char[] VersionSuffixSeparators = ['-', '+'];
+
     // TOML literals, formatted when read, so the file is a concatenation.
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
@@ -116,11 +121,6 @@ public sealed record DetectionOverrides
     {
         return since is null || (engine is not null && engine >= since);
     }
-
-    // A named array rather than either inline form: `Split('-', '+')` reads as a
-    // partial match for `Split(char, int)`, and `Split(['-', '+'])` allocates on
-    // every call for a separator set that never changes.
-    private static readonly char[] VersionSuffixSeparators = ['-', '+'];
 
     // clap prints `0.18.0`, or `0.18.0-rc.1` for a pre-release, which reads the
     // same keys as the release it precedes. System.Version knows neither suffix.

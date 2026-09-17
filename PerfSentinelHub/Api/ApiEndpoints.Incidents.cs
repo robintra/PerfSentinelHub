@@ -167,12 +167,12 @@ public static partial class ApiEndpoints
             return false;
 
         query = new IncidentQuery(
-            Service: ReadOptional(request, "service"),
-            Namespace: ReadOptional(request, "namespace"),
-            Kind: kind,
-            SourceIds: sourceIds,
-            Offset: offset,
-            Limit: limit);
+            ReadOptional(request, "service"),
+            ReadOptional(request, "namespace"),
+            kind,
+            sourceIds,
+            offset,
+            limit);
         return true;
     }
 

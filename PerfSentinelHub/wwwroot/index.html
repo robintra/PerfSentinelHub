@@ -5,26 +5,26 @@
     <meta content="width=device-width, initial-scale=1" name="viewport">
     <title>perf-sentinel hub</title>
     <script>
-        /* Resolves the theme before the first paint. tokens.css defines its palettes
-           under [data-theme], so a root without the attribute has no variables at all
-           and the page would flash unstyled. The stored position may be auto, light or
-           dark; only the resolved light or dark ever reaches the DOM. */
-        (function () {
-            let stored = null;
-            try {
-                /* sessionStorage first: the dashboard writes the same key, so a theme
-                   chosen over there comes back here within the tab. */
-                stored = sessionStorage.getItem("perf-sentinel:theme") || localStorage.getItem("perf-sentinel:theme");
-            } catch (e) {
-                stored = null;
-            }
-            const position = stored === "light" || stored === "dark" ? stored : "auto";
-            let theme = position;
-            if (position === "auto")
-                theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-            document.documentElement.dataset.theme = theme;
-            document.documentElement.dataset.themePosition = position;
-        })();
+      /* Resolves the theme before the first paint. tokens.css defines its palettes
+         under [data-theme], so a root without the attribute has no variables at all
+         and the page would flash unstyled. The stored position may be auto, light or
+         dark; only the resolved light or dark ever reaches the DOM. */
+      (function () {
+        let stored = null;
+        try {
+          /* sessionStorage first: the dashboard writes the same key, so a theme
+             chosen over there comes back here within the tab. */
+          stored = sessionStorage.getItem('perf-sentinel:theme') || localStorage.getItem('perf-sentinel:theme');
+        } catch (e) {
+          stored = null;
+        }
+        const position = stored === 'light' || stored === 'dark' ? stored : 'auto';
+        let theme = position;
+        if (position === 'auto')
+          theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.themePosition = position;
+      })();
     </script>
     <link href="fonts.css" rel="stylesheet">
     <link href="tokens.css" rel="stylesheet">

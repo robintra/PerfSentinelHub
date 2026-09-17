@@ -62,3 +62,16 @@ v0.1.7	dadd839	2026-09-06	PASS
 # then passed on rerun once it had, which is a lab prerequisite rather than a
 # Hub defect.
 v0.1.8	070998a	2026-09-10	PASS
+#
+# v0.2.0: the seven hub-* scenarios green on lab commit fc5ed79, run on their
+# own rather than inside verify-all-scenarios, whose other 79 exercise the
+# engine and not the Hub. The image was built by seed-hub-local from fe29f07,
+# on feat/native-oauth2, with Hub:Auth off, the lab's default: what is proven
+# is that the machine routes (findings, import, health, metrics) and the whole
+# ingestion chain are unchanged by the auth wiring. Sign-in itself is not, the
+# lab having no OAuth2 provider; AuthenticationTests covers it. hub-ingestion
+# and hub-incidents-mirror failed first on a missing lab-tracegen:1 image,
+# seed-tracegen being a verify-all-scenarios prerequisite, then passed on rerun
+# once it was built, which is a lab prerequisite rather than a Hub defect.
+# hub-plugin-contract rewrote the plugin fixture byte for byte.
+v0.2.0	fc5ed79	2026-09-17	PASS

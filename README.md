@@ -87,25 +87,27 @@ These registry commands work only once the public rehearsal and publication succ
 
 ## Documentation
 
-| Document                                       | Covers                                                                                                |
-|------------------------------------------------|-------------------------------------------------------------------------------------------------------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Five diagrams: the topology, push against poll, what a run does, the retention clocks, the run states |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every setting, where the Hub connects, and an https source behind a private CA                        |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)       | One Hub per cluster or one central Hub, the flows each shape needs, and what push alone gives up      |
-| [docs/API.md](docs/API.md)                     | The import, read and analysis APIs                                                                    |
-| [docs/LAUNCHER.md](docs/LAUNCHER.md)           | The browser interface, its printed commands and its live reports                                      |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md)       | Freshness, recovery, metrics with ready-made Grafana and Prometheus files, backup and restore         |
-| [docs/LIMITATIONS.md](docs/LIMITATIONS.md)     | What the Hub declares rather than measures, and what a run does not promise                           |
-| [RELEASING.md](RELEASING.md)                   | What a release contains, how it is signed, and how to verify one publicly                             |
-| [CONTRIBUTING.md](CONTRIBUTING.md)             | Local gates, the pinned toolchain, and the pull request rules                                         |
+| Document                                         | Covers                                                                                                |
+|--------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)     | Five diagrams: the topology, push against poll, what a run does, the retention clocks, the run states |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md)   | Every setting, where the Hub connects, and an https source behind a private CA                        |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)         | One Hub per cluster or one central Hub, the flows each shape needs, and what push alone gives up      |
+| [docs/API.md](docs/API.md)                       | The import, read and analysis APIs                                                                    |
+| [docs/LAUNCHER.md](docs/LAUNCHER.md)             | The browser interface, its printed commands and its live reports                                      |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md)         | Freshness, recovery, metrics with ready-made Grafana and Prometheus files, backup and restore         |
+| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Browser sign-in against Keycloak, Entra ID, Google, GitLab or Bitbucket, and the routes left open     |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md)       | What the Hub declares rather than measures, and what a run does not promise                           |
+| [RELEASING.md](RELEASING.md)                     | What a release contains, how it is signed, and how to verify one publicly                             |
+| [CONTRIBUTING.md](CONTRIBUTING.md)               | Local gates, the pinned toolchain, and the pull request rules                                         |
 
 ## What this is not
 
-No ingress, no user authentication, no CI or SARIF import, no acknowledgment writer, and
-no remote backup. The local `backup` command snapshots the database, but shipping that
-file off the cluster stays the operator's job.
+No ingress, no user accounts, no CI or SARIF import, no acknowledgment writer, and no
+remote backup. The local `backup` command snapshots the database, but shipping that file
+off the cluster stays the operator's job. Browser sign-in is delegated to an OAuth2
+provider when `Hub:Auth` is on, and the Hub keeps no user of its own.
 
-Network exposure and authentication belong to the next independent design.
+Network exposure belongs to the next independent design.
 Acknowledgments remain in the repository perf-sentinel consumes.
 
 Every badge above reports something observed. The container image and Helm chart badges

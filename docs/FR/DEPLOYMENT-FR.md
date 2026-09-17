@@ -77,10 +77,11 @@ analysable depuis un terminal qui, lui, le joint. Voir
 
 ## Ce qui doit être vrai de l'adresse
 
-Le Hub doit être servi à la racine d'une origine, et il n'authentifie aucun de
-ses lecteurs. Les deux contraintes façonnent le proxy inverse posé devant lui
-plutôt que le Hub lui-même, donc à lire avant d'écrire l'ingress. Voir
-[LIMITATIONS-FR.md](LIMITATIONS-FR.md).
+Le Hub doit être servi à la racine d'une origine, et par défaut il n'authentifie
+aucun de ses lecteurs. Les deux contraintes façonnent le proxy inverse posé
+devant lui plutôt que le Hub lui-même, donc à lire avant d'écrire l'ingress.
+Voir [LIMITATIONS-FR.md](LIMITATIONS-FR.md). `Hub:Auth` lève la seconde pour le
+navigateur sans proxy, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
 
 ## La CI lit, elle n'alimente pas
 

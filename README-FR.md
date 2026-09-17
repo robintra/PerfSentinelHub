@@ -89,26 +89,28 @@ publication réussies.
 
 ## Documentation
 
-| Document                                                   | Contenu                                                                                                          |
-|------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| [docs/FR/ARCHITECTURE-FR.md](docs/FR/ARCHITECTURE-FR.md)   | Cinq schémas : la topologie, push contre poll, ce que fait un run, les horloges de rétention, les états d'un run |
-| [docs/FR/CONFIGURATION-FR.md](docs/FR/CONFIGURATION-FR.md) | Chaque réglage, où le Hub se connecte, et une source https derrière une CA privée                                |
-| [docs/FR/DEPLOYMENT-FR.md](docs/FR/DEPLOYMENT-FR.md)       | Un Hub par cluster ou un Hub central, les flux qu'exige chaque forme, et ce que le push seul abandonne           |
-| [docs/FR/API-FR.md](docs/FR/API-FR.md)                     | Les API d'import, de lecture et d'analyse                                                                        |
-| [docs/FR/LAUNCHER-FR.md](docs/FR/LAUNCHER-FR.md)           | L'interface de navigateur, ses commandes imprimées et ses rapports live                                          |
-| [docs/FR/OPERATIONS-FR.md](docs/FR/OPERATIONS-FR.md)       | Fraîcheur, rétablissement, sauvegarde et restauration                                                            |
-| [docs/FR/LIMITATIONS-FR.md](docs/FR/LIMITATIONS-FR.md)     | Ce que le Hub déclare au lieu de le mesurer, et ce qu'un run ne promet pas                                       |
-| [RELEASING.md](RELEASING.md)                               | Ce que contient une release, comment elle est signée, et comment en vérifier une publiquement                    |
-| [CONTRIBUTING.md](CONTRIBUTING.md)                         | Les portes locales, la chaîne d'outils épinglée, et les règles de pull request                                   |
+| Document                                                     | Contenu                                                                                                          |
+|--------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| [docs/FR/ARCHITECTURE-FR.md](docs/FR/ARCHITECTURE-FR.md)     | Cinq schémas : la topologie, push contre poll, ce que fait un run, les horloges de rétention, les états d'un run |
+| [docs/FR/CONFIGURATION-FR.md](docs/FR/CONFIGURATION-FR.md)   | Chaque réglage, où le Hub se connecte, et une source https derrière une CA privée                                |
+| [docs/FR/DEPLOYMENT-FR.md](docs/FR/DEPLOYMENT-FR.md)         | Un Hub par cluster ou un Hub central, les flux qu'exige chaque forme, et ce que le push seul abandonne           |
+| [docs/FR/API-FR.md](docs/FR/API-FR.md)                       | Les API d'import, de lecture et d'analyse                                                                        |
+| [docs/FR/LAUNCHER-FR.md](docs/FR/LAUNCHER-FR.md)             | L'interface de navigateur, ses commandes imprimées et ses rapports live                                          |
+| [docs/FR/OPERATIONS-FR.md](docs/FR/OPERATIONS-FR.md)         | Fraîcheur, rétablissement, sauvegarde et restauration                                                            |
+| [docs/FR/AUTHENTICATION-FR.md](docs/FR/AUTHENTICATION-FR.md) | Connexion du navigateur via Keycloak, Entra ID, Google, GitLab ou Bitbucket                                      |
+| [docs/FR/LIMITATIONS-FR.md](docs/FR/LIMITATIONS-FR.md)       | Ce que le Hub déclare au lieu de le mesurer, et ce qu'un run ne promet pas                                       |
+| [RELEASING.md](RELEASING.md)                                 | Ce que contient une release, comment elle est signée, et comment en vérifier une publiquement                    |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                           | Les portes locales, la chaîne d'outils épinglée, et les règles de pull request                                   |
 
 ## Ce que ce n'est pas
 
-Ni ingress, ni authentification d'utilisateur, ni import CI ou SARIF, ni écrivain
-d'acquittements, ni sauvegarde distante. La commande `backup` locale prend un instantané
-de la base, mais expédier ce fichier hors du cluster reste le travail de l'opérateur.
+Ni ingress, ni comptes utilisateurs, ni import CI ou SARIF, ni écrivain d'acquittements,
+ni sauvegarde distante. La commande `backup` locale prend un instantané de la base, mais
+expédier ce fichier hors du cluster reste le travail de l'opérateur. La connexion du
+navigateur est déléguée à un fournisseur OAuth2 quand `Hub:Auth` est activé, et le Hub
+ne garde aucun utilisateur à lui.
 
-L'exposition réseau et l'authentification relèvent de la prochaine conception
-indépendante. Les acquittements restent dans le dépôt que consomme perf-sentinel.
+L'exposition réseau relève de la prochaine conception indépendante. Les acquittements restent dans le dépôt que consomme perf-sentinel.
 
 Chaque badge ci-dessus rapporte quelque chose d'observé. Ceux de l'image de conteneur et
 du chart Helm sont délibérément absents jusqu'à ce qu'une première release publie leurs

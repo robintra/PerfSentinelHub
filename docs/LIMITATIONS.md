@@ -63,6 +63,10 @@ the smaller cases.
 
 ## What the Hub does not authenticate
 
+This section describes the Hub with `Hub:Auth:Enabled` off, the default. On, the
+Hub signs browser users in itself and only the machine routes stay open, see
+[AUTHENTICATION.md](AUTHENTICATION.md).
+
 One endpoint asks for a credential, `POST /api/import/findings`, whose
 `X-API-Key` is compared by fingerprint. Every other one asks for nothing:
 `/api/status`, `/api/sources`, `/api/findings`, `/api/analyses` for both the
@@ -74,7 +78,8 @@ The identity header attributes, it does not authenticate.
 `Hub:Analysis:IdentityHeader` is recorded on a run as a claim some proxy made,
 and the Hub verifies nothing about it. That is the right behaviour behind an
 authenticating proxy and no defence at all without one. If the network is not
-the boundary, put that proxy in front. See [DEPLOYMENT.md](DEPLOYMENT.md).
+the boundary, put that proxy in front or turn on `Hub:Auth`. See
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## What sits outside the Hub
 

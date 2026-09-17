@@ -73,10 +73,11 @@ terminal that can reach it. See [LAUNCHER.md](LAUNCHER.md).
 
 ## What has to be true of the address
 
-The Hub must be served at the root of an origin, and it authenticates none of
-its readers. Both constraints shape the reverse proxy in front of it rather
-than the Hub itself, so read them before writing the ingress. See
-[LIMITATIONS.md](LIMITATIONS.md).
+The Hub must be served at the root of an origin, and by default it
+authenticates none of its readers. Both constraints shape the reverse proxy in
+front of it rather than the Hub itself, so read them before writing the
+ingress. See [LIMITATIONS.md](LIMITATIONS.md). `Hub:Auth` lifts the second one
+for the browser without a proxy, see [AUTHENTICATION.md](AUTHENTICATION.md).
 
 ## The CI reads, it does not feed
 

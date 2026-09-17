@@ -62,8 +62,11 @@ public static class HubAuthentication
                 {
                     // A fetch cannot follow a redirect to the provider's origin. The
                     // API says 401 and the launcher reloads itself into the sign-in.
+                    // A report says 401 only inside the launcher's frame: a shared
+                    // report link opened on its own is a page and signs in like one.
                     if (context.Request.Path.StartsWithSegments("/api") ||
-                        context.Request.Path.StartsWithSegments("/reports"))
+                        (context.Request.Path.StartsWithSegments("/reports") &&
+                         context.Request.Headers["Sec-Fetch-Dest"] == "iframe"))
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     else
                         context.Response.Redirect(context.RedirectUri);

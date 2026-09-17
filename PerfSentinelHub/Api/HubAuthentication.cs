@@ -109,7 +109,10 @@ public static partial class HubAuthentication
     /// <summary>
     ///     A cancelled consent screen or a userinfo without the identity field
     ///     would otherwise surface as an unhandled 500. No redirect: it would send
-    ///     the user straight back to the screen they just cancelled.
+    ///     the user straight back to the screen they just cancelled. Nor "reload":
+    ///     reloading this callback replays a state whose correlation cookie is
+    ///     already spent, and fails again. The line names no URL built from the
+    ///     request, whose Host a client chooses.
     /// </summary>
     private static async Task RefuseSignInAsync(RemoteFailureContext context)
     {
@@ -121,7 +124,7 @@ public static partial class HubAuthentication
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         context.Response.ContentType = "text/plain; charset=utf-8";
         await context.Response.WriteAsync(
-            "Sign-in refused by the provider. Reload the Hub to try again.",
+            "Sign-in refused. Open the Hub's home page to try again.",
             context.HttpContext.RequestAborted);
     }
 

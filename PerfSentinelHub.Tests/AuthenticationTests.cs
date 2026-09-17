@@ -194,6 +194,26 @@ public sealed class AuthenticationTests : IAsyncLifetime
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_replayed_callback_points_at_the_hub_rather_than_at_a_reload()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = Client();
+
+        using var challenge = await client.GetAsync("/", cancellationToken);
+        var state = QueryHelpers.ParseQuery(challenge.Headers.Location!.Query)["state"];
+        var callbackPath = $"/auth/callback?error=access_denied&state={Uri.EscapeDataString(state!)}";
+        using var first = await client.GetAsync(callbackPath, cancellationToken);
+        using var replay = await client.GetAsync(callbackPath, cancellationToken);
+
+        // The correlation cookie is spent by the first answer, so reloading the
+        // callback can never succeed: the line has to send the user home.
+        Assert.Equal(HttpStatusCode.Forbidden, replay.StatusCode);
+        var line = await replay.Content.ReadAsStringAsync(cancellationToken);
+        Assert.Contains("home page", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Reload", line, StringComparison.OrdinalIgnoreCase);
+    }
+
     private HttpClient Client()
     {
         // https: the session and correlation cookies are Secure, and the cookie

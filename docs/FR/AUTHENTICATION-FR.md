@@ -40,10 +40,11 @@ code sur le token endpoint, puis appelle l'endpoint userinfo avec l'access token
 et enregistre comme utilisateur le champ nommé par `Hub:Auth:IdentityClaim`. Un
 userinfo sans ce champ fait échouer la connexion plutôt que d'ouvrir une session
 sans nom. Une connexion échouée, celle-là ou un utilisateur qui annule sur
-l'écran du fournisseur, répond `403` avec une ligne invitant à recharger, et
-journalise la raison en warning (événement `1900`). Aucun token n'est conservé : la session est un cookie chiffré
-`hub_session`, `Secure`, `HttpOnly`, `SameSite=Lax`, valable 8 heures et
-prolongé tant qu'il sert. Il n'y a pas de bouton de déconnexion.
+l'écran du fournisseur, répond `403` avec une ligne renvoyant vers la page
+d'accueil du Hub, et journalise la raison en warning (événement `1900`). Aucun
+token n'est conservé : la session est un cookie chiffré `hub_session`, `Secure`,
+`HttpOnly`, `SameSite=Lax`, valable 8 heures et prolongé tant qu'il sert. Il n'y
+a pas de bouton de déconnexion.
 
 L'utilisateur connecté est ce qu'affiche la barre du haut et ce qu'un run
 enregistre comme `requested_by`. `Hub:Analysis:IdentityHeader` est ignoré pour

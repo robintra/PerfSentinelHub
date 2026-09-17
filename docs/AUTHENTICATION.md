@@ -9,14 +9,14 @@ the Hub authenticates nobody, as described in [LIMITATIONS.md](LIMITATIONS.md).
 With `Hub:Auth:Enabled`, every route needs a session except the ones a machine
 calls:
 
-| Route                                                            | Access                                        |
-|------------------------------------------------------------------|-----------------------------------------------|
-| `/` and the launcher's files                                     | session, otherwise a redirect to the provider |
-| `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, otherwise `401`                      |
-| `/reports/`                                                      | session, otherwise `401`                      |
-| `/api/findings`                                                  | open, for IDE plugins and CI jobs             |
-| `POST /api/import/findings`                                      | its own `X-API-Key`, as before                |
-| `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape               |
+| Route                                                            | Access                                                                  |
+|------------------------------------------------------------------|-------------------------------------------------------------------------|
+| `/` and the launcher's files                                     | session, otherwise a redirect to the provider                           |
+| `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, otherwise `401`                                                |
+| `/reports/`                                                      | session, `401` in the launcher's frame, a redirect when opened directly |
+| `/api/findings`                                                  | open, for IDE plugins and CI jobs                                       |
+| `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
+| `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape                                         |
 
 The API answers `401` rather than a redirect because a fetch cannot follow a
 redirect to the provider's origin. The launcher reloads itself on a `401`, and

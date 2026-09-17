@@ -10,14 +10,14 @@ personne, comme le décrit [LIMITATIONS-FR.md](LIMITATIONS-FR.md).
 Avec `Hub:Auth:Enabled`, chaque route exige une session, sauf celles qu'appelle
 une machine :
 
-| Route                                                            | Accès                                          |
-|------------------------------------------------------------------|------------------------------------------------|
-| `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur |
-| `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, sinon `401`                           |
-| `/reports/`                                                      | session, sinon `401`                           |
-| `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI    |
-| `POST /api/import/findings`                                      | sa propre `X-API-Key`, comme avant             |
-| `/health/live`, `/health/ready`, `/metrics`                      | ouvert, pour les sondes et le scrape           |
+| Route                                                            | Accès                                                                      |
+|------------------------------------------------------------------|----------------------------------------------------------------------------|
+| `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur                             |
+| `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, sinon `401`                                                       |
+| `/reports/`                                                      | session, `401` dans le cadre du lanceur, redirection si ouvert directement |
+| `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI                                |
+| `POST /api/import/findings`                                      | sa propre `X-API-Key`, comme avant                                         |
+| `/health/live`, `/health/ready`, `/metrics`                      | ouvert, pour les sondes et le scrape                                       |
 
 L'API répond `401` plutôt qu'une redirection, car un fetch ne peut pas suivre
 une redirection vers l'origine du fournisseur. Le lanceur se recharge sur un

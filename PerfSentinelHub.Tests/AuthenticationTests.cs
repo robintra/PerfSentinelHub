@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.WebUtilities;
@@ -18,8 +17,8 @@ namespace PerfSentinelHub.Tests;
 public sealed class AuthenticationTests : IAsyncLifetime
 {
     private readonly HubApplicationFactory _hub = new();
-    private FakeDaemon _provider = null!;
     private WebApplicationFactory<Program> _factory = null!;
+    private FakeDaemon _provider = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -79,7 +78,6 @@ public sealed class AuthenticationTests : IAsyncLifetime
     [InlineData("/api/status")]
     [InlineData("/api/sources")]
     [InlineData("/api/analyses")]
-    [InlineData("/reports/0123456789abcdef.html")]
     [InlineData("/app.js")]
     public async Task What_the_launcher_reads_answers_401_or_redirects_without_a_session(string path)
     {
@@ -92,6 +90,24 @@ public sealed class AuthenticationTests : IAsyncLifetime
         Assert.Equal(
             path == "/app.js" ? HttpStatusCode.Redirect : HttpStatusCode.Unauthorized,
             response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("iframe", HttpStatusCode.Unauthorized)]
+    [InlineData("document", HttpStatusCode.Redirect)]
+    [InlineData(null, HttpStatusCode.Redirect)]
+    public async Task A_report_answers_401_in_the_launcher_frame_and_signs_in_as_a_page(
+        string? destination, HttpStatusCode expected)
+    {
+        using var client = Client();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reports/0123456789abcdef.html");
+        if (destination is not null) request.Headers.Add("Sec-Fetch-Dest", destination);
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        // A shared report link opened on its own is a page: it has to reach the
+        // sign-in, not stop at a bare 401.
+        Assert.Equal(expected, response.StatusCode);
     }
 
     [Theory]

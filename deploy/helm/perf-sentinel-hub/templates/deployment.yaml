@@ -40,6 +40,15 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
+            {{- with .Values.hub.auth }}
+            {{- if .enabled }}
+            - name: Hub__Auth__ClientSecret
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .clientSecretName }}
+                  key: {{ .clientSecretKey }}
+            {{- end }}
+            {{- end }}
             {{- range $index, $source := .Values.sources }}
             {{- if $source.authSecretName }}
             - name: Hub__Sources__{{ $index }}__AuthHeaderValue

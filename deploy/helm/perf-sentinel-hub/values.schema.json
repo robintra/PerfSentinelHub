@@ -23,7 +23,33 @@
         "retention": { "type": "string", "minLength": 1 },
         "resolutionGrace": { "type": "string", "minLength": 1 },
         "defaultReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
-        "maxReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 }
+        "maxReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "authorizationEndpoint": { "type": "string" },
+            "tokenEndpoint": { "type": "string" },
+            "userInformationEndpoint": { "type": "string" },
+            "clientId": { "type": "string" },
+            "clientSecretName": { "type": "string" },
+            "clientSecretKey": { "type": "string" },
+            "scopes": { "type": "string" },
+            "identityClaim": { "type": "string" }
+          },
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": {
+            "properties": {
+              "authorizationEndpoint": { "pattern": "^https://" },
+              "tokenEndpoint": { "pattern": "^https://" },
+              "userInformationEndpoint": { "pattern": "^https://" },
+              "clientId": { "minLength": 1 },
+              "clientSecretName": { "minLength": 1 },
+              "clientSecretKey": { "minLength": 1 }
+            },
+            "required": ["authorizationEndpoint", "tokenEndpoint", "userInformationEndpoint", "clientId", "clientSecretName", "clientSecretKey"]
+          }
+        }
       }
     },
     "sources": {

@@ -69,6 +69,10 @@ cas les plus petits.
 
 ## Ce que le Hub n'authentifie pas
 
+Cette section décrit le Hub avec `Hub:Auth:Enabled` désactivé, le défaut. Activé,
+le Hub connecte lui-même les utilisateurs du navigateur et seules les routes
+machines restent ouvertes, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
+
 Un seul endpoint réclame une preuve, `POST /api/import/findings`, dont la
 `X-API-Key` est comparée par empreinte. Tous les autres ne réclament rien :
 `/api/status`, `/api/sources`, `/api/findings`, `/api/analyses` aussi bien pour
@@ -80,7 +84,7 @@ L'en-tête d'identité attribue, il n'authentifie pas.
 `Hub:Analysis:IdentityHeader` est enregistré sur un run comme une déclaration
 faite par un proxy, et le Hub n'en vérifie rien. C'est le bon comportement
 derrière un proxy authentifiant, et aucune défense sans lui. Si le réseau n'est
-pas la frontière, posez ce proxy devant. Voir
+pas la frontière, posez ce proxy devant ou activez `Hub:Auth`. Voir
 [DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
 
 ## Ce qui se joue hors du Hub

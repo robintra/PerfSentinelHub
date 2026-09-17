@@ -81,7 +81,8 @@ de `Hub:Sources`, fixés au démarrage et restreints à 1 à 64 caractères ASCI
 alphanumériques, `.`, `_` ou `-`. `status` prend six constantes. Rien de ce
 qu'envoie un appelant n'atteint un libellé.
 
-L'endpoint ne porte aucune authentification, exactement comme `/api/status`.
+L'endpoint ne porte aucune authentification, exactement comme `/api/status`, et
+reste ouvert sous `Hub:Auth` pour que la collecte n'ait pas besoin de session.
 Gardez-le derrière ce qui protège déjà le reste du Hub. Il partage cette
 origine avec le lanceur, donc un proxy ouvert pour le navigateur sert aussi
 `/metrics` tant que le chemin n'est pas exclu. Le chart laisse la

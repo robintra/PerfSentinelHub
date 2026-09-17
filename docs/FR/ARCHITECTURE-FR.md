@@ -16,7 +16,8 @@ Un seul Hub sert deux publics qui ne se recouvrent jamais. Le navigateur reçoit
 lanceur et rien d'autre. Un greffon d'IDE ou un job de CI reçoit `/api/findings` et
 n'ouvre jamais un écran. Ce partage n'est imposé par aucune authentification, il est
 simplement ce que chaque client demande, et il vaut mieux le savoir avant de lire l'une
-ou l'autre surface.
+ou l'autre surface. `Hub:Auth` place le côté navigateur derrière une connexion et laisse
+`/api/findings` ouvert, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
 
 Le moteur apparaît deux fois sur ce tableau et c'est le même binaire les deux fois :
 une fois comme sous-processus que le Hub lance pour produire un rapport, une fois comme

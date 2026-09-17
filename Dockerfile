@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble-aot@sha256:1a069a730888d278b5ac00e3e238707387d20d2b65f0fc6866b6180df0a767e0 AS build
 ARG TARGETARCH
-ARG VERSION=0.1.10
+ARG VERSION=0.2.0
 ARG SOURCE_DATE_EPOCH
 WORKDIR /src
 COPY . .
@@ -16,7 +16,7 @@ FROM ghcr.io/robintra/perf-sentinel:0.22.2@sha256:994c73dba5ebe46ffb274a8c25b222
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-noble-chiseled-extra@sha256:9a3e4e315a3eae3be20b73739ae84fa7e4ffb2a47a234f3bef30825f0543fe1b
 ARG SOURCE_COMMIT=unknown
-LABEL org.opencontainers.image.version="0.1.10" \
+LABEL org.opencontainers.image.version="0.2.0" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
       org.opencontainers.image.source="https://github.com/robintra/PerfSentinelHub"
 WORKDIR /app

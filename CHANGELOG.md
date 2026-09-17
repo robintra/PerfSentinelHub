@@ -2,6 +2,36 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- The Hub can sign browser users in against an OAuth2 provider itself, so an operator who
+  does not want to run an authenticating proxy in front of it no longer has to. `Hub:Auth`
+  is off by default, and off nothing changes. On, the launcher, the API it calls and
+  `/reports/` need a session, and the routes a machine calls stay open: `/api/findings` for
+  IDE plugins and CI jobs, `POST /api/import/findings` behind its own `X-API-Key`,
+  `/health/live`, `/health/ready` and `/metrics`. The provider is described by three
+  endpoints, a confidential client and the userinfo field that names the user, which fits
+  Keycloak, Entra ID, Google, GitLab and Bitbucket alike, and `docs/AUTHENTICATION.md`
+  gives the values for each. It is built on the framework's own OAuth and cookie handlers,
+  so no package is added and the NativeAOT publish stays free of trimming warnings. The
+  browser goes through the authorization code flow with PKCE, the Hub keeps no token, and
+  the session is an encrypted `hub_session` cookie, `Secure`, `HttpOnly` and
+  `SameSite=Lax`, valid eight hours and renewed while in use, whose keys live in a `keys`
+  directory next to `Hub:DatabasePath` so a restart signs nobody out. A page without a
+  session redirects to the provider, and so does a shared report link opened on its own;
+  the API and a report inside the launcher's frame answer `401` instead, since a fetch
+  cannot follow a redirect to another origin, and the launcher reloads into the sign-in. A
+  cancelled consent screen, or a userinfo without the configured field, answers `403` with
+  a line pointing back to the Hub's home page and logs the reason as event `1900`, rather
+  than failing with a 500. The signed-in user is what the topbar shows and what a run
+  records as `requested_by`, and `Hub:Analysis:IdentityHeader` is ignored for a session,
+  since any client can send it. `X-Forwarded-Proto` is honoured so the redirect URI reads
+  `https` behind a TLS-terminating ingress. The chart gains a `hub.auth` block whose client
+  secret comes from a Secret as `Hub__Auth__ClientSecret`, and its schema refuses
+  `enabled` without the endpoints, the client id and that Secret.
+
 ## [0.1.10] - 2026-09-16
 
 ### Changed

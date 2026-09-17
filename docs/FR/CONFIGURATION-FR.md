@@ -24,7 +24,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:MaxReadLimit`               | `10000`                                               | 1 à 10000                                                                                             |
 | `Hub:Analysis:EngineBinaryPath`  | aucun                                                 | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles |
 | `Hub:Analysis:ReportDirectory`   | `/data/reports`                                       | Absolu, accessible en écriture. Les rapports rendus vivent ici                                        |
-| `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                    | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur                                    |
+| `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                    | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur, ignoré sous `Hub:Auth`            |
 | `Hub:Analysis:Workers`           | `2`                                                   | 1 à 16                                                                                                |
 | `Hub:Analysis:MaxTracesCap`      | `2000`                                                | 1 à 10000, la limite propre du moteur sur `--max-traces`                                              |
 | `Hub:Analysis:MaxTracesEmbedded` | `50`                                                  | 0 à 10000. Arbres de spans embarqués dans le rapport. Le poser fait sortir le sink du ciblage de taille |
@@ -35,6 +35,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:UpdateCheck:Interval`       | `1.00:00:00` (1 jour)                                 | Au moins 15 minutes                                                                                   |
 | `Hub:UpdateCheck:EngineEndpoint` | API des releases GitHub de `robintra/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                               |
 | `Hub:UpdateCheck:HubEndpoint`    | API des releases GitHub de `robintra/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                               |
+| `Hub:Auth:*`                     | désactivé                                             | Connexion du navigateur via OAuth2, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md)                 |
 | `Hub:Sources`                    | aucune                                                | Au moins une source                                                                                   |
 
 ## Réglages par source

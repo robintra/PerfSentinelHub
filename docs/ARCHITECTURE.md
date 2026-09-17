@@ -15,7 +15,8 @@ re-exporting both themes, never touching the SVG by hand.
 One Hub serves two audiences that never overlap. The browser gets the launcher and
 nothing else. An IDE plugin or a CI job gets `/api/findings` and never opens a screen.
 That split is not enforced by authentication, it is simply what each client asks for,
-and it is worth knowing before reading either surface.
+and it is worth knowing before reading either surface. `Hub:Auth` puts the browser's side
+behind a sign-in and leaves `/api/findings` open, see [AUTHENTICATION.md](AUTHENTICATION.md).
 
 The engine appears twice on this board and it is the same binary both times: once as a
 subprocess the Hub spawns to produce a report, and once as the daemon it collects from.

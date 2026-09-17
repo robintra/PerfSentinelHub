@@ -75,8 +75,9 @@ Cardinality is bounded by configuration. `source` takes the ids in
 `.`, `_` or `-`. `status` takes six constants. Nothing a caller sends reaches a
 label.
 
-The endpoint carries no authentication, exactly like `/api/status`. Keep it
-behind whatever fronts the rest of the Hub. It shares that origin with the
+The endpoint carries no authentication, exactly like `/api/status`, and stays
+open under `Hub:Auth` so the scrape needs no session. Keep it behind whatever
+fronts the rest of the Hub. It shares that origin with the
 launcher, so a proxy opened for the browser serves `/metrics` as well unless
 the path is excluded. The chart leaves the scrape opted
 into rather than assumed:

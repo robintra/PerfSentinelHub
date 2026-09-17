@@ -39,7 +39,9 @@ navigateur passe par le flux authorization code avec PKCE, le Hub échange le
 code sur le token endpoint, puis appelle l'endpoint userinfo avec l'access token
 et enregistre comme utilisateur le champ nommé par `Hub:Auth:IdentityClaim`. Un
 userinfo sans ce champ fait échouer la connexion plutôt que d'ouvrir une session
-sans nom. Aucun token n'est conservé : la session est un cookie chiffré
+sans nom. Une connexion échouée, celle-là ou un utilisateur qui annule sur
+l'écran du fournisseur, répond `403` avec une ligne invitant à recharger, et
+journalise la raison en warning (événement `1900`). Aucun token n'est conservé : la session est un cookie chiffré
 `hub_session`, `Secure`, `HttpOnly`, `SameSite=Lax`, valable 8 heures et
 prolongé tant qu'il sert. Il n'y a pas de bouton de déconnexion.
 

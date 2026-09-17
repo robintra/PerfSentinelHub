@@ -20,7 +20,7 @@ namespace PerfSentinelHub.Api;
 ///     calls: findings for IDE plugins and CI, the import (its own key), health and
 ///     metrics.
 /// </summary>
-public static class HubAuthentication
+public static partial class HubAuthentication
 {
     private const string Scheme = "oauth";
 
@@ -58,6 +58,7 @@ public static class HubAuthentication
                     options.Scope.Add(scope);
                 options.ClaimActions.MapJsonKey(ClaimTypes.Name, auth.IdentityClaim);
                 options.Events.OnCreatingTicket = ReadUserInformationAsync;
+                options.Events.OnRemoteFailure = RefuseSignInAsync;
                 options.Events.OnRedirectToAuthorizationEndpoint = context =>
                 {
                     // A fetch cannot follow a redirect to the provider's origin. The
@@ -104,6 +105,28 @@ public static class HubAuthentication
         app.UseAuthentication();
         app.UseAuthorization();
     }
+
+    /// <summary>
+    ///     A cancelled consent screen or a userinfo without the identity field
+    ///     would otherwise surface as an unhandled 500. No redirect: it would send
+    ///     the user straight back to the screen they just cancelled.
+    /// </summary>
+    private static async Task RefuseSignInAsync(RemoteFailureContext context)
+    {
+        LogSignInRefused(
+            context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(HubAuthentication)),
+            context.Failure?.Message ?? "unknown");
+        context.HandleResponse();
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.ContentType = "text/plain; charset=utf-8";
+        await context.Response.WriteAsync(
+            "Sign-in refused by the provider. Reload the Hub to try again.",
+            context.HttpContext.RequestAborted);
+    }
+
+    [LoggerMessage(1900, LogLevel.Warning, "Sign-in refused: {Reason}")]
+    private static partial void LogSignInRefused(ILogger logger, string reason);
 
     private static async Task ReadUserInformationAsync(OAuthCreatingTicketContext context)
     {

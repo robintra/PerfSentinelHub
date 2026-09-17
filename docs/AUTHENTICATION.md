@@ -36,7 +36,9 @@ browser goes through the authorization code flow with PKCE, the Hub exchanges
 the code at the token endpoint, then calls the userinfo endpoint with the access
 token and records the field named by `Hub:Auth:IdentityClaim` as the user. A
 userinfo without that field fails the sign-in rather than opening a nameless
-session. No token is kept: the session is an encrypted `hub_session` cookie,
+session. A failed sign-in, that one or a user cancelling on the provider's
+screen, answers `403` with a line saying to reload, and logs the reason as a
+warning (event `1900`). No token is kept: the session is an encrypted `hub_session` cookie,
 `Secure`, `HttpOnly`, `SameSite=Lax`, valid 8 hours and renewed while in use.
 There is no sign-out button.
 

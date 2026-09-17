@@ -30,6 +30,23 @@ hub:
     # request the Hub makes that does not go to a configured source. Set to
     # false in a cluster with no egress.
     enabled: true
+  auth:
+    # Browser sign-in against an OAuth2 provider (Keycloak, Entra ID, Google,
+    # GitLab, Bitbucket...), so no oauth2-proxy has to front the Hub. Declare
+    # https://<hub host>/auth/callback as the client's redirect URI. The
+    # routes machines call stay open: /api/findings, the import (its own key),
+    # /health and /metrics. See docs/AUTHENTICATION.md.
+    enabled: false
+    authorizationEndpoint: ""
+    tokenEndpoint: ""
+    userInformationEndpoint: ""
+    clientId: ""
+    # The client secret comes from a Secret, never from these values.
+    clientSecretName: ""
+    clientSecretKey: ""
+    scopes: "openid profile email"
+    # The userinfo field recorded as the identity.
+    identityClaim: email
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours and authHeaderName.
 sources: []

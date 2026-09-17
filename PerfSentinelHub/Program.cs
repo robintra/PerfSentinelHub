@@ -84,11 +84,15 @@ builder.Services.AddTransient<IncidentReader>();
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddHostedService<RetentionWorker>();
+var authenticates = builder.AddHubAuthentication();
 
 var app = builder.Build();
 
 await app.Services.GetRequiredService<HubDatabase>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
+
+// Before the static files: the fallback policy guards the launcher itself.
+if (authenticates) app.UseHubAuthentication();
 
 // The launcher and the reports it opens are served from the same origin: the
 // theme handoff between them goes through sessionStorage, with no URL

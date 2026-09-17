@@ -21,6 +21,7 @@ public sealed record HubOptions
     public int MaxReadLimit { get; set; } = 10_000;
     public AnalysisOptions Analysis { get; set; } = new();
     public UpdateCheckOptions UpdateCheck { get; set; } = new();
+    public AuthOptions Auth { get; set; } = new();
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
 }
 
@@ -83,6 +84,29 @@ public sealed record UpdateCheckOptions
 
     public Uri HubEndpoint { get; set; } =
         new("https://api.github.com/repos/robintra/PerfSentinelHub/releases/latest");
+}
+
+/// <summary>
+///     Browser sign-in against an OAuth2 provider, so no authenticating proxy has
+///     to stand in front of the Hub. Generic on purpose: three endpoints and the
+///     userinfo field that names the user fit Keycloak, Entra ID, Google, GitLab and
+///     Bitbucket alike, and none of them needs a package beyond the framework.
+/// </summary>
+public sealed record AuthOptions
+{
+    public bool Enabled { get; set; }
+    public Uri? AuthorizationEndpoint { get; set; }
+    public Uri? TokenEndpoint { get; set; }
+    public Uri? UserInformationEndpoint { get; set; }
+    public string? ClientId { get; set; }
+    public string? ClientSecret { get; set; }
+
+    // Space-separated, as it goes on the wire. A list would append to its own
+    // default when bound, not replace it.
+    public string Scopes { get; set; } = "openid profile email";
+
+    // The userinfo field recorded as the identity.
+    public string IdentityClaim { get; set; } = "email";
 }
 
 public static class SourceKinds
@@ -181,6 +205,31 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Sources must contain at least one source.");
         ValidateAnalysisSettings(options.Analysis, errors);
         ValidateUpdateCheckSettings(options.UpdateCheck, errors);
+        ValidateAuthSettings(options.Auth, errors);
+    }
+
+    private static void ValidateAuthSettings(AuthOptions auth, List<string> errors)
+    {
+        if (!auth.Enabled) return;
+        if (IsInvalidAuthEndpoint(auth.AuthorizationEndpoint) ||
+            IsInvalidAuthEndpoint(auth.TokenEndpoint) ||
+            IsInvalidAuthEndpoint(auth.UserInformationEndpoint))
+            errors.Add("Hub:Auth endpoints must be absolute HTTPS URLs (HTTP on loopback only) "
+                       + "without credentials or fragment.");
+        if (string.IsNullOrWhiteSpace(auth.ClientId) || string.IsNullOrWhiteSpace(auth.ClientSecret))
+            errors.Add("Hub:Auth:ClientId and Hub:Auth:ClientSecret are required.");
+        if (string.IsNullOrWhiteSpace(auth.IdentityClaim))
+            errors.Add("Hub:Auth:IdentityClaim must name a userinfo field.");
+    }
+
+    private static bool IsInvalidAuthEndpoint(Uri? endpoint)
+    {
+        return endpoint is null ||
+               !endpoint.IsAbsoluteUri ||
+               !(endpoint.Scheme == Uri.UriSchemeHttps ||
+                 (endpoint.Scheme == Uri.UriSchemeHttp && endpoint.IsLoopback)) ||
+               !string.IsNullOrEmpty(endpoint.UserInfo) ||
+               !string.IsNullOrEmpty(endpoint.Fragment);
     }
 
     private static void ValidateAnalysisSettings(AnalysisOptions analysis, List<string> errors)

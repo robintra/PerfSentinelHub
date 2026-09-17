@@ -171,8 +171,8 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    ///     The identity a reverse proxy established upstream. The Hub has no
-    ///     account surface and does not verify it, so it is recorded as a claim.
+    ///     The signed-in user under Hub:Auth, otherwise the identity a reverse
+    ///     proxy established upstream, which the Hub records as a claim unverified.
     /// </summary>
     private static string Identity(HttpRequest request, AnalysisOptions analysis)
     {
@@ -182,8 +182,14 @@ public static partial class ApiEndpoints
     /// <summary>Null when no proxy established one, rather than a placeholder.</summary>
     private static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
     {
-        if (!request.Headers.TryGetValue(analysis.IdentityHeader, out var values) ||
-            values is not [{ Length: > 0 } identity])
+        // A session outranks the header, which any client can send.
+        string identity;
+        if (request.HttpContext.User.Identity is { IsAuthenticated: true, Name: { Length: > 0 } name })
+            identity = name;
+        else if (request.Headers.TryGetValue(analysis.IdentityHeader, out var values) &&
+                 values is [{ Length: > 0 } header])
+            identity = header;
+        else
             return null;
 
         var trimmed = identity.Length > MaxIdentityChars ? identity[..MaxIdentityChars] : identity;

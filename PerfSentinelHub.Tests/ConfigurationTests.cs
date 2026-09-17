@@ -127,6 +127,49 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Enabled_authentication_requires_a_usable_provider()
+    {
+        Assert.True(new HubOptionsValidator().Validate(null, ValidOptions() with { Auth = ValidAuth() }).Succeeded);
+
+        AuthOptions[] invalid =
+        [
+            ValidAuth() with { ClientId = "" },
+            ValidAuth() with { ClientSecret = null },
+            ValidAuth() with { IdentityClaim = " " },
+            ValidAuth() with { AuthorizationEndpoint = null },
+            ValidAuth() with { TokenEndpoint = new Uri("/token", UriKind.Relative) },
+            // Plain http carries the code and the access token in clear, loopback excepted.
+            ValidAuth() with { UserInformationEndpoint = new Uri("http://idp.example/userinfo") },
+            ValidAuth() with { TokenEndpoint = new Uri("https://user:pw@idp.example/token") }
+        ];
+
+        Assert.All(invalid, auth => Assert.False(
+            new HubOptionsValidator().Validate(null, ValidOptions() with { Auth = auth }).Succeeded));
+        Assert.True(new HubOptionsValidator().Validate(null, ValidOptions() with
+        {
+            Auth = ValidAuth() with { TokenEndpoint = new Uri("http://127.0.0.1:8081/token") }
+        }).Succeeded);
+        // Off, nothing about the provider is read, so nothing is required.
+        Assert.True(new HubOptionsValidator().Validate(null, ValidOptions() with
+        {
+            Auth = new AuthOptions { Enabled = false }
+        }).Succeeded);
+    }
+
+    private static AuthOptions ValidAuth()
+    {
+        return new AuthOptions
+        {
+            Enabled = true,
+            AuthorizationEndpoint = new Uri("https://idp.example/authorize"),
+            TokenEndpoint = new Uri("https://idp.example/token"),
+            UserInformationEndpoint = new Uri("https://idp.example/userinfo"),
+            ClientId = "hub",
+            ClientSecret = "secret" // gitleaks:allow -- synthetic test credential
+        };
+    }
+
+    [Fact]
     public void Analysis_settings_bind_from_the_documented_strings()
     {
         var configuration = new ConfigurationBuilder()

@@ -1025,7 +1025,14 @@
         else if (screen === "run" || screen === "report") {
             const id = currentRunId();
             if (id && (!state.run || state.run.id !== id)) loadRun(id);
-            else if (id) render();
+            else if (id) {
+                render();
+                // The report frame cannot say its session lapsed: a 401 there is
+                // a blank pane. Asking the API is what reloads into the sign-in.
+                // No render on success, which would reload the report again.
+                if (screen === "report") getJson("/api/analyses/" + id).catch(function () {
+                });
+            }
         }
     }
 

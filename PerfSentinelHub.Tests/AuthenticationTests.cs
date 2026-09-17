@@ -22,14 +22,28 @@ public sealed class AuthenticationTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        _provider = await FakeDaemon.StartAsync(context => context.Request.Path.Value switch
+        // The code becomes the access token, so a test picks the userinfo it gets
+        // back by the code it hands the callback: "anon" names nobody.
+        _provider = await FakeDaemon.StartAsync(async context =>
         {
-            "/token" => context.Response.WriteAsJsonAsync(
-                new Dictionary<string, string> { ["access_token"] = "at", ["token_type"] = "Bearer" }),
-            "/userinfo" when context.Request.Headers.Authorization == "Bearer at" =>
-                context.Response.WriteAsJsonAsync(
-                    new Dictionary<string, string> { ["sub"] = "1", ["email"] = "alice@example.internal" }),
-            _ => Task.FromResult(context.Response.StatusCode = StatusCodes.Status404NotFound)
+            switch (context.Request.Path.Value)
+            {
+                case "/token":
+                    var form = await context.Request.ReadFormAsync();
+                    await context.Response.WriteAsJsonAsync(new Dictionary<string, string>
+                    { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
+                    break;
+                case "/userinfo" when context.Request.Headers.Authorization == "Bearer anon":
+                    await context.Response.WriteAsJsonAsync(new Dictionary<string, string> { ["sub"] = "2" });
+                    break;
+                case "/userinfo":
+                    await context.Response.WriteAsJsonAsync(new Dictionary<string, string>
+                    { ["sub"] = "1", ["email"] = "alice@example.internal" });
+                    break;
+                default:
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    break;
+            }
         }, TestContext.Current.CancellationToken);
 
         _factory = _hub.WithWebHostBuilder(builder =>
@@ -156,6 +170,28 @@ public sealed class AuthenticationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, status.StatusCode);
         var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         Assert.Equal("alice@example.internal", payload.GetProperty("identity").GetString());
+    }
+
+    [Theory]
+    [InlineData("error=access_denied")]
+    [InlineData("code=anon")]
+    public async Task A_refused_or_nameless_sign_in_answers_403_rather_than_failing(string outcome)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = Client();
+
+        using var challenge = await client.GetAsync("/", cancellationToken);
+        var state = QueryHelpers.ParseQuery(challenge.Headers.Location!.Query)["state"];
+        using var callback = await client.GetAsync(
+            $"/auth/callback?{outcome}&state={Uri.EscapeDataString(state!)}", cancellationToken);
+
+        // Cancelling on the provider's consent screen, or a userinfo without the
+        // configured field, is not a Hub fault. No redirect either: it would send
+        // the user straight back to the screen they just cancelled.
+        Assert.Equal(HttpStatusCode.Forbidden, callback.StatusCode);
+        Assert.Null(callback.Headers.Location);
+        Assert.Contains("Sign-in refused", await callback.Content.ReadAsStringAsync(cancellationToken),
+            StringComparison.Ordinal);
     }
 
     private HttpClient Client()

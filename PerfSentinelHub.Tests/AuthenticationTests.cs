@@ -31,14 +31,14 @@ public sealed class AuthenticationTests : IAsyncLifetime
                 case "/token":
                     var form = await context.Request.ReadFormAsync();
                     await context.Response.WriteAsJsonAsync(new Dictionary<string, string>
-                        { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
+                    { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
                     break;
                 case "/userinfo" when context.Request.Headers.Authorization == "Bearer anon":
                     await context.Response.WriteAsJsonAsync(new Dictionary<string, string> { ["sub"] = "2" });
                     break;
                 case "/userinfo":
                     await context.Response.WriteAsJsonAsync(new Dictionary<string, string>
-                        { ["sub"] = "1", ["email"] = "alice@example.internal" });
+                    { ["sub"] = "1", ["email"] = "alice@example.internal" });
                     break;
                 default:
                     context.Response.StatusCode = StatusCodes.Status404NotFound;

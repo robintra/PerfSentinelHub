@@ -233,7 +233,7 @@ test("the knobs this file and app.js name are the ones DetectionOverrides.cs dec
 
   const copy = entriesIn(
     tableIn(appSource, "const DETECTION_COPY = {", "};"),
-    /^\s+([a-z0-9_]+): "/gm,
+    /^\s+([a-z0-9_]+): ["']/gm,
     KNOB_COUNT,
     "sentences in app.js DETECTION_COPY"
   ).map(function (found) { return found[1]; });
@@ -278,7 +278,7 @@ test("the four alias pairs read the same in DaemonDefaults.cs, in app.js and her
   const page = {};
   entriesIn(
     tableIn(appSource, "const DETECT_ALIAS = {", "};"),
-    /([a-z0-9_]+): "([a-z0-9_]+)"/g,
+    /([a-z0-9_]+): ["']([a-z0-9_]+)["']/g,
     ALIAS_COUNT,
     "pairs in app.js DETECT_ALIAS"
   ).forEach(function (found) { page[found[2]] = found[1]; });

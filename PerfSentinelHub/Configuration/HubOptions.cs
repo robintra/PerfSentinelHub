@@ -141,9 +141,21 @@ public sealed record SourceOptions
 
     public Uri? BaseUrl { get; set; }
 
-    // The endpoint as it goes on a command line. Computed once so the run the Hub
-    // launches and the command it publishes cannot drift apart.
+    // Where a workstation and a viewer's browser reach this source, when that is
+    // not where the Hub does: a Hub inside the cluster polls a Service name that
+    // nothing outside it resolves. Printed commands and live reports use it,
+    // the Hub's own reads and runs never do.
+    public Uri? PublicUrl { get; set; }
+
+    // The endpoint as it goes on the engine's command line when the Hub runs it.
     public string EndpointArgument => BaseUrl!.ToString().TrimEnd('/');
+
+    // What leaves the Hub, the printed command and the live report: the public
+    // URL, or the one the Hub runs against when none is declared.
+    public Uri PublishedUrl => (PublicUrl ?? BaseUrl)!;
+
+    // PublishedUrl spelled the way EndpointArgument spells BaseUrl.
+    public string PublicEndpointArgument => PublishedUrl.ToString().TrimEnd('/');
 
     // The engine subcommand that reads this source, null for a daemon: a daemon is
     // read over HTTP and has no subcommand of its own.
@@ -157,6 +169,15 @@ public sealed record SourceOptions
     public string? AuthHeaderName { get; set; }
 
     public string? AuthHeaderValue { get; set; }
+
+    // The header the PublicUrl route asks for, when it is not AuthHeaderName:
+    // an ingress usually authenticates on its own terms. A name and no value,
+    // since the Hub never calls that route.
+    public string? PublicAuthHeaderName { get; set; }
+
+    // The header a printed command names: the public route's own, or the Hub's
+    // when the public route reaches the same daemon, through a port-forward.
+    public string? PublishedAuthHeaderName => PublicAuthHeaderName ?? AuthHeaderName;
 
     // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a
     // trailing newline must hash to the same bytes on both halves of the contract.
@@ -239,7 +260,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
         if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
             errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
-        if (IsInvalidIdentityHeader(analysis.IdentityHeader))
+        if (IsInvalidHeaderName(analysis.IdentityHeader))
             errors.Add("Hub:Analysis:IdentityHeader must be a header name.");
         if (analysis.Workers is < 1 or > 16)
             errors.Add("Hub:Analysis:Workers must be between 1 and 16.");
@@ -295,6 +316,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         ValidateRetentionHours(source, errors);
         ValidateBaseUrl(source, errors);
         ValidateAuthHeader(source, errors);
+        ValidatePublicAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
             errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
     }
@@ -315,16 +337,24 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static void ValidateBaseUrl(SourceOptions source, List<string> errors)
     {
-        var baseUrl = source.BaseUrl;
-        if (baseUrl is null ||
-            !baseUrl.IsAbsoluteUri ||
-            (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps) ||
-            !string.IsNullOrEmpty(baseUrl.UserInfo) ||
-            !string.IsNullOrEmpty(baseUrl.Query) ||
-            !string.IsNullOrEmpty(baseUrl.Fragment))
+        if (IsInvalidSourceUrl(source.BaseUrl))
             errors.Add(
                 $"Source '{source.Id}' requires an absolute HTTP(S) URL " +
                 "without credentials, query, or fragment.");
+        if (source.PublicUrl is not null && IsInvalidSourceUrl(source.PublicUrl))
+            errors.Add(
+                $"Source '{source.Id}' public URL must be an absolute HTTP(S) URL " +
+                "without credentials, query, or fragment.");
+    }
+
+    private static bool IsInvalidSourceUrl(Uri? url)
+    {
+        return url is null ||
+               !url.IsAbsoluteUri ||
+               (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps) ||
+               !string.IsNullOrEmpty(url.UserInfo) ||
+               !string.IsNullOrEmpty(url.Query) ||
+               !string.IsNullOrEmpty(url.Fragment);
     }
 
     private static void ValidateAuthHeader(SourceOptions source, List<string> errors)
@@ -361,12 +391,23 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         }
     }
 
+    private static void ValidatePublicAuthHeader(SourceOptions source, List<string> errors)
+    {
+        if (source.PublicAuthHeaderName is not { } name)
+            return;
+
+        if (source.PublicUrl is null)
+            errors.Add($"Source '{source.Id}' public auth header name requires a public URL.");
+        if (IsInvalidHeaderName(name))
+            errors.Add($"Source '{source.Id}' public auth header name is invalid.");
+    }
+
     private static bool IsInvalidImportApiKey(string value)
     {
         return value.Length < 32 || string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl);
     }
 
-    private static bool IsInvalidIdentityHeader(string value)
+    private static bool IsInvalidHeaderName(string value)
     {
         return string.IsNullOrWhiteSpace(value) ||
                value.Any(character => char.IsControl(character) || character == ' ');

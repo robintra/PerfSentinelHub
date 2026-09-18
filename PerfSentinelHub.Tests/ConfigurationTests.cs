@@ -50,6 +50,20 @@ public sealed class ConfigurationTests
             ValidOptions() with { Sources = [] },
             ValidOptions() with { Sources = [ValidSource() with { BaseUrl = null }] },
             ValidOptions() with { Sources = [ValidSource() with { BaseUrl = new Uri("https://daemon.example?a=b") }] },
+            ValidOptions() with { Sources = [ValidSource() with { PublicUrl = new Uri("https://daemon.example#a") }] },
+            ValidOptions() with { Sources = [ValidSource() with { PublicUrl = new Uri("ftp://daemon.example") }] },
+            // A public header name with no public route has nothing to describe.
+            ValidOptions() with { Sources = [ValidSource() with { PublicAuthHeaderName = "Authorization" }] },
+            ValidOptions() with
+            {
+                Sources =
+                [
+                    ValidSource() with
+                    {
+                        PublicUrl = new Uri("https://public.example"), PublicAuthHeaderName = "Bad Header"
+                    }
+                ]
+            },
             ValidOptions() with { Sources = [ValidSource(), ValidSource()] },
             ValidOptions() with { DatabasePath = "relative.db" },
             ValidOptions() with { PollInterval = TimeSpan.Zero },

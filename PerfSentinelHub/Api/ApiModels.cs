@@ -66,15 +66,17 @@ public sealed record SourceResponse(
     long? UnreachableSinceMs,
     string? ProducerVersion,
     string? LastErrorCode,
-    // The endpoint a command would target, in the exact form the Hub passes to
-    // the engine itself. Published rather than rebuilt in the page: the two
-    // spellings have to be the same bytes.
+    // The endpoint a printed command targets: the source's PublicUrl when one is
+    // declared, its BaseUrl otherwise, spelled the way the Hub passes an endpoint
+    // to the engine. Published rather than rebuilt in the page so the two
+    // spellings stay the same bytes. The wire name predates PublicUrl.
     string BaseUrl,
     // The engine subcommand for this kind, null for a daemon: a daemon is not
     // queried, it is read.
     string? EngineSubcommand,
     // The header's name, never its value. Without it the note cannot say what
-    // belongs in the variable, which the engine expects as "Name: Value".
+    // belongs in the variable, which the engine expects as "Name: Value". The
+    // one the published address asks for, like BaseUrl above.
     string? AuthHeaderName,
     // What the last incidents read of this daemon came to: ok, absent (no such
     // route, or the store is off), unauthorized, error. Null when none has run.

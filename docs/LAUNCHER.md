@@ -64,7 +64,7 @@ reader's own choice is remembered from then on and applies to every command on t
 once.
 
 Neither command carries a placeholder. The endpoint is the source's own configured
-`BaseUrl`, and the monitor command carries the re-read interval the reader picked on that
+`PublicUrl`, or its `BaseUrl` when it declares none, and the monitor command carries the re-read interval the reader picked on that
 row, so a copied line is runnable as it stands and does not contradict the screen it came
 from. The one thing an operator still types is the service name, which is theirs to choose
 and is shown empty rather than guessed.
@@ -78,14 +78,17 @@ inventing a tag.
 
 The launcher prints the run as an engine command line, so an operator can take it to a
 terminal instead. It is built from the very object the form posts, never from the form, so
-the printed command and the submitted run cannot drift.
+the printed command and the submitted run cannot drift. The endpoint is the one deliberate
+difference: a source that declares a `PublicUrl` prints it, while the Hub runs against its
+`BaseUrl`.
 
 It is one command and not the two the Hub runs: the JSON output and the render step exist
 so the Hub can build a dashboard, and a terminal needs neither.
 
 Values are quoted for a POSIX shell with single quotes, the only form that holds for a
 service name carrying `$` or a quote. An authenticated source prints `--auth-header-env`
-rather than its token, which the Hub holds and never discloses.
+rather than its token, which the Hub holds and never discloses. The header it names is the
+source's `PublicAuthHeaderName` when it declares one, see [CONFIGURATION.md](CONFIGURATION.md).
 
 Detection overrides have no command-line flag, so a run that changed one carries
 `-c perf-sentinel.toml`, and the file is printed beside the command, ready to copy or to
@@ -100,13 +103,14 @@ rather than relying on that discovery.
 
 ## Live reports
 
-A report rendered from a daemon source goes live when the daemon's `BaseUrl` is a bare
-origin. The render passes `--daemon-url`, and the dashboard's own Refresh and
+A report rendered from a daemon source goes live when the daemon's `PublicUrl`, or its
+`BaseUrl` when it declares none, is a bare origin. The render passes `--daemon-url`, and the dashboard's own Refresh and
 acknowledgment controls then talk to that daemon from the viewer's browser.
 
 Two conditions sit outside the Hub: the daemon's `[daemon.cors] allowed_origins` must
 carry the origin this Hub serves reports from, and the viewer must be able to reach the
-daemon directly.
+daemon directly. A Hub that polls its daemon by a Service name needs a `PublicUrl` for
+this, see [CONFIGURATION.md](CONFIGURATION.md).
 
 A daemon behind a path-based ingress gets a static report instead, because the engine's
 flag takes an origin and nothing else. So does every daemon source when the configured

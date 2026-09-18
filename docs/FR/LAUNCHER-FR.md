@@ -70,8 +70,8 @@ L'onglet qu'ouvre une première visite suit la plateforme, Windows recevant Powe
 choix propre du lecteur est retenu ensuite et s'applique d'un coup à toutes les commandes
 de la page.
 
-Aucune des deux commandes ne porte de valeur d'exemple. Le point d'accès est le `BaseUrl`
-configuré de la source, et la commande du monitor porte l'intervalle de relecture choisi
+Aucune des deux commandes ne porte de valeur d'exemple. Le point d'accès est le `PublicUrl`
+configuré de la source, ou son `BaseUrl` quand elle n'en déclare pas, et la commande du monitor porte l'intervalle de relecture choisi
 sur cette ligne, de sorte qu'une ligne copiée est exécutable telle quelle et ne contredit
 pas l'écran d'où elle vient. La seule chose qu'un opérateur tape encore est le nom de
 service, qui lui appartient et qui est montré vide plutôt que deviné.
@@ -86,7 +86,8 @@ des releases plutôt que d'inventer un tag.
 Le lanceur imprime le run sous forme de ligne de commande du moteur, pour qu'un opérateur
 puisse l'emporter dans un terminal. Elle est bâtie depuis l'objet même que le formulaire
 poste, jamais depuis le formulaire, de sorte que la commande imprimée et le run soumis ne
-peuvent pas diverger.
+peuvent pas diverger. Le point d'accès est la seule différence voulue : une source qui
+déclare un `PublicUrl` l'imprime, tandis que le Hub lance le run sur son `BaseUrl`.
 
 C'est une commande et non les deux que le Hub lance : la sortie JSON et l'étape de rendu
 existent pour que le Hub puisse bâtir un dashboard, et un terminal n'a besoin ni de l'une
@@ -95,7 +96,8 @@ ni de l'autre.
 Les valeurs sont protégées pour un shell POSIX par des apostrophes simples, la seule forme
 qui tienne pour un nom de service portant un `$` ou une apostrophe. Une source
 authentifiée imprime `--auth-header-env` plutôt que son jeton, que le Hub détient et ne
-divulgue jamais.
+divulgue jamais. L'en-tête nommé est le `PublicAuthHeaderName` de la source quand elle en
+déclare un, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md).
 
 Les surcharges de détection n'ont pas de flag en ligne de commande, donc un run qui en a
 changé une porte `-c perf-sentinel.toml`, et le fichier est imprimé à côté de la commande,
@@ -110,13 +112,14 @@ commande nomme le fichier au lieu de s'en remettre à cette découverte.
 
 ## Les rapports live
 
-Un rapport rendu depuis une source daemon devient live quand le `BaseUrl` de ce daemon est
-une origine nue. Le rendu passe `--daemon-url`, et les contrôles de rafraîchissement et
+Un rapport rendu depuis une source daemon devient live quand le `PublicUrl` de ce daemon,
+ou son `BaseUrl` quand il n'en déclare pas, est une origine nue. Le rendu passe `--daemon-url`, et les contrôles de rafraîchissement et
 d'acquittement du dashboard parlent alors à ce daemon depuis le navigateur du lecteur.
 
 Deux conditions se trouvent hors du Hub : le `[daemon.cors] allowed_origins` du daemon
 doit porter l'origine depuis laquelle ce Hub sert ses rapports, et le lecteur doit pouvoir
-joindre le daemon directement.
+joindre le daemon directement. Un Hub qui polle son daemon par un nom de Service a besoin
+pour cela d'un `PublicUrl`, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md).
 
 Un daemon derrière un ingress à préfixe de chemin reçoit un rapport statique, parce que le
 flag du moteur prend une origine et rien d'autre. Il en va de même de toute source daemon

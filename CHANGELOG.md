@@ -4,6 +4,14 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- `Sources[].PublicUrl` (Helm `sources[].publicUrl`), the address printed commands and live
+  reports target when `BaseUrl` is a name only the cluster resolves. The Hub's own polls,
+  reads and runs keep `BaseUrl`. Without it, nothing changes.
+- `Sources[].PublicAuthHeaderName` (Helm `sources[].publicAuthHeaderName`), the header
+  printed commands name when the public route authenticates differently from `BaseUrl`.
+
 ### Changed
 
 - The example Grafana dashboard shows times in the viewer's browser time zone instead of

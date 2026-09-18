@@ -92,7 +92,8 @@ pas la frontière, posez ce proxy devant ou activez `Hub:Auth`. Voir
 Un rapport vivant exige deux choses que le Hub ne contrôle pas : le
 `[daemon.cors] allowed_origins` du daemon doit porter l'origine depuis laquelle
 le Hub sert ses rapports, et le lecteur doit pouvoir joindre ce daemon
-directement. Un daemon derrière un ingress à préfixe de chemin reçoit un rapport
+directement, à son `PublicUrl` quand le Hub le lit par un nom que seul le cluster
+résout. Un daemon derrière un ingress à préfixe de chemin reçoit un rapport
 statique à la place, parce que le `--daemon-url` du moteur prend une origine et
 rien d'autre. Voir [LAUNCHER-FR.md](LAUNCHER-FR.md).
 

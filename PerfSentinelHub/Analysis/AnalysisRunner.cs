@@ -182,11 +182,12 @@ public sealed partial class AnalysisRunner(
     ///     path-based ingress (the engine takes an origin and rejects path, query,
     ///     userinfo and trailing slash at parse), and an engine binary built
     ///     without its `daemon` feature, which does not know the flag at all.
+    ///     The viewer's browser makes these calls, so the URL is the public one.
     /// </summary>
     public static string? LiveDaemonUrl(SourceOptions source, bool engineTakesTheFlag)
     {
-        return engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.BaseUrl!.AbsolutePath == "/"
-            ? source.EndpointArgument
+        return engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.PublishedUrl.AbsolutePath == "/"
+            ? source.PublicEndpointArgument
             : null;
     }
 

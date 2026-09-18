@@ -85,7 +85,8 @@ the boundary, put that proxy in front or turn on `Hub:Auth`. See
 
 A live report needs two things the Hub does not control: the daemon's
 `[daemon.cors] allowed_origins` must carry the origin the Hub serves reports
-from, and the viewer must be able to reach that daemon directly. A daemon behind
+from, and the viewer must be able to reach that daemon directly, at its `PublicUrl`
+when the Hub reads it by a name only the cluster resolves. A daemon behind
 a path-based ingress gets a static report instead, because the engine's
 `--daemon-url` takes an origin and nothing else. See [LAUNCHER.md](LAUNCHER.md).
 

@@ -48,7 +48,10 @@ hub:
     # The userinfo field recorded as the identity.
     identityClaim: email
 # Each source takes id, name, environment, baseUrl, and optionally
-# kind (daemon, tempo, jaeger_query), retentionHours and authHeaderName.
+# kind (daemon, tempo, jaeger_query), retentionHours, authHeaderName and
+# publicUrl (the address printed commands and live reports use when baseUrl
+# is a name only the cluster resolves) with publicAuthHeaderName (the header
+# that address asks for, when it is not authHeaderName).
 sources: []
 # Annotations on the Service. Left empty because a scrape is opted into, not
 # assumed: set prometheus.io/scrape, /port and /path here, or point a

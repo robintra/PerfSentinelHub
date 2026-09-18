@@ -509,8 +509,8 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "utc",
+  "timezone": "browser",
   "title": "PerfSentinelHub overview",
   "uid": "perf-sentinel-hub-overview",
-  "version": 1
+  "version": 2
 }

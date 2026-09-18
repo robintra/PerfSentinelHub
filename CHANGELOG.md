@@ -2,6 +2,13 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The example Grafana dashboard shows times in the viewer's browser time zone instead of
+  UTC, like the launcher already does. Dashboard `version` 2.
+
 ## [0.2.0] - 2026-09-17
 
 ### Added

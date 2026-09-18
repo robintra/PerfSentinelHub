@@ -190,6 +190,8 @@ public sealed record SourceOptions
 
 public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 {
+    private const string UrlShape = "without credentials, query, or fragment.";
+
     public ValidateOptionsResult Validate(string? name, HubOptions options)
     {
         var errors = new List<string>();
@@ -287,10 +289,10 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         // whoever reads the configuration sees the whole destination.
         if (IsInvalidUpdateEndpoint(update.EngineEndpoint))
             errors.Add("Hub:UpdateCheck:EngineEndpoint must be an absolute HTTPS URL "
-                       + "without credentials, query, or fragment.");
+                       + UrlShape);
         if (IsInvalidUpdateEndpoint(update.HubEndpoint))
             errors.Add("Hub:UpdateCheck:HubEndpoint must be an absolute HTTPS URL "
-                       + "without credentials, query, or fragment.");
+                       + UrlShape);
     }
 
     private static bool IsInvalidUpdateEndpoint(Uri? endpoint)
@@ -340,11 +342,11 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         if (IsInvalidSourceUrl(source.BaseUrl))
             errors.Add(
                 $"Source '{source.Id}' requires an absolute HTTP(S) URL " +
-                "without credentials, query, or fragment.");
+                UrlShape);
         if (source.PublicUrl is not null && IsInvalidSourceUrl(source.PublicUrl))
             errors.Add(
                 $"Source '{source.Id}' public URL must be an absolute HTTP(S) URL " +
-                "without credentials, query, or fragment.");
+                UrlShape);
     }
 
     private static bool IsInvalidSourceUrl(Uri? url)

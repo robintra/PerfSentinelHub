@@ -61,6 +61,9 @@ SONAR_SCANNER_ARGUMENTS = (
     '"/d:sonar.issue.ignore.multicriteria.demopacing.resourceKey=tests/browser/demo/**"',
 )
 SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
+# A shallow clone leaves Sonar without blame, so new code and issue assignment go blind, and a pull
+# request analysis without origin/main cannot diff against its target branch.
+SONAR_CHECKOUT = "fetch-depth: 0"
 SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}
 REQUIRED_SECRETS = {
     "CI_GATE_APP_ID",
@@ -116,6 +119,8 @@ def validate_sonar(root: Path) -> list[str]:
             for argument in SONAR_SCANNER_ARGUMENTS
             if argument not in text
         )
+        if SONAR_CHECKOUT not in text:
+            errors.append(f"{relative}: Sonar checkout must fetch full history ({SONAR_CHECKOUT})")
     return errors
 
 

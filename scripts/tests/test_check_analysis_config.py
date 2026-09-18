@@ -39,7 +39,7 @@ SCANNER = (
     "/d:sonar.issue.ignore.multicriteria.demopacing.ruleKey=typescript:S2925 "
     '"/d:sonar.issue.ignore.multicriteria.demopacing.resourceKey=tests/browser/demo/**"\n'
 )
-SONAR = SCANNER
+SONAR = "      - uses: actions/checkout\n        with:\n          fetch-depth: 0\n" + SCANNER
 
 
 def secret_inventory(**entry_overrides):
@@ -146,6 +146,17 @@ class AnalysisConfigCheckerTests(unittest.TestCase):
 
                 self.assertEqual(1, result.returncode)
                 self.assertIn(".github/workflows/ci.yml", result.stderr)
+
+    def test_rejects_a_shallow_sonar_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_repository(root, sonar=SONAR.replace("fetch-depth: 0", "fetch-depth: 1"))
+
+            result = run_checker(root)
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn(".github/workflows/ci.yml: Sonar checkout", result.stderr)
+            self.assertIn(".github/workflows/sonar-main.yml: Sonar checkout", result.stderr)
 
     def test_rejects_missing_scanner_arguments(self):
         cases = (

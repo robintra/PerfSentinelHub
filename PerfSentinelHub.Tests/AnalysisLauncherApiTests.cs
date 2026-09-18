@@ -124,6 +124,53 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
     }
 
     [Fact]
+    public async Task A_source_publishes_its_public_url_rather_than_the_one_the_hub_polls()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scoped = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
+                options.Sources =
+                [
+                    .. options.Sources,
+                    new SourceOptions
+                    {
+                        Id = "tempo",
+                        Name = "Tempo",
+                        Environment = "production",
+                        Kind = SourceKinds.Tempo,
+                        BaseUrl = new Uri("http://tempo.obs.svc:3200"),
+                        AuthHeaderName = "X-Scope-OrgID",
+                        AuthHeaderValue = "tenant-42", // gitleaks:allow -- synthetic test credential
+                        PublicUrl = new Uri("https://tempo.example/"),
+                        PublicAuthHeaderName = "Authorization"
+                    },
+                    new SourceOptions
+                    {
+                        Id = "jaeger",
+                        Name = "Jaeger",
+                        Environment = "production",
+                        Kind = SourceKinds.JaegerQuery,
+                        BaseUrl = new Uri("http://jaeger.obs.svc:16686"),
+                        AuthHeaderName = "X-Scope-OrgID",
+                        AuthHeaderValue = "tenant-42", // gitleaks:allow -- synthetic test credential
+                        PublicUrl = new Uri("http://localhost:16686")
+                    }
+                ])));
+        using var client = scoped.CreateClient();
+
+        // A printed command runs on a workstation, which cannot resolve the
+        // cluster name the Hub itself reads, and authenticates the way the
+        // public route does.
+        var backend = await ReadSourceAsync(client, "tempo", cancellationToken);
+        Assert.Equal("https://tempo.example", backend.GetProperty("base_url").GetString());
+        Assert.Equal("Authorization", backend.GetProperty("auth_header_name").GetString());
+
+        // A port-forward reaches the same backend, so it keeps the Hub's header.
+        var forwarded = await ReadSourceAsync(client, "jaeger", cancellationToken);
+        Assert.Equal("X-Scope-OrgID", forwarded.GetProperty("auth_header_name").GetString());
+    }
+
+    [Fact]
     public async Task A_source_with_an_auth_header_names_it_and_never_its_value()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

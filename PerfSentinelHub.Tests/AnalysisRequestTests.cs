@@ -126,9 +126,11 @@ public sealed class AnalysisRequestTests
     public void The_endpoint_and_subcommand_a_command_would_publish_are_the_ones_the_engine_receives(
         string kind, string subcommand)
     {
-        // The launcher prints a command out of these same two properties.
-        // Inlining either back into ToEngineArguments would let the printed
-        // command and the launched run target different things, silently.
+        // The launcher prints a command out of EngineSubcommand and
+        // PublicEndpointArgument, which spells the same URL the same way when
+        // no public URL is declared. Inlining either back into
+        // ToEngineArguments would let the printed command and the launched run
+        // target different things, silently.
         var source = Source(kind) with { BaseUrl = new Uri("http://backend.example:3200/prefix/") };
         var request = Parse("""{"trace_id":"abc123def456"}""", kind, out _);
 
@@ -137,8 +139,13 @@ public sealed class AnalysisRequestTests
         Assert.Equal(subcommand, arguments[0]);
         Assert.Equal(source.EngineSubcommand, arguments[0]);
         Assert.Equal(source.EndpointArgument, arguments[2]);
+        Assert.Equal(source.PublicEndpointArgument, arguments[2]);
         // The trailing slash is dropped once, in the one place both readers use.
         Assert.Equal("http://backend.example:3200/prefix", arguments[2]);
+        // A public URL only changes what is printed: the Hub still runs from
+        // inside the cluster, against the URL it polls.
+        var published = source with { PublicUrl = new Uri("https://backend.example/") };
+        Assert.Equal("http://backend.example:3200/prefix", request.ToEngineArguments(published, null)[2]);
     }
 
     [Fact]
@@ -169,6 +176,17 @@ public sealed class AnalysisRequestTests
         Assert.DoesNotContain(
             "--auth-header-env",
             service.ToEngineArguments(Source(SourceKinds.Tempo), null));
+        // A header only the public route asks for is the operator's business:
+        // the Hub runs over the cluster network and holds no value for it.
+        Assert.DoesNotContain(
+            "--auth-header-env",
+            service.ToEngineArguments(
+                Source(SourceKinds.Tempo) with
+                {
+                    PublicUrl = new Uri("https://backend.example"),
+                    PublicAuthHeaderName = "Authorization"
+                },
+                null));
     }
 
     [Fact]

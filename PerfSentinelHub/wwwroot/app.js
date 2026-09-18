@@ -698,8 +698,8 @@
    * The step that trips people up: it names a variable, and a reader who has
    * never met the flag cannot tell what goes in it or where. So it shows the
    * line to run, in the shell they picked, with their own credential to drop
-   * in. Only ever shown for a source the Hub itself reaches with a header, so
-   * an open backend on an intranet never sees any of this.
+   * in. Only ever shown for a source whose published address takes a header,
+   * so an open backend on an intranet never sees any of this.
    */
   function tokenStep(source) {
     const header = source.auth_header_name + ': …';
@@ -1507,9 +1507,9 @@
           + 'five seconds.',
           engineNote(),
           source.auth_header_name
-            ? 'The Hub reaches this daemon with an auth header it holds and does not disclose. '
+            ? 'This daemon is behind an `' + source.auth_header_name + '` header. '
             + '`query monitor` takes no such flag, so this command works only from somewhere '
-            + 'that can reach the daemon directly.'
+            + 'that reaches the daemon without it.'
             : null
         ]
       }),

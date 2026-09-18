@@ -115,6 +115,27 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public void A_daemon_report_goes_live_against_its_public_url_when_one_is_declared()
+    {
+        // The Hub polls over the cluster network, the viewer's browser cannot:
+        // a declared PublicUrl is what the report talks to, and its own shape
+        // decides whether the report can go live at all.
+        var inCluster = new SourceOptions
+        {
+            Id = "d",
+            Name = "D",
+            Environment = "production",
+            Kind = SourceKinds.Daemon,
+            BaseUrl = new Uri("http://daemon.svc:4318/")
+        };
+        var published = inCluster with { PublicUrl = new Uri("http://localhost:14318/") };
+        var prefixed = inCluster with { PublicUrl = new Uri("https://gw.example/perf-sentinel/") };
+
+        Assert.Equal("http://localhost:14318", AnalysisRunner.LiveDaemonUrl(published, true));
+        Assert.Null(AnalysisRunner.LiveDaemonUrl(prefixed, true));
+    }
+
+    [Fact]
     public async Task A_daemon_run_is_rendered_live_when_the_probed_engine_takes_the_flag()
     {
         // The pure helper above says what the URL should be, and EngineProbeTests

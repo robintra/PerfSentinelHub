@@ -48,7 +48,9 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Sources[].Kind`                 | `daemon` | L'un de `daemon`, `tempo`, `jaeger_query`. Seul un daemon est pollé, et seul un daemon peut porter une clé d'import |
 | `Sources[].RetentionHours`       | aucun    | Backends de traces seulement, d'une heure à dix ans                                                                 |
 | `Sources[].BaseUrl`              | aucune   | Obligatoire. HTTP(S) absolue, sans identifiants, query ni fragment                                                  |
+| `Sources[].PublicUrl`            | aucune   | Optionnelle, même forme que `BaseUrl`. Cible des commandes affichées et des rapports live                           |
 | `Sources[].AuthHeaderName/Value` | aucun    | Les deux absents ou les deux présents, sans saut de ligne. Le `[daemon] read_api_key` d'un daemon va ici en `X-API-Key` |
+| `Sources[].PublicAuthHeaderName` | aucun    | Exige `PublicUrl`, sans espace ni caractère de contrôle. L'en-tête nommé par les commandes affichées à la place d'`AuthHeaderName` |
 | `Sources[].ImportApiKey`         | aucune   | Identifiant de push optionnel, au moins 32 caractères, fourni via un Secret                                         |
 
 `Hub:DatabasePath` et `Hub:Analysis:ReportDirectory` valent par défaut `/data/hub.db` et
@@ -64,6 +66,24 @@ quelqu'un l'édite.
 `BaseUrl` conserve un préfixe de chemin, donc `https://gw/perf-sentinel/` polle
 `https://gw/perf-sentinel/api/status`.
 
+`BaseUrl` est l'adresse où le Hub joint une source. Un Hub dans le cluster lit un nom de
+Service que rien hors du cluster ne résout : une commande affichée depuis ce Hub ne
+tournerait pas sur un poste, et un rapport live y enverrait le navigateur du lecteur.
+`PublicUrl` est l'adresse vue de l'extérieur : un hôte d'Ingress, ou
+`http://localhost:14318` pour des lecteurs qui font eux-mêmes le port-forward. Les
+commandes affichées et les rapports live l'utilisent. Les polls, lectures et runs du Hub
+gardent `BaseUrl` et restent sur le réseau du cluster. Sans `PublicUrl`, les deux
+utilisent `BaseUrl`.
+
+Les commandes affichées nomment l'en-tête d'`AuthHeaderName`, ce qui convient à un
+port-forward : il joint le même daemon. Un Ingress qui authentifie à sa façon prend
+`PublicAuthHeaderName` à la place. C'est un nom sans valeur, puisque le Hub n'appelle
+jamais la route publique et que le lecteur fournit son propre identifiant.
+
+Un Hub servi en HTTPS a besoin d'un `PublicUrl` en HTTPS pour que ses rapports soient
+live : les navigateurs bloquent les appels HTTP depuis une page HTTPS, sauf vers
+`localhost` pour la plupart d'entre eux.
+
 ## Ce qu'est une source, et ce qui est mesuré
 
 La liste est de la configuration, jamais une découverte. Rien n'est détecté
@@ -71,7 +91,7 @@ automatiquement, le lanceur ne peut pas ajouter de source, et le Hub refuse de d
 sans aucune.
 
 Cela coupe chaque ligne de l'écran de flotte en deux. `Id`, `Name`, `Environment`, `Kind`,
-`BaseUrl` et `RetentionHours` sont déclarés : repris de ce fichier tels quels et jamais
+`BaseUrl`, `PublicUrl` et `RetentionHours` sont déclarés : repris de ce fichier tels quels et jamais
 confrontés à quoi que ce soit. `reachable`, `last_success`, `unreachable_since`,
 `producer_version` et `last_error` sont observés, écrits par le poll. Un contour en
 pointillé marque la moitié déclarée dans le lanceur, et c'est pourquoi un déploiement mal

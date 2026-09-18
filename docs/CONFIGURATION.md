@@ -47,7 +47,9 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Sources[].Kind`                 | `daemon` | One of `daemon`, `tempo`, `jaeger_query`. Only a daemon is polled, and only a daemon may carry an import key |
 | `Sources[].RetentionHours`       | none     | Trace backends only, 1 hour to 10 years                                                                      |
 | `Sources[].BaseUrl`              | none     | Required. Absolute HTTP(S), no credentials, query, or fragment                                               |
+| `Sources[].PublicUrl`            | none     | Optional, same shape as `BaseUrl`. What printed commands and live reports target                             |
 | `Sources[].AuthHeaderName/Value` | none     | Both absent or both present, no newlines. A daemon's `[daemon] read_api_key` goes here as `X-API-Key`        |
+| `Sources[].PublicAuthHeaderName` | none     | Requires `PublicUrl`, no spaces or controls. The header printed commands name instead of `AuthHeaderName`    |
 | `Sources[].ImportApiKey`         | none     | Optional push credential, at least 32 characters, supplied through a Secret                                  |
 
 `Hub:DatabasePath` and `Hub:Analysis:ReportDirectory` default to `/data/hub.db` and
@@ -61,13 +63,29 @@ carries the same caveat as `Environment`: it keeps a stale claim until someone e
 `BaseUrl` keeps a path prefix, so `https://gw/perf-sentinel/` polls
 `https://gw/perf-sentinel/api/status`.
 
+`BaseUrl` is where the Hub reaches a source. A Hub inside the cluster reads a Service name
+that nothing outside the cluster resolves, so a command printed from it would not run on a
+workstation, and a live report would point the viewer's browser at it. `PublicUrl` is the
+address from outside: an Ingress host, or `http://localhost:14318` for readers who forward
+the port themselves. Printed commands and live reports use it. The Hub's own polls, reads
+and runs keep `BaseUrl`, so they stay on the cluster network. Without `PublicUrl`, both use
+`BaseUrl`.
+
+Printed commands name the header `AuthHeaderName` names, which fits a port-forward: it
+reaches the same daemon. An Ingress that authenticates on its own terms takes
+`PublicAuthHeaderName` instead. It is a name without a value, since the Hub never calls the
+public route and the reader supplies their own credential.
+
+A Hub served over HTTPS needs an HTTPS `PublicUrl` for its reports to go live: browsers
+block HTTP calls from an HTTPS page, with an exception for `localhost` in most of them.
+
 ## What a source is, and what is measured
 
 The list is configuration, never discovery. Nothing is auto-detected, the launcher cannot
 add a source, and the Hub refuses to start with none.
 
 That splits every row on the fleet screen in two. `Id`, `Name`, `Environment`, `Kind`,
-`BaseUrl` and `RetentionHours` are declared: taken from this file as written and never
+`BaseUrl`, `PublicUrl` and `RetentionHours` are declared: taken from this file as written and never
 checked against anything. `reachable`, `last_success`, `unreachable_since`,
 `producer_version` and `last_error` are observed, written by the poll. A dashed outline in
 the launcher marks the declared half, which is why a misconfigured deployment can label

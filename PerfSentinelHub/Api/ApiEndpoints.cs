@@ -85,9 +85,9 @@ public static partial class ApiEndpoints
                     state?.UnreachableSinceMs,
                     state?.ProducerVersion,
                     state?.LastErrorCode,
-                    source.EndpointArgument,
+                    source.PublicEndpointArgument,
                     source.EngineSubcommand,
-                    source.AuthHeaderName,
+                    source.PublishedAuthHeaderName,
                     read?.State,
                     read?.LastReadMs);
             })

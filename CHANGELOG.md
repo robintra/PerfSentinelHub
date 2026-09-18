@@ -16,6 +16,28 @@ All notable changes to PerfSentinelHub are recorded here.
 
 - The example Grafana dashboard shows times in the viewer's browser time zone instead of
   UTC, like the launcher already does. Dashboard `version` 2.
+- The image ships perf-sentinel `0.23.0` as its analysis engine, repinned by digest from
+  `0.22.2`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.22.2` now reads one minor behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  The change that reaches the Hub's own data comes from the daemon, not from this binary:
+  a `0.23.0` daemon counts slow episodes across analysis batches, on by default, and
+  reports `slow_*` findings it used to leave in its duration histogram. They carry the
+  signature a batch run would give them, so they fold into a row the Hub already holds for
+  that template and otherwise arrive as new rows with today's `first_seen_ms`. Expect more
+  slow findings per source once it upgrades, not a change in how any row is stored.
+
+  A report the Hub renders shows its times in the reader's browser time zone, as the
+  launcher and the dashboard already do. For a daemon run, the source side of a
+  correlation card opens Explain on its own trace when the daemon is on `0.23.0` too,
+  since the field it reads is new there. The Hub reads the JSON the engine writes, never
+  its terminal text, so the local-time `Window:` line changes nothing here.
+
+  The new `[detection] slow_query_window_minutes` only acts in the daemon, and a backend
+  analysis is a batch run, so `DetectionOverrides` is untouched and the launcher still
+  gates `sanitizer_aware_min_cv` alone, on engines `0.18.0` or later. The daemon view's
+  defaults are unchanged too: `0.23.0` adds nothing to the settings a daemon publishes.
 
 ## [0.2.0] - 2026-09-17
 

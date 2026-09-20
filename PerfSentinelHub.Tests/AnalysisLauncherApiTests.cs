@@ -206,6 +206,42 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
         Assert.Equal(JsonValueKind.Null, open.GetProperty("auth_header_name").ValueKind);
     }
 
+    [Fact]
+    public async Task A_source_says_whether_it_relays_acks_and_never_with_what()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scoped = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
+                options.Sources =
+                [
+                    .. options.Sources,
+                    new SourceOptions
+                    {
+                        Id = "relayed",
+                        Name = "Relayed",
+                        Environment = "production",
+                        BaseUrl = new Uri("http://perf-sentinel.obs.svc:4318"),
+                        AckHeaderName = "X-Ack-Key",
+                        AckHeaderValue = "ack-topsecret" // gitleaks:allow -- synthetic test credential
+                    }
+                ])));
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync("/api/sources", cancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        using var body = JsonDocument.Parse(payload);
+        var source = body.RootElement.EnumerateArray()
+            .Single(candidate => candidate.GetProperty("id").GetString() == "relayed");
+        Assert.True(source.GetProperty("ack_relay").GetBoolean());
+        // Unlike the read header, not even the name: no printed command ever acks.
+        Assert.DoesNotContain("X-Ack-Key", payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("ack-topsecret", payload, StringComparison.Ordinal);
+
+        var open = await ReadSourceAsync(client, "test", cancellationToken);
+        Assert.False(open.GetProperty("ack_relay").GetBoolean());
+    }
+
     private static async Task<JsonElement> ReadSourceAsync(
         HttpClient client,
         string sourceId,

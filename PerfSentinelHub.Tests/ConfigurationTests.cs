@@ -1,13 +1,17 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Tests;
 
 public sealed class ConfigurationTests
 {
+    private const string AckSecret = "ack-secret"; // gitleaks:allow -- synthetic test credential
+
     [Fact]
     public void Indexed_source_configuration_binds_to_the_options_model()
     {
@@ -126,6 +130,121 @@ public sealed class ConfigurationTests
         };
 
         Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    // One validator words both pairs, and the read pair's wording predates it.
+    [Theory]
+    [InlineData(null, "secret", "Source 'prod' must provide both auth header name and value.")]
+    [InlineData("Authorization", "secret\nInjected", "Source 'prod' auth header contains a newline.")]
+    [InlineData("Bad Header", "secret", "Source 'prod' auth header is invalid.")]
+    public void The_read_credential_keeps_its_messages(string? name, string value, string message)
+    {
+        var source = ValidSource() with { AuthHeaderName = name, AuthHeaderValue = value };
+
+        Assert.Equal(message, Assert.Single(Failures(source)));
+    }
+
+    [Theory]
+    [InlineData("X-API-Key", null, "Source 'prod' must provide both ack header name and value.")]
+    [InlineData(null, "ack-secret", "Source 'prod' must provide both ack header name and value.")]
+    [InlineData("X-API-Key\r\nInjected", "ack-secret", "Source 'prod' ack header contains a newline.")]
+    [InlineData("X-API-Key", "ack-secret\r\nInjected", "Source 'prod' ack header contains a newline.")]
+    [InlineData("Bad Header", "ack-secret", "Source 'prod' ack header is invalid.")]
+    public void Invalid_ack_header_is_rejected(string? name, string? value, string message)
+    {
+        var source = ValidSource() with { AckHeaderName = name, AckHeaderValue = value };
+
+        Assert.Equal(message, Assert.Single(Failures(source)));
+    }
+
+    [Fact]
+    public void Only_a_daemon_can_carry_an_ack_credential()
+    {
+        // A trace backend has no ack route: the credential would sit there for a
+        // relay that can never use it.
+        var source = AckSource() with { Kind = SourceKinds.Tempo };
+
+        Assert.Equal(
+            "Source 'prod' is not a daemon and cannot carry an ack credential.",
+            Assert.Single(Failures(source)));
+    }
+
+    [Theory]
+    [InlineData(AckSecret, AckSecret)]
+    [InlineData("Bearer " + AckSecret, AckSecret)]
+    [InlineData(AckSecret, "bearer  " + AckSecret)]
+    public void An_ack_credential_differs_from_the_read_credential(string readValue, string ackValue)
+    {
+        // The daemon refuses a read key equal to its ack key, since every reader
+        // could then write. It reads a key bare or behind a Bearer scheme.
+        var source = AckSource() with
+        {
+            AuthHeaderName = "Authorization",
+            AuthHeaderValue = readValue,
+            AckHeaderValue = ackValue
+        };
+
+        Assert.Equal(
+            "Source 'prod' ack credential must differ from its read credential.",
+            Assert.Single(Failures(source)));
+    }
+
+    [Fact]
+    public void A_daemon_can_carry_an_ack_credential_of_its_own()
+    {
+        Assert.Empty(Failures(AckSource()));
+        Assert.Empty(Failures(AckSource() with { AuthHeaderName = "X-API-Key", AuthHeaderValue = "read-secret" }));
+    }
+
+    [Theory]
+    [InlineData(false, false, true, 1)]
+    [InlineData(true, false, true, 0)]
+    [InlineData(false, true, true, 0)]
+    [InlineData(false, false, false, 0)]
+    public void An_ack_credential_is_warned_about_when_the_relay_can_identify_nobody(
+        bool signsIn,
+        bool trustsIdentityHeader,
+        bool relays,
+        int warnings)
+    {
+        var logger = new ListLogger<Program>();
+        var options = ValidOptions() with
+        {
+            Auth = new AuthOptions { Enabled = signsIn },
+            AckRelay = new AckRelayOptions { TrustIdentityHeader = trustsIdentityHeader },
+            Sources = [relays ? AckSource() : ValidSource()]
+        };
+
+        HubAuthentication.WarnWhenAckRelayIdentifiesNobody(options, logger);
+
+        Assert.Equal(warnings, logger.Messages.Count);
+        Assert.DoesNotContain(logger.Messages, message => message.Contains(AckSecret, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("false", 1)]
+    [InlineData("true", 0)]
+    public async Task The_host_warns_at_startup_unless_the_identity_header_is_trusted(
+        string trustIdentityHeader,
+        int warnings)
+    {
+        var logger = new ListLogger<Program>();
+        await using var hub = new HubApplicationFactory();
+        await using var scoped = hub.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Hub:AckRelay:TrustIdentityHeader", trustIdentityHeader);
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<ILogger<Program>>(logger);
+                services.PostConfigure<HubOptions>(options => options.Sources = [AckSource()]);
+            });
+        });
+
+        using var client = scoped.CreateClient();
+
+        Assert.Equal(warnings, logger.Messages.Count(message =>
+            message.Contains("ack credential", StringComparison.Ordinal)));
+        Assert.DoesNotContain(logger.Messages, message => message.Contains(AckSecret, StringComparison.Ordinal));
     }
 
     [Theory]
@@ -339,5 +458,15 @@ public sealed class ConfigurationTests
             Environment = "prod",
             BaseUrl = new Uri("https://daemon.example")
         };
+    }
+
+    private static SourceOptions AckSource()
+    {
+        return ValidSource() with { AckHeaderName = "X-API-Key", AckHeaderValue = AckSecret };
+    }
+
+    private static string[] Failures(SourceOptions source)
+    {
+        return [.. new HubOptionsValidator().Validate(null, ValidOptions() with { Sources = [source] }).Failures ?? []];
     }
 }

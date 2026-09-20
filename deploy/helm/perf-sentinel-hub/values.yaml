@@ -47,11 +47,21 @@ hub:
     scopes: "openid profile email"
     # The userinfo field recorded as the identity.
     identityClaim: email
+  ackRelay:
+    # Who acks has to be known, and a hub.auth session always says. Set to
+    # true to also accept the identity a reverse proxy puts in
+    # analysis.identityHeader, a claim the Hub cannot verify: only behind a
+    # proxy that sets the header itself and strips the one a client sent.
+    # With neither, the relay refuses every caller.
+    trustIdentityHeader: false
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours, authHeaderName and
 # publicUrl (the address printed commands and live reports use when baseUrl
 # is a name only the cluster resolves) with publicAuthHeaderName (the header
-# that address asks for, when it is not authHeaderName).
+# that address asks for, when it is not authHeaderName). A daemon the Hub
+# relays acks to also takes ackHeaderName with ackSecretName and ackSecretKey,
+# the daemon's [daemon.ack] api_key: a Secret apart from the read one, since
+# the daemon refuses its read key on a write.
 sources: []
 # Annotations on the Service. Left empty because a scrape is opted into, not
 # assumed: set prometheus.io/scrape, /port and /path here, or point a

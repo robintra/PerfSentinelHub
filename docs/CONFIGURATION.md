@@ -11,31 +11,32 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 
 ## Settings
 
-| Setting                          | Default                                            | Validation                                                                                      |
-|----------------------------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| `Hub:DatabasePath`               | `/data/hub.db`                                     | Absolute path                                                                                   |
-| `Hub:PollInterval`               | `01:00:00`                                         | Positive duration                                                                               |
-| `Hub:HttpTimeout`                | `00:00:10`                                         | Positive duration                                                                               |
-| `Hub:MaxConcurrentPolls`         | `4`                                                | 1 to 32                                                                                         |
-| `Hub:Retention`                  | `180.00:00:00` (180 days)                          | Positive duration                                                                               |
-| `Hub:ResolutionGrace`            | `7.00:00:00` (7 days)                              | Positive, below `Retention`                                                                     |
-| `Hub:DefaultReadLimit`           | `1000`                                             | 1 to `MaxReadLimit`                                                                             |
-| `Hub:MaxReadLimit`               | `10000`                                            | 1 to 10000                                                                                      |
-| `Hub:Analysis:EngineBinaryPath`  | none                                               | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
-| `Hub:Analysis:ReportDirectory`   | `/data/reports`                                    | Absolute, writable. Rendered reports live here                                                  |
-| `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                 | Header a reverse proxy sets with the requester's identity. Ignored for a `Hub:Auth` session     |
-| `Hub:Analysis:Workers`           | `2`                                                | 1 to 16                                                                                         |
-| `Hub:Analysis:MaxTracesCap`      | `2000`                                             | 1 to 10000, the engine's own limit on `--max-traces`                                            |
-| `Hub:Analysis:MaxTracesEmbedded` | `50`                                               | 0 to 10000. Span trees embedded in the report. Setting it opts the sink out of size targeting   |
-| `Hub:Analysis:Timeout`           | `00:05:00`                                         | Positive, at most one hour                                                                      |
-| `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 hours)                            | Positive duration                                                                               |
-| `Hub:Analysis:RunRetention`      | `30.00:00:00` (30 days)                            | Positive, longer than `ReportRetention`. When a finished run's row is deleted                   |
-| `Hub:UpdateCheck:Enabled`        | `true`                                             | Whether the Hub asks GitHub for the newest published release                                    |
-| `Hub:UpdateCheck:Interval`       | `1.00:00:00` (1 day)                               | At least 15 minutes                                                                             |
-| `Hub:UpdateCheck:EngineEndpoint` | GitHub releases API for `robintra/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                              |
-| `Hub:UpdateCheck:HubEndpoint`    | GitHub releases API for `robintra/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
-| `Hub:Auth:*`                     | off                                                | Browser sign-in against an OAuth2 provider, see [AUTHENTICATION.md](AUTHENTICATION.md)          |
-| `Hub:Sources`                    | none                                               | At least one source                                                                             |
+| Setting                            | Default                                            | Validation                                                                                      |
+|------------------------------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| `Hub:DatabasePath`                 | `/data/hub.db`                                     | Absolute path                                                                                   |
+| `Hub:PollInterval`                 | `01:00:00`                                         | Positive duration                                                                               |
+| `Hub:HttpTimeout`                  | `00:00:10`                                         | Positive duration                                                                               |
+| `Hub:MaxConcurrentPolls`           | `4`                                                | 1 to 32                                                                                         |
+| `Hub:Retention`                    | `180.00:00:00` (180 days)                          | Positive duration                                                                               |
+| `Hub:ResolutionGrace`              | `7.00:00:00` (7 days)                              | Positive, below `Retention`                                                                     |
+| `Hub:DefaultReadLimit`             | `1000`                                             | 1 to `MaxReadLimit`                                                                             |
+| `Hub:MaxReadLimit`                 | `10000`                                            | 1 to 10000                                                                                      |
+| `Hub:Analysis:EngineBinaryPath`    | none                                               | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
+| `Hub:Analysis:ReportDirectory`     | `/data/reports`                                    | Absolute, writable. Rendered reports live here                                                  |
+| `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                 | Header a reverse proxy sets with the requester's identity. Ignored for a `Hub:Auth` session     |
+| `Hub:Analysis:Workers`             | `2`                                                | 1 to 16                                                                                         |
+| `Hub:Analysis:MaxTracesCap`        | `2000`                                             | 1 to 10000, the engine's own limit on `--max-traces`                                            |
+| `Hub:Analysis:MaxTracesEmbedded`   | `50`                                               | 0 to 10000. Span trees embedded in the report. Setting it opts the sink out of size targeting   |
+| `Hub:Analysis:Timeout`             | `00:05:00`                                         | Positive, at most one hour                                                                      |
+| `Hub:Analysis:ReportRetention`     | `1.00:00:00` (24 hours)                            | Positive duration                                                                               |
+| `Hub:Analysis:RunRetention`        | `30.00:00:00` (30 days)                            | Positive, longer than `ReportRetention`. When a finished run's row is deleted                   |
+| `Hub:UpdateCheck:Enabled`          | `true`                                             | Whether the Hub asks GitHub for the newest published release                                    |
+| `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 day)                               | At least 15 minutes                                                                             |
+| `Hub:UpdateCheck:EngineEndpoint`   | GitHub releases API for `robintra/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                              |
+| `Hub:UpdateCheck:HubEndpoint`      | GitHub releases API for `robintra/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
+| `Hub:Auth:*`                       | off                                                | Browser sign-in against an OAuth2 provider, see [AUTHENTICATION.md](AUTHENTICATION.md)          |
+| `Hub:AckRelay:TrustIdentityHeader` | `false`                                            | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
+| `Hub:Sources`                      | none                                               | At least one source                                                                             |
 
 ## Per-source settings
 
@@ -50,6 +51,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Sources[].PublicUrl`            | none     | Optional, same shape as `BaseUrl`. What printed commands and live reports target                             |
 | `Sources[].AuthHeaderName/Value` | none     | Both absent or both present, no newlines. A daemon's `[daemon] read_api_key` goes here as `X-API-Key`        |
 | `Sources[].PublicAuthHeaderName` | none     | Requires `PublicUrl`, no spaces or controls. The header printed commands name instead of `AuthHeaderName`    |
+| `Sources[].AckHeaderName/Value`  | none     | Daemons only, both or neither. The daemon's `[daemon.ack] api_key`, sent on relayed acks alone, see below    |
 | `Sources[].ImportApiKey`         | none     | Optional push credential, at least 32 characters, supplied through a Secret                                  |
 
 `Hub:DatabasePath` and `Hub:Analysis:ReportDirectory` default to `/data/hub.db` and
@@ -79,6 +81,29 @@ public route and the reader supplies their own credential.
 A Hub served over HTTPS needs an HTTPS `PublicUrl` for its reports to go live: browsers
 block HTTP calls from an HTTPS page, with an exception for `localhost` in most of them.
 
+## The ack credential
+
+`AckHeaderName` and `AckHeaderValue` are a second credential, apart from the read pair. The
+Hub sends it on one kind of request only, the ack or the revoke it relays to that daemon,
+and keeps the read pair for everything else. It is the daemon's `[daemon.ack] api_key`,
+sent as `X-API-Key`, or as `Authorization` with a `Bearer` value. Without it the Hub never
+writes to that daemon, and `/api/sources` reports `ack_relay: false` for the source. Like
+`AuthHeaderValue`, the value belongs in a Secret: under Helm that is `ackSecretName` and
+`ackSecretKey`, and only the header name reaches the ConfigMap.
+
+The Hub refuses to start when the pair sits on a trace backend, which has no ack route, or
+when it carries the same key as the source's `AuthHeaderValue`, with a `Bearer` scheme
+ignored on either side. The daemon refuses a `read_api_key` equal to its ack key for the
+same reason: a read key that can write is a write key. A Hub that reads a daemon with its
+ack key therefore needs a `[daemon] read_api_key` on that daemon before it can relay.
+
+The relay has to know who acks. A `Hub:Auth` session always says. The header a reverse
+proxy sets, `Hub:Analysis:IdentityHeader`, is a claim the Hub cannot verify, so it names the
+caller only once `Hub:AckRelay:TrustIdentityHeader` is `true`, `hub.ackRelay.trustIdentityHeader`
+under Helm. Set it only behind a proxy that writes the header itself and strips the one a
+client sent. With neither, the relay can identify nobody and refuses every caller, and the
+Hub logs one warning at startup that names the sources whose credential will never be sent.
+
 ## What a source is, and what is measured
 
 The list is configuration, never discovery. Nothing is auto-detected, the launcher cannot
@@ -107,6 +132,9 @@ sources:
     baseUrl: http://perf-sentinel.observability:4318
     importSecretName: hub-import-keys    # the push credential, never inline
     importSecretKey: checkout-prod
+    ackHeaderName: X-API-Key             # optional, lets the Hub relay acks to this daemon
+    ackSecretName: hub-ack-keys          # the daemon's [daemon.ack] api_key, never inline
+    ackSecretKey: checkout-prod
   - id: victoria-eu
     name: Victoria Traces EU
     environment: staging
@@ -121,6 +149,8 @@ The same pair as environment variables, one index per source:
 Hub__Sources__0__Id=checkout-prod
 Hub__Sources__0__Kind=daemon
 Hub__Sources__0__BaseUrl=http://perf-sentinel.observability:4318
+Hub__Sources__0__AckHeaderName=X-API-Key
+Hub__Sources__0__AckHeaderValue="$ACK_API_KEY"   # from your secret store, never a literal
 Hub__Sources__1__Id=victoria-eu
 Hub__Sources__1__Kind=jaeger_query
 Hub__Sources__1__BaseUrl=http://victoria-traces.observability:10428

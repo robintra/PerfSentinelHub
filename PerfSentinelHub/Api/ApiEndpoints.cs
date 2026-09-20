@@ -96,7 +96,8 @@ public static partial class ApiEndpoints
                     read?.State,
                     read?.LastReadMs,
                     ackRead?.State,
-                    ackRead?.LastReadMs);
+                    ackRead?.LastReadMs,
+                    source.HasAckCredential);
             })
         ];
     }
@@ -253,7 +254,7 @@ public static partial class ApiEndpoints
             sourceIds,
             fromMs,
             toMs,
-            Signature: signature);
+            signature);
         return true;
     }
 

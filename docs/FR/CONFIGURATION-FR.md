@@ -12,46 +12,48 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 
 ## Réglages
 
-| Réglage                          | Défaut                                                | Validation                                                                                            |
-|----------------------------------|-------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
-| `Hub:DatabasePath`               | `/data/hub.db`                                        | Chemin absolu                                                                                         |
-| `Hub:PollInterval`               | `01:00:00`                                            | Durée positive                                                                                        |
-| `Hub:HttpTimeout`                | `00:00:10`                                            | Durée positive                                                                                        |
-| `Hub:MaxConcurrentPolls`         | `4`                                                   | 1 à 32                                                                                                |
-| `Hub:Retention`                  | `180.00:00:00` (180 jours)                            | Durée positive                                                                                        |
-| `Hub:ResolutionGrace`            | `7.00:00:00` (7 jours)                                | Positive, inférieure à `Retention`                                                                    |
-| `Hub:DefaultReadLimit`           | `1000`                                                | 1 à `MaxReadLimit`                                                                                    |
-| `Hub:MaxReadLimit`               | `10000`                                               | 1 à 10000                                                                                             |
-| `Hub:Analysis:EngineBinaryPath`  | aucun                                                 | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles |
-| `Hub:Analysis:ReportDirectory`   | `/data/reports`                                       | Absolu, accessible en écriture. Les rapports rendus vivent ici                                        |
-| `Hub:Analysis:IdentityHeader`    | `X-Forwarded-User`                                    | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur, ignoré sous `Hub:Auth`            |
-| `Hub:Analysis:Workers`           | `2`                                                   | 1 à 16                                                                                                |
-| `Hub:Analysis:MaxTracesCap`      | `2000`                                                | 1 à 10000, la limite propre du moteur sur `--max-traces`                                              |
-| `Hub:Analysis:MaxTracesEmbedded` | `50`                                                  | 0 à 10000. Arbres de spans embarqués dans le rapport. Le poser fait sortir le sink du ciblage de taille |
-| `Hub:Analysis:Timeout`           | `00:05:00`                                            | Positive, une heure au plus                                                                           |
-| `Hub:Analysis:ReportRetention`   | `1.00:00:00` (24 heures)                              | Durée positive                                                                                        |
-| `Hub:Analysis:RunRetention`      | `30.00:00:00` (30 jours)                              | Positive, plus longue que `ReportRetention`. Quand la ligne d'un run terminé est supprimée             |
-| `Hub:UpdateCheck:Enabled`        | `true`                                                | Si le Hub demande à GitHub la release publiée la plus récente                                         |
-| `Hub:UpdateCheck:Interval`       | `1.00:00:00` (1 jour)                                 | Au moins 15 minutes                                                                                   |
-| `Hub:UpdateCheck:EngineEndpoint` | API des releases GitHub de `robintra/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                               |
-| `Hub:UpdateCheck:HubEndpoint`    | API des releases GitHub de `robintra/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                               |
-| `Hub:Auth:*`                     | désactivé                                             | Connexion du navigateur via OAuth2, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md)                 |
-| `Hub:Sources`                    | aucune                                                | Au moins une source                                                                                   |
+| Réglage                            | Défaut                                                | Validation                                                                                              |
+|------------------------------------|-------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| `Hub:DatabasePath`                 | `/data/hub.db`                                        | Chemin absolu                                                                                           |
+| `Hub:PollInterval`                 | `01:00:00`                                            | Durée positive                                                                                          |
+| `Hub:HttpTimeout`                  | `00:00:10`                                            | Durée positive                                                                                          |
+| `Hub:MaxConcurrentPolls`           | `4`                                                   | 1 à 32                                                                                                  |
+| `Hub:Retention`                    | `180.00:00:00` (180 jours)                            | Durée positive                                                                                          |
+| `Hub:ResolutionGrace`              | `7.00:00:00` (7 jours)                                | Positive, inférieure à `Retention`                                                                      |
+| `Hub:DefaultReadLimit`             | `1000`                                                | 1 à `MaxReadLimit`                                                                                      |
+| `Hub:MaxReadLimit`                 | `10000`                                               | 1 à 10000                                                                                               |
+| `Hub:Analysis:EngineBinaryPath`    | aucun                                                 | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles   |
+| `Hub:Analysis:ReportDirectory`     | `/data/reports`                                       | Absolu, accessible en écriture. Les rapports rendus vivent ici                                          |
+| `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                    | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur, ignoré sous `Hub:Auth`              |
+| `Hub:Analysis:Workers`             | `2`                                                   | 1 à 16                                                                                                  |
+| `Hub:Analysis:MaxTracesCap`        | `2000`                                                | 1 à 10000, la limite propre du moteur sur `--max-traces`                                                |
+| `Hub:Analysis:MaxTracesEmbedded`   | `50`                                                  | 0 à 10000. Arbres de spans embarqués dans le rapport. Le poser fait sortir le sink du ciblage de taille |
+| `Hub:Analysis:Timeout`             | `00:05:00`                                            | Positive, une heure au plus                                                                             |
+| `Hub:Analysis:ReportRetention`     | `1.00:00:00` (24 heures)                              | Durée positive                                                                                          |
+| `Hub:Analysis:RunRetention`        | `30.00:00:00` (30 jours)                              | Positive, plus longue que `ReportRetention`. Quand la ligne d'un run terminé est supprimée              |
+| `Hub:UpdateCheck:Enabled`          | `true`                                                | Si le Hub demande à GitHub la release publiée la plus récente                                           |
+| `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 jour)                                 | Au moins 15 minutes                                                                                     |
+| `Hub:UpdateCheck:EngineEndpoint`   | API des releases GitHub de `robintra/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
+| `Hub:UpdateCheck:HubEndpoint`      | API des releases GitHub de `robintra/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
+| `Hub:Auth:*`                       | désactivé                                             | Connexion du navigateur via OAuth2, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md)                   |
+| `Hub:AckRelay:TrustIdentityHeader` | `false`                                               | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
+| `Hub:Sources`                      | aucune                                                | Au moins une source                                                                                     |
 
 ## Réglages par source
 
-| Réglage                          | Défaut   | Validation                                                                                                          |
-|----------------------------------|----------|---------------------------------------------------------------------------------------------------------------------|
-| `Sources[].Id`                   | aucun    | Unique, 1 à 64 caractères ASCII alphanumériques, `.`, `_` ou `-`                                                                                                  |
-| `Sources[].Name`                 | aucun    | Non vide                                                                                                            |
-| `Sources[].Environment`          | aucun    | Non vide                                                                                                            |
-| `Sources[].Kind`                 | `daemon` | L'un de `daemon`, `tempo`, `jaeger_query`. Seul un daemon est pollé, et seul un daemon peut porter une clé d'import |
-| `Sources[].RetentionHours`       | aucun    | Backends de traces seulement, d'une heure à dix ans                                                                 |
-| `Sources[].BaseUrl`              | aucune   | Obligatoire. HTTP(S) absolue, sans identifiants, query ni fragment                                                  |
-| `Sources[].PublicUrl`            | aucune   | Optionnelle, même forme que `BaseUrl`. Cible des commandes affichées et des rapports live                           |
-| `Sources[].AuthHeaderName/Value` | aucun    | Les deux absents ou les deux présents, sans saut de ligne. Le `[daemon] read_api_key` d'un daemon va ici en `X-API-Key` |
+| Réglage                          | Défaut   | Validation                                                                                                                         |
+|----------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------|
+| `Sources[].Id`                   | aucun    | Unique, 1 à 64 caractères ASCII alphanumériques, `.`, `_` ou `-`                                                                   |
+| `Sources[].Name`                 | aucun    | Non vide                                                                                                                           |
+| `Sources[].Environment`          | aucun    | Non vide                                                                                                                           |
+| `Sources[].Kind`                 | `daemon` | L'un de `daemon`, `tempo`, `jaeger_query`. Seul un daemon est pollé, et seul un daemon peut porter une clé d'import                |
+| `Sources[].RetentionHours`       | aucun    | Backends de traces seulement, d'une heure à dix ans                                                                                |
+| `Sources[].BaseUrl`              | aucune   | Obligatoire. HTTP(S) absolue, sans identifiants, query ni fragment                                                                 |
+| `Sources[].PublicUrl`            | aucune   | Optionnelle, même forme que `BaseUrl`. Cible des commandes affichées et des rapports live                                          |
+| `Sources[].AuthHeaderName/Value` | aucun    | Les deux absents ou les deux présents, sans saut de ligne. Le `[daemon] read_api_key` d'un daemon va ici en `X-API-Key`            |
 | `Sources[].PublicAuthHeaderName` | aucun    | Exige `PublicUrl`, sans espace ni caractère de contrôle. L'en-tête nommé par les commandes affichées à la place d'`AuthHeaderName` |
-| `Sources[].ImportApiKey`         | aucune   | Identifiant de push optionnel, au moins 32 caractères, fourni via un Secret                                         |
+| `Sources[].AckHeaderName/Value`  | aucun    | Daemons seulement, les deux ou aucun. Le `[daemon.ack] api_key` du daemon, envoyé sur les seuls acquittements relayés              |
+| `Sources[].ImportApiKey`         | aucune   | Identifiant de push optionnel, au moins 32 caractères, fourni via un Secret                                                        |
 
 `Hub:DatabasePath` et `Hub:Analysis:ReportDirectory` valent par défaut `/data/hub.db` et
 `/data/reports`, qui sont les chemins du conteneur. Tous deux sont validés par
@@ -84,6 +86,32 @@ Un Hub servi en HTTPS a besoin d'un `PublicUrl` en HTTPS pour que ses rapports s
 live : les navigateurs bloquent les appels HTTP depuis une page HTTPS, sauf vers
 `localhost` pour la plupart d'entre eux.
 
+## L'identifiant d'acquittement
+
+`AckHeaderName` et `AckHeaderValue` forment un second identifiant, distinct de la paire de
+lecture. Le Hub ne l'envoie que sur un seul type de requête, l'acquittement ou la révocation
+qu'il relaie vers ce daemon, et garde la paire de lecture pour tout le reste. C'est le
+`[daemon.ack] api_key` du daemon, envoyé en `X-API-Key`, ou en `Authorization` avec une
+valeur `Bearer`. Sans lui le Hub n'écrit jamais sur ce daemon, et `/api/sources` rapporte
+`ack_relay: false` pour la source. Comme `AuthHeaderValue`, la valeur va dans un Secret :
+sous Helm ce sont `ackSecretName` et `ackSecretKey`, et seul le nom de l'en-tête atteint la
+ConfigMap.
+
+Le Hub refuse de démarrer quand la paire est posée sur un backend de traces, qui n'a pas de
+route d'acquittement, ou quand elle porte la même clé que l'`AuthHeaderValue` de la source,
+un schéma `Bearer` étant ignoré de part et d'autre. Le daemon refuse un `read_api_key` égal
+à sa clé d'acquittement pour la même raison : une clé de lecture qui peut écrire est une
+clé d'écriture. Un Hub qui lit un daemon avec sa clé d'acquittement a donc besoin d'un
+`[daemon] read_api_key` sur ce daemon avant de pouvoir relayer.
+
+Le relais doit savoir qui acquitte. Une session `Hub:Auth` le dit toujours. L'en-tête posé
+par un reverse proxy, `Hub:Analysis:IdentityHeader`, est une affirmation que le Hub ne peut
+pas vérifier, il ne nomme donc l'appelant qu'une fois `Hub:AckRelay:TrustIdentityHeader` à
+`true`, `hub.ackRelay.trustIdentityHeader` sous Helm. Ne le posez que derrière un proxy qui
+écrit lui-même l'en-tête et retire celui qu'un client aurait envoyé. Sans l'un ni l'autre,
+le relais ne peut identifier personne et refuse tous les appelants, et le Hub journalise un
+avertissement au démarrage, qui nomme les sources dont l'identifiant ne sera jamais envoyé.
+
 ## Ce qu'est une source, et ce qui est mesuré
 
 La liste est de la configuration, jamais une découverte. Rien n'est détecté
@@ -113,6 +141,9 @@ sources:
     baseUrl: http://perf-sentinel.observability:4318
     importSecretName: hub-import-keys    # le secret de push, jamais en clair
     importSecretKey: checkout-prod
+    ackHeaderName: X-API-Key             # optionnel, laisse le Hub relayer les acquittements vers ce daemon
+    ackSecretName: hub-ack-keys          # le [daemon.ack] api_key du daemon, jamais en clair
+    ackSecretKey: checkout-prod
   - id: victoria-eu
     name: Victoria Traces EU
     environment: staging
@@ -127,6 +158,8 @@ La même paire en variables d'environnement, un indice par source :
 Hub__Sources__0__Id=checkout-prod
 Hub__Sources__0__Kind=daemon
 Hub__Sources__0__BaseUrl=http://perf-sentinel.observability:4318
+Hub__Sources__0__AckHeaderName=X-API-Key
+Hub__Sources__0__AckHeaderValue="$ACK_API_KEY"   # depuis votre coffre à secrets, jamais en clair
 Hub__Sources__1__Id=victoria-eu
 Hub__Sources__1__Kind=jaeger_query
 Hub__Sources__1__BaseUrl=http://victoria-traces.observability:10428

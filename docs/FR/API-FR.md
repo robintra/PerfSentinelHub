@@ -50,6 +50,10 @@ d'un daemon et quand elle a été prise, null tous les deux quand aucune n'a eu 
 qui n'est jamais interrogé, plus `truncated` : la liste a atteint le plafond du daemon,
 mille acquittements, donc sa fin peut manquer.
 
+`ack_relay` vaut true quand le Hub détient un identifiant pour écrire des acquittements sur
+ce daemon, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md#lidentifiant-dacquittement). Ni son
+en-tête ni sa valeur ne sont jamais publiés.
+
 Sur `/api/findings`, `include_acked` vaut `true` par défaut. À `false`, il ne liste un
 finding que tant qu'au moins une source du périmètre le porte non acquitté, toutes les
 sources comptant quand la lecture n'a pas de périmètre, voir

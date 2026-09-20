@@ -22,7 +22,16 @@ public sealed record HubOptions
     public AnalysisOptions Analysis { get; set; } = new();
     public UpdateCheckOptions UpdateCheck { get; set; } = new();
     public AuthOptions Auth { get; set; } = new();
+    public AckRelayOptions AckRelay { get; set; } = new();
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
+}
+
+public sealed record AckRelayOptions
+{
+    // Who acks has to be known. A Hub:Auth session always says. The header a
+    // reverse proxy sets, Hub:Analysis:IdentityHeader, is a claim the Hub cannot
+    // verify, so it names the caller only once this opts in.
+    public bool TrustIdentityHeader { get; set; }
 }
 
 public sealed record AnalysisOptions
@@ -179,6 +188,14 @@ public sealed record SourceOptions
     // when the public route reaches the same daemon, through a port-forward.
     public string? PublishedAuthHeaderName => PublicAuthHeaderName ?? AuthHeaderName;
 
+    // What the relay sends on an ack write, the daemon's [daemon.ack] api_key.
+    // Apart from the read pair above, which the daemon refuses on a write.
+    public string? AckHeaderName { get; set; }
+
+    public string? AckHeaderValue { get; set; }
+
+    public bool HasAckCredential => AckHeaderName is not null;
+
     // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a
     // trailing newline must hash to the same bytes on both halves of the contract.
     public string? ImportApiKey
@@ -321,7 +338,8 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add($"Source '{source.Id}' is not a daemon and cannot carry an import API key.");
         ValidateRetentionHours(source, errors);
         ValidateBaseUrl(source, errors);
-        ValidateAuthHeader(source, errors);
+        ValidateHeaderPair(source.Id, "auth", source.AuthHeaderName, source.AuthHeaderValue, errors);
+        ValidateAckHeader(source, errors);
         ValidatePublicAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
             errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
@@ -363,38 +381,65 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
                !string.IsNullOrEmpty(url.Fragment);
     }
 
-    private static void ValidateAuthHeader(SourceOptions source, List<string> errors)
+    // Both credentials a source can carry: "auth" reads the daemon, "ack" writes to it.
+    private static void ValidateHeaderPair(
+        string sourceId,
+        string label,
+        string? name,
+        string? value,
+        List<string> errors)
     {
-        var hasAuthHeaderName = source.AuthHeaderName is not null;
-        var hasAuthHeaderValue = source.AuthHeaderValue is not null;
-        if (hasAuthHeaderName != hasAuthHeaderValue)
+        var hasName = name is not null;
+        var hasValue = value is not null;
+        if (hasName != hasValue)
         {
-            errors.Add($"Source '{source.Id}' must provide both auth header name and value.");
+            errors.Add($"Source '{sourceId}' must provide both {label} header name and value.");
             return;
         }
 
-        if (source.AuthHeaderName is null)
+        if (name is null || value is null)
             return;
 
-        if (source.AuthHeaderName.Contains('\r', StringComparison.Ordinal) ||
-            source.AuthHeaderName.Contains('\n', StringComparison.Ordinal) ||
-            source.AuthHeaderValue!.Contains('\r', StringComparison.Ordinal) ||
-            source.AuthHeaderValue.Contains('\n', StringComparison.Ordinal))
+        if (name.Contains('\r', StringComparison.Ordinal) ||
+            name.Contains('\n', StringComparison.Ordinal) ||
+            value.Contains('\r', StringComparison.Ordinal) ||
+            value.Contains('\n', StringComparison.Ordinal))
         {
-            errors.Add($"Source '{source.Id}' auth header contains a newline.");
+            errors.Add($"Source '{sourceId}' {label} header contains a newline.");
             return;
         }
 
         using var request = new HttpRequestMessage();
         try
         {
-            if (!request.Headers.TryAddWithoutValidation(source.AuthHeaderName, source.AuthHeaderValue))
-                errors.Add($"Source '{source.Id}' auth header is invalid.");
+            if (!request.Headers.TryAddWithoutValidation(name, value))
+                errors.Add($"Source '{sourceId}' {label} header is invalid.");
         }
         catch (FormatException)
         {
-            errors.Add($"Source '{source.Id}' auth header is invalid.");
+            errors.Add($"Source '{sourceId}' {label} header is invalid.");
         }
+    }
+
+    private static void ValidateAckHeader(SourceOptions source, List<string> errors)
+    {
+        ValidateHeaderPair(source.Id, "ack", source.AckHeaderName, source.AckHeaderValue, errors);
+        // A trace backend has no ack route, so nothing would ever send the credential.
+        if (source.Kind != SourceKinds.Daemon && (source.AckHeaderName ?? source.AckHeaderValue) is not null)
+            errors.Add($"Source '{source.Id}' is not a daemon and cannot carry an ack credential.");
+        // The daemon refuses a read key equal to its ack key: every reader could then write.
+        if (source is { AckHeaderValue: { } ackHeaderValue, AuthHeaderValue: { } authHeaderValue } &&
+            KeyOf(ackHeaderValue) == KeyOf(authHeaderValue))
+            errors.Add($"Source '{source.Id}' ack credential must differ from its read credential.");
+    }
+
+    // The key a header value carries, as the daemon reads it: bare in X-API-Key, or
+    // behind a Bearer scheme of any case in Authorization.
+    private static string KeyOf(string headerValue)
+    {
+        return headerValue.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? headerValue[7..].TrimStart(' ')
+            : headerValue;
     }
 
     private static void ValidatePublicAuthHeader(SourceOptions source, List<string> errors)

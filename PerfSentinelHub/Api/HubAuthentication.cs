@@ -107,6 +107,27 @@ public static partial class HubAuthentication
     }
 
     /// <summary>
+    ///     The ack relay names who acks: a session, or the proxy's identity header
+    ///     once Hub:AckRelay:TrustIdentityHeader opts in. With neither it refuses
+    ///     every caller, and a configured ack credential is never sent.
+    /// </summary>
+    public static void WarnWhenAckRelayIdentifiesNobody(HubOptions options, ILogger logger)
+    {
+        if (options.Auth.Enabled || options.AckRelay.TrustIdentityHeader) return;
+
+        string[] sourceIds = [.. options.Sources.Where(source => source.HasAckCredential).Select(source => source.Id)];
+        if (sourceIds.Length > 0)
+            LogAckRelayIdentifiesNobody(logger, string.Join(", ", sourceIds));
+    }
+
+    [LoggerMessage(
+        1901,
+        LogLevel.Warning,
+        "Neither Hub:Auth:Enabled nor Hub:AckRelay:TrustIdentityHeader is set, so the ack relay can "
+        + "identify nobody: the ack credential of {SourceIds} will never be sent.")]
+    private static partial void LogAckRelayIdentifiesNobody(ILogger logger, string sourceIds);
+
+    /// <summary>
     ///     A cancelled consent screen or a userinfo without the identity field
     ///     would otherwise surface as an unhandled 500. No redirect: it would send
     ///     the user straight back to the screen they just cancelled. Nor "reload":

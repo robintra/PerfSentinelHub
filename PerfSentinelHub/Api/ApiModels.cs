@@ -88,7 +88,10 @@ public sealed record SourceResponse(
     // The same two for the last read of this daemon's acks, which has one more
     // state: truncated, a listing at the daemon's cap whose tail is missing.
     string? AcksState,
-    long? AcksReadMs);
+    long? AcksReadMs,
+    // Whether the Hub holds a credential to write acks to this daemon. Neither
+    // its header nor its value is published: no printed command ever acks.
+    bool AckRelay);
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 

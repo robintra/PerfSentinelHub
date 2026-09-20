@@ -4693,7 +4693,7 @@
                     text: PSL.dur(Math.abs(row.first_seen_ms - incident.at_ms))
                         + (phase === 'after' ? ' after the restart' : ' before the incident')
                 }),
-                // The daemon that froze the finding is the one the page checks first.
+                // The daemon that froze the finding is the only one the page checks.
                 el('td', {}, [finding.signature
                     ? el('a', {href: PSL.ackRouteHash(finding.signature, incident.source_id), text: 'Ack'})
                     : null])
@@ -4781,7 +4781,8 @@
             return section;
         }
         section.appendChild(ackFindingCard(ack.finding));
-        section.appendChild(ackForm(PSL.ackRows(ack.finding, state.sources, route.sourceId)));
+        // The route is the scope: the source or the environment it names sets the default ticks.
+        section.appendChild(ackForm(PSL.ackRows(ack.finding, state.sources, route)));
         return section;
     }
 
@@ -5161,7 +5162,8 @@
 
     // ------------------------------------------------------------------ boot
 
-    // A Grafana link arrives as `/?ack=<signature>`. It becomes the hash route
+    // A Grafana link arrives as `/?ack=<signature>`, with the environment and the
+    // source it was opened from when it has them. It becomes the hash route
     // before anything reads the route, and the query leaves the address bar.
     const ackEntry = PSL.ackEntryHash(location.search);
     if (ackEntry) history.replaceState(null, '', location.pathname + ackEntry);

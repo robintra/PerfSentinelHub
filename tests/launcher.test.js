@@ -529,10 +529,25 @@ test("the query a Grafana link carries becomes the ack route", () => {
     assert.equal(PSL.ackEntryHash(null), null);
 });
 
+test("the context a Grafana link names travels into the ack route", () => {
+    assert.equal(PSL.ackEntryHash("?ack=abc&environment=production&source_id=production-a"),
+        "#/ack?signature=abc&environment=production&source_id=production-a");
+    assert.equal(PSL.ackEntryHash("?ack=abc&environment=pre%20prod"), "#/ack?signature=abc&environment=pre%20prod");
+    assert.equal(PSL.ackEntryHash("?ack=abc&source_id=prod%26x"), "#/ack?signature=abc&source_id=prod%26x");
+    // Grafana sends a single space for the All choice of a variable.
+    assert.equal(PSL.ackEntryHash("?ack=abc&environment=%20&source_id=+"), "#/ack?signature=abc");
+    assert.equal(PSL.ackEntryHash("?ack=abc&environment=&source_id="), "#/ack?signature=abc");
+    // A padded value would match no row and tick nothing, with no hint why.
+    assert.equal(PSL.ackEntryHash("?ack=abc&environment=%20production%20&source_id=+production-a"),
+        "#/ack?signature=abc&environment=production&source_id=production-a");
+    assert.deepEqual(PSL.readAckRoute(PSL.ackEntryHash("?ack=abc&environment=production&source_id=production-a")),
+        {signature: "abc", sourceId: "production-a", environment: "production"});
+});
+
 test("a signature with slashes, colons and percent signs survives both hops", () => {
     const odd = "slow_http:edge/gw:GET /a%2Fb?x=1&y=2#frag:100%";
     const hash = PSL.ackEntryHash("?ack=" + encodeURIComponent(odd));
-    assert.deepEqual(PSL.readAckRoute(hash), {signature: odd, sourceId: null});
+    assert.deepEqual(PSL.readAckRoute(hash), {signature: odd, sourceId: null, environment: null});
 });
 
 test("an ack link with an empty value still lands on the ack page, which says so", () => {
@@ -544,10 +559,27 @@ test("an ack link with an empty value still lands on the ack page, which says so
 test("the ack route carries a signature and an optional source", () => {
     assert.equal(PSL.ackRouteHash("a/b:c", "prod&x"), "#/ack?signature=a%2Fb%3Ac&source_id=prod%26x");
     assert.deepEqual(PSL.readAckRoute("#/ack?signature=a%2Fb%3Ac&source_id=prod%26x"),
-        {signature: "a/b:c", sourceId: "prod&x"});
+        {signature: "a/b:c", sourceId: "prod&x", environment: null});
     assert.deepEqual(PSL.readAckRoute(PSL.ackRouteHash(SIGNATURE, "production-a")),
-        {signature: SIGNATURE, sourceId: "production-a"});
-    assert.deepEqual(PSL.readAckRoute(PSL.ackRouteHash(SIGNATURE, null)), {signature: SIGNATURE, sourceId: null});
+        {signature: SIGNATURE, sourceId: "production-a", environment: null});
+    assert.deepEqual(PSL.readAckRoute(PSL.ackRouteHash(SIGNATURE, null)),
+        {signature: SIGNATURE, sourceId: null, environment: null});
+});
+
+test("the ack route carries an optional environment, and a blank one reads as none", () => {
+    assert.equal(PSL.ackRouteHash("abc", null, "pre prod"), "#/ack?signature=abc&environment=pre%20prod");
+    assert.deepEqual(PSL.readAckRoute(PSL.ackRouteHash(SIGNATURE, "production-a", "production")),
+        {signature: SIGNATURE, sourceId: "production-a", environment: "production"});
+    assert.deepEqual(PSL.readAckRoute("#/ack?signature=abc&environment=staging"),
+        {signature: "abc", sourceId: null, environment: "staging"});
+    // Blank is no context, never a refusal: the link still names its finding.
+    assert.deepEqual(PSL.readAckRoute("#/ack?signature=abc&environment=%20&source_id=%20"),
+        {signature: "abc", sourceId: null, environment: null});
+    assert.deepEqual(PSL.readAckRoute("#/ack?signature=abc&environment=&source_id="),
+        {signature: "abc", sourceId: null, environment: null});
+    // A hand-written route is read the way the entry link is, without its padding.
+    assert.deepEqual(PSL.readAckRoute("#/ack?signature=abc&environment=%20production&source_id=production-a%20"),
+        {signature: "abc", sourceId: "production-a", environment: "production"});
 });
 
 test("an ack route the page cannot act on reads as null", () => {
@@ -561,12 +593,16 @@ test("an ack route the page cannot act on reads as null", () => {
     assert.equal(PSL.readAckRoute("#/ack?signature=" + "a".repeat(1025)), null, "too long");
     assert.equal(PSL.readAckRoute("#/ack?signature=a%0Ab"), null, "control character");
     assert.equal(PSL.readAckRoute("#/ack?signature=a%C2%85b"), null, "C1 control character");
+    assert.notEqual(PSL.readAckRoute("#/ack?signature=abc&environment=" + "e".repeat(256)), null);
+    assert.equal(PSL.readAckRoute("#/ack?signature=abc&environment=" + "e".repeat(257)), null, "long environment");
+    assert.equal(PSL.readAckRoute("#/ack?signature=abc&environment=prod%0Auction"), null, "control in environment");
     assert.equal(PSL.readAckRoute(""), null);
     assert.equal(PSL.readAckRoute(null), null);
 });
 
 const ackSources = [
     {id: "production-a", name: "Production A", environment: "production", ack_relay: true, acks_state: "ok"},
+    {id: "production-b", name: "Production B", environment: "production", ack_relay: true, acks_state: "ok"},
     {id: "staging-a", name: "Staging A", environment: "staging", ack_relay: true, acks_state: "ok"},
     {id: "ci", name: "CI", environment: "ci", ack_relay: true, acks_state: "truncated"},
     {id: "edge", name: "Edge", environment: "production", ack_relay: false, acks_state: "ok"},
@@ -606,25 +642,75 @@ test("a runtime ack can be revoked, a CI baseline ack cannot", () => {
     assert.match(rows[1].note, /pull request/);
 });
 
-test("a source that cannot be acted on says why", () => {
-    const rows = PSL.ackRows(carriedBy(["edge", "old", "fresh"]), ackSources, null);
-    assert.deepEqual(rows.map((row) => row.action), ["none", "none", "none"]);
-    assert.deepEqual(rows.map((row) => row.checked), [false, false, false]);
-    assert.equal(rows[0].relay, false);
-    assert.match(rows[0].note, /ack credential/);
-    // No listing proves no ack: the finding may be acked there already, by
-    // the baseline too, so neither action is offered.
-    assert.match(rows[1].note, /unknown/);
-    assert.match(rows[1].note, /absent/);
-    assert.match(rows[2].note, /never read/);
+test("a source without an ack credential offers nothing and says why", () => {
+    const row = PSL.ackRows(carriedBy(["edge"]), ackSources, null)[0];
+    assert.equal(row.action, "none");
+    assert.equal(row.checked, false);
+    assert.equal(row.relay, false);
+    assert.match(row.note, /ack credential/);
+});
+
+test("a relaying source whose ack state is unknown takes either action", () => {
+    // A daemon below 0.24.0 is absent for good, and one failed read must not
+    // hide Acknowledge until the next good poll: the relay would still answer.
+    const states = ["absent", "error", "unauthorized", null];
+    const sources = states.map((state, index) => (
+        {id: "s" + index, name: "S" + index, environment: "staging", ack_relay: true, acks_state: state}));
+    const rows = PSL.ackRows(carriedBy(sources.map((source) => source.id)), sources, {environment: "staging"});
+    assert.deepEqual(rows.map((row) => row.action), ["either", "either", "either", "either"]);
+    assert.deepEqual(rows.map((row) => row.checked), [true, true, true, true]);
+    ["absent", "error", "unauthorized", "never read"].forEach((named, index) => {
+        assert.match(rows[index].note, /unknown/);
+        assert.match(rows[index].note, new RegExp("acks_state is " + named));
+        assert.match(rows[index].note, /the daemon refuses the one that does not/);
+        assert.match(rows[index].note, /result line/);
+    });
+});
+
+test("an ack the Hub knows decides the action whatever the ack state reads", () => {
+    const stale = [
+        {id: "staging-a", name: "Staging A", environment: "staging", ack_relay: true, acks_state: "error"},
+        {id: "ci", name: "CI", environment: "ci", ack_relay: true, acks_state: "error"}
+    ];
+    const rows = PSL.ackRows(carriedBy(["staging-a", "ci"], [daemonAck, tomlAck]), stale, null);
+    assert.deepEqual(rows.map((row) => row.action), ["revoke", "none"]);
+    assert.match(rows[1].note, /CI baseline/);
 });
 
 test("a source the link names is the only one checked", () => {
     const finding = carriedBy(["production-a", "staging-a", "ci"], [tomlAck]);
-    assert.deepEqual(PSL.ackRows(finding, ackSources, "staging-a").map((row) => row.checked), [false, true, false]);
-    assert.deepEqual(PSL.ackRows(finding, ackSources, null).map((row) => row.checked), [true, true, false]);
+    const checked = (scope) => PSL.ackRows(finding, ackSources, scope).map((row) => row.checked);
+    assert.deepEqual(checked({sourceId: "staging-a", environment: null}), [false, true, false]);
+    // The source is the narrower context, so it wins over the environment.
+    assert.deepEqual(checked({sourceId: "staging-a", environment: "production"}), [false, true, false]);
     // Naming a row nothing can be done on checks nothing.
-    assert.deepEqual(PSL.ackRows(finding, ackSources, "ci").map((row) => row.checked), [false, false, false]);
+    assert.deepEqual(checked({sourceId: "ci", environment: null}), [false, false, false]);
+    assert.deepEqual(checked({sourceId: "elsewhere", environment: "production"}), [false, false, false]);
+});
+
+test("an environment the link names checks its sources and no other", () => {
+    const finding = carriedBy(["production-a", "production-b", "edge", "staging-a", "old"]);
+    const checked = (environment) => PSL.ackRows(finding, ackSources, {sourceId: null, environment})
+        .map((row) => row.checked);
+    // Edge is production too, and nothing can be done on it.
+    assert.deepEqual(checked("production"), [true, true, false, false, false]);
+    assert.deepEqual(checked("staging"), [false, false, false, true, true]);
+    assert.deepEqual(checked("Production"), [false, false, false, false, false], "compared as written");
+    // Every other row stays one the reader can tick by hand.
+    const rows = PSL.ackRows(finding, ackSources, {sourceId: null, environment: "production"});
+    assert.equal(rows[3].action, "ack");
+    assert.equal(PSL.ackChecked(rows[3], {"staging-a": {action: "ack", checked: true}}), true);
+});
+
+test("a link with no context checks a source only when it is the one that can take an action", () => {
+    const alone = PSL.ackRows(carriedBy(["production-a", "edge"]), ackSources, null);
+    assert.deepEqual(alone.map((row) => row.checked), [true, false]);
+    assert.deepEqual(PSL.ackRows(carriedBy(["production-a", "edge"]), ackSources, {}).map((row) => row.checked),
+        [true, false]);
+    // An ack hides a finding, so several candidates are the reader's to pick.
+    const several = PSL.ackRows(carriedBy(["production-a", "staging-a", "old"]), ackSources, null);
+    assert.deepEqual(several.map((row) => row.action), ["ack", "ack", "either"]);
+    assert.deepEqual(several.map((row) => row.checked), [false, false, false]);
 });
 
 test("a source the finding lists and the Hub no longer configures keeps its name", () => {
@@ -640,6 +726,8 @@ test("a source the finding lists and the Hub no longer configures keeps its name
 });
 
 const ACK_NOW = Date.parse("2026-09-20T15:00:00Z");
+const IN_PRODUCTION = {sourceId: null, environment: "production"};
+const IN_STAGING = {sourceId: null, environment: "staging"};
 
 function ackOn(id) {
     return {...daemonAck, source_id: id};
@@ -656,23 +744,61 @@ test("a tick only speaks for the action it was made on", () => {
     assert.equal(PSL.ackChecked(dead, {edge: {action: "none", checked: true}}), false);
 });
 
+test("a tick on a row that takes either action speaks for both, and so does one read against it", () => {
+    const either = PSL.ackRows(carriedBy(["old"]), ackSources, IN_STAGING)[0];
+    assert.equal(either.action, "either");
+    assert.equal(PSL.ackChecked(either, {}), true);
+    assert.equal(PSL.ackChecked(either, {old: {action: "either", checked: false}}), false);
+    // The next read of that daemon came back good: the row the reader left out
+    // now reads Acknowledge, in the link's environment, and must stay out.
+    const known = ackSources.map((source) => (source.id === "old" ? {...source, acks_state: "ok"} : source));
+    const settled = PSL.ackRows(carriedBy(["old"]), known, IN_STAGING)[0];
+    assert.equal(settled.action, "ack");
+    assert.equal(PSL.ackChecked(settled, {old: {action: "either", checked: false}}), false);
+    // And the other way round, when a read fails after the reader left a row out.
+    assert.equal(PSL.ackChecked(either, {old: {action: "ack", checked: false}}), false);
+});
+
 test("a source the reader unticked is not written to after the rows are read again", () => {
-    const ids = ["production-a", "staging-a", "ci"];
-    const ticks = {"staging-a": {action: "ack", checked: false}};
-    const before = PSL.ackPlan(PSL.ackRows(carriedBy(ids), ackSources, null), ticks, "known", "", ACK_NOW);
-    assert.deepEqual(before.ack.map((row) => row.id), ["production-a", "ci"]);
-    // That submit acked two sources, which now read Revoke. A second Acknowledge
+    const ids = ["production-a", "production-b", "ci"];
+    const ticks = {"production-b": {action: "ack", checked: false}};
+    const before = PSL.ackPlan(PSL.ackRows(carriedBy(ids), ackSources, IN_PRODUCTION), ticks, "known", "", ACK_NOW);
+    assert.deepEqual(before.ack.map((row) => row.id), ["production-a"]);
+    // That submit acked one source, which now reads Revoke. A second Acknowledge
     // must not reach the one the reader left out.
-    const acked = carriedBy(ids, [ackOn("production-a"), ackOn("ci")]);
-    const after = PSL.ackPlan(PSL.ackRows(acked, ackSources, null), ticks, "known", "", ACK_NOW);
+    const acked = carriedBy(ids, [ackOn("production-a")]);
+    const after = PSL.ackPlan(PSL.ackRows(acked, ackSources, IN_PRODUCTION), ticks, "known", "", ACK_NOW);
     assert.deepEqual(after.ack, []);
-    assert.deepEqual(after.revoke.map((row) => row.id), ["production-a", "ci"]);
+    assert.deepEqual(after.revoke.map((row) => row.id), ["production-a"]);
     assert.equal(after.blocker, "No checked source can take an ack.");
     assert.equal(after.blocked, false, "Revoke is ready");
 });
 
+test("a checked row that takes either action counts for both buttons", () => {
+    const rows = PSL.ackRows(carriedBy(["staging-a", "old", "fresh"]), ackSources, IN_STAGING);
+    assert.deepEqual(rows.map((row) => row.action), ["ack", "either", "either"]);
+    const plan = PSL.ackPlan(rows, {fresh: {action: "either", checked: false}}, "known", "", ACK_NOW);
+    assert.deepEqual(plan.ack.map((row) => row.id), ["staging-a", "old"]);
+    assert.deepEqual(plan.revoke.map((row) => row.id), ["old"]);
+    assert.equal(plan.blocker, null);
+    // The Hub mirrors no ack from that row, so the sentence must not claim one.
+    assert.equal(plan.sentence,
+        "Acknowledge writes to 2 sources, with no expiry. Revoke asks 1 source to remove the ack, if there is one.");
+    // Alone, it keeps Revoke ready while Acknowledge waits for its reason.
+    const alone = PSL.ackPlan(PSL.ackRows(carriedBy(["old"]), ackSources, null), {}, "", "", ACK_NOW);
+    assert.deepEqual(alone.ack.map((row) => row.id), ["old"]);
+    assert.deepEqual(alone.revoke.map((row) => row.id), ["old"]);
+    assert.equal(alone.blocker, "An ack needs a reason.");
+    assert.equal(alone.blocked, false);
+    assert.equal(alone.sentence, "An ack needs a reason. Revoke asks 1 source to remove the ack, if there is one.");
+    // One row of unknown state is enough to hedge the whole list.
+    const mixed = PSL.ackRows(carriedBy(["staging-a", "old"], [daemonAck]), ackSources, IN_STAGING);
+    assert.equal(PSL.ackPlan(mixed, {}, "", "", ACK_NOW).revoke.length, 2);
+    assert.match(PSL.ackPlan(mixed, {}, "", "", ACK_NOW).sentence, /Revoke asks 2 sources to remove the ack, if/);
+});
+
 test("Acknowledge waits for a checked source, a reason and an expiry the Hub would take", () => {
-    const rows = PSL.ackRows(carriedBy(["production-a", "staging-a"]), ackSources, null);
+    const rows = PSL.ackRows(carriedBy(["production-a", "production-b"]), ackSources, IN_PRODUCTION);
     assert.deepEqual(PSL.ackPlan(rows, {}, "  ", "", ACK_NOW), {
         ack: rows, revoke: [], expiresAt: null,
         blocker: "An ack needs a reason.", blocked: true, sentence: "An ack needs a reason."
@@ -685,8 +811,13 @@ test("Acknowledge waits for a checked source, a reason and an expiry the Hub wou
         ack: rows, revoke: [], expiresAt: "2026-09-30T23:59:59Z", blocker: null, blocked: false,
         sentence: "Acknowledge writes to 2 sources, until 2026-09-30T23:59:59Z."
     });
-    const one = PSL.ackPlan(rows, {"staging-a": {action: "ack", checked: false}}, "known", "", ACK_NOW);
+    const one = PSL.ackPlan(rows, {"production-b": {action: "ack", checked: false}}, "known", "", ACK_NOW);
     assert.equal(one.sentence, "Acknowledge writes to 1 source, with no expiry.");
+    // Several candidates and no context: nothing is written until the reader ticks.
+    const unticked = PSL.ackRows(carriedBy(["production-a", "staging-a"]), ackSources, null);
+    assert.equal(PSL.ackPlan(unticked, {}, "known", "", ACK_NOW).blocker, "No checked source can take an ack.");
+    const ticked = PSL.ackPlan(unticked, {"staging-a": {action: "ack", checked: true}}, "known", "", ACK_NOW);
+    assert.deepEqual(ticked.ack.map((row) => row.id), ["staging-a"]);
     const none = PSL.ackPlan(PSL.ackRows(carriedBy(["edge"]), ackSources, null), {}, "known", "", ACK_NOW);
     assert.equal(none.blocker, "No checked source can take an ack.");
     assert.equal(none.sentence, "No checked source can take an ack or a revoke.");
@@ -694,7 +825,8 @@ test("Acknowledge waits for a checked source, a reason and an expiry the Hub wou
 });
 
 test("the sentence speaks for Revoke too, and reads as a refusal only when both buttons are dead", () => {
-    const mixed = PSL.ackRows(carriedBy(["production-a", "staging-a"], [daemonAck]), ackSources, null);
+    const mixed = PSL.ackRows(carriedBy(["production-a", "production-b"], [ackOn("production-b")]),
+        ackSources, IN_PRODUCTION);
     const waiting = PSL.ackPlan(mixed, {}, "", "", ACK_NOW);
     assert.equal(waiting.sentence, "An ack needs a reason. Revoke removes the ack on 1 source.");
     assert.equal(waiting.blocked, false);
@@ -755,4 +887,27 @@ test("each relay outcome reads as one line, and never as a bare status", () => {
         {ok: false, text: "Odd: The Hub refused the request with status 418."}
     ]);
     assert.deepEqual(PSL.ackSummary([]), []);
+});
+
+test("the button that does not apply to a row of unknown ack state reads as the daemon's own answer", () => {
+    // A result carries the button pressed, never "either": the row is only
+    // where the two may meet, and the relay's detail says which one the daemon refused.
+    assert.deepEqual(PSL.ackSummary([
+        {
+            name: "Old", action: "ack", status: 409,
+            detail: "This finding is already acked at the daemon or by its CI baseline."
+        },
+        {
+            name: "Old", action: "revoke", status: 404,
+            detail: "This finding is not acked at this daemon, or only by its CI baseline, which no API revokes."
+        },
+        {name: "Old", action: "revoke", status: 204}
+    ]), [
+        {ok: false, text: "Old: This finding is already acked at the daemon or by its CI baseline."},
+        {
+            ok: false,
+            text: "Old: This finding is not acked at this daemon, or only by its CI baseline, which no API revokes."
+        },
+        {ok: true, text: "Old: ack revoked."}
+    ]);
 });

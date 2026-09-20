@@ -87,9 +87,12 @@ block HTTP calls from an HTTPS page, with an exception for `localhost` in most o
 Hub sends it on one kind of request only, the ack or the revoke it relays to that daemon,
 and keeps the read pair for everything else. It is the daemon's `[daemon.ack] api_key`,
 sent as `X-API-Key`, or as `Authorization` with a `Bearer` value. Without it the Hub never
-writes to that daemon, and `/api/sources` reports `ack_relay: false` for the source. Like
-`AuthHeaderValue`, the value belongs in a Secret: under Helm that is `ackSecretName` and
-`ackSecretKey`, and only the header name reaches the ConfigMap.
+writes to that daemon, and `/api/sources` reports `ack_relay: false` for the source.
+Leaving both unset is how a source is kept out of the ack page, where its row then offers
+nothing, a CI daemon whose acks only change by pull request for instance, see
+[LAUNCHER.md](LAUNCHER.md#pull-requests-only-in-an-environment). Like `AuthHeaderValue`,
+the value belongs in a Secret: under Helm that is `ackSecretName` and `ackSecretKey`, and
+only the header name reaches the ConfigMap.
 
 The Hub refuses to start when the pair sits on a trace backend, which has no ack route, or
 when it carries the same key as the source's `AuthHeaderValue`, with a `Bearer` scheme

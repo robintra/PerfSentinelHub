@@ -205,12 +205,15 @@ cette page est l'endroit où arrive un lien Grafana.
 
 Trois entrées :
 
-- `/?ack=<signature>`, la signature encodée en pourcent. Une query et non un hash, parce
-  qu'un hash se perd quand le fournisseur d'identité demande un mot de passe en chemin. Au
-  chargement le lanceur la convertit en la route ci-dessous, et la query quitte la barre
-  d'adresse.
-- `#/ack?signature=<signature>&source_id=<id>`, la route elle-même. `source_id` est
-  facultatif et ne décide que des lignes cochées au départ.
+- `/?ack=<signature>&environment=<environment>&source_id=<id>`, chaque valeur encodée en
+  pourcent et les deux dernières facultatives. Une query et non un hash, parce qu'un hash
+  se perd quand le fournisseur d'identité demande un mot de passe en chemin. Au chargement
+  le lanceur la convertit en la route ci-dessous, et la query quitte la barre d'adresse.
+- `#/ack?signature=<signature>&environment=<environment>&source_id=<id>`, la route
+  elle-même. `environment` et `source_id` sont facultatifs et ne décident que des lignes
+  cochées au départ. Une valeur blanche se lit comme absente, ce que Grafana envoie pour le
+  choix All d'une variable. Un environnement de plus de 256 caractères ou qui porte un
+  caractère de contrôle rend le lien incomplet.
 - Le lien Ack de chaque finding d'un incident déplié, qui nomme le daemon de l'incident.
 
 La page lit le finding sur `/api/findings` par sa signature exacte et en montre le type, la
@@ -221,23 +224,35 @@ finding le dit aussi. Aucun des deux ne retombe sur un autre écran.
 
 Dessous, un seul formulaire : une raison obligatoire, une expiration facultative, et une
 ligne par source qui porte le finding. L'expiration est un jour, envoyé comme la dernière
-seconde de ce jour en UTC, et une expiration vide est un acquittement permanent. Une ligne
-est cochée au départ quand on peut y faire quelque chose, et quand le lien nomme une
-source, cette ligne seule l'est.
+seconde de ce jour en UTC, et une expiration vide est un acquittement permanent.
+
+Un acquittement masque un finding, donc le contexte du lien décide des lignes cochées au
+départ, parmi celles où l'on peut faire quelque chose. Quand le lien nomme une source,
+cette ligne seule est cochée. Sinon, quand il nomme un environnement, les lignes de cet
+environnement le sont. Sans aucun contexte, une ligne n'est cochée au départ que si elle
+est la seule où l'on peut faire quelque chose. Toute autre ligne reste visible et se coche
+à la main, donc un lien ouvert depuis la production n'écrit jamais en staging ni sur un
+daemon de CI sans que le lecteur le demande.
 
 | La source                                                      | Sa ligne propose                                  |
 |----------------------------------------------------------------|---------------------------------------------------|
 | relaie, et le Hub n'en reflète aucun acquittement              | Acknowledge                                       |
 | relaie, et tient un acquittement pris à l'exécution            | Revoke, à côté de qui l'a pris, quand et pourquoi |
 | relaie, et tient un acquittement de la baseline de CI          | rien                                              |
-| relaie, et sa dernière lecture d'acquittements ne conclut pas  | rien, et la ligne nomme `acks_state`              |
+| relaie, et son état d'acquittement est inconnu                 | les deux boutons, et la ligne nomme `acks_state`  |
 | n'a pas d'identifiant d'acquittement, ou n'est plus configurée | rien, et la ligne dit lequel des deux             |
 
 Une source relaie quand `ack_relay` vaut true sur `/api/sources`. Une lecture
 d'acquittements conclut à `ok` et à `truncated`, les deux états depuis lesquels le Hub
-reflète des acquittements. Partout ailleurs le Hub ne distingue pas un finding non acquitté
-d'un finding que la baseline couvre déjà, ce qui est le cas de tout daemon antérieur à
-0.24.0, donc la ligne ne propose aucune des deux actions.
+reflète des acquittements. Partout ailleurs l'état d'acquittement est inconnu : le Hub ne
+distingue pas un finding non acquitté d'un finding déjà acquitté, ce qui est le cas de tout
+daemon antérieur à 0.24.0 et de tout daemon dont la dernière lecture d'acquittements a
+échoué. Le relais répondrait quand même, donc on peut toujours agir sur une telle ligne, et
+les deux boutons s'y appliquent quand elle est cochée. Le daemon refuse celui qui ne
+s'applique pas, l'acquittement d'un finding déjà acquitté ou la révocation d'un finding qui
+ne l'est pas, et sa réponse s'affiche dans la ligne de résultat de cette source. Une ligne
+dont le Hub reflète déjà l'acquittement garde Revoke, ou rien pour un acquittement de la
+baseline, quoi que dise l'état.
 
 Un acquittement de la baseline ne se révoque pas ici parce qu'il ne se révoque nulle part à
 l'exécution : l'API du daemon elle-même lui répond `404`, et la baseline change par
@@ -257,6 +272,21 @@ ou l'identité que pose un proxy une fois `Hub:AckRelay:TrustIdentityHeader` act
 autre appelant reçoit le `403` du relais à l'envoi, et l'acquittement est pris au nom sous
 lequel le Hub connaît l'appelant. Voir [API-FR.md](API-FR.md#relais-dacquittement) et
 [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comment-ça-marche).
+
+### Pull requests uniquement dans un environnement
+
+Une équipe qui n'acquitte que par pull request dans un environnement, un daemon de CI par
+exemple, ne donne à cette source aucun identifiant d'acquittement : `AckHeaderName` et
+`AckHeaderValue` n'y sont pas renseignés, voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#lidentifiant-dacquittement). Sa ligne ne propose
+alors rien, et le Hub n'a aucun chemin d'écriture vers ce daemon. Les acquittements de sa
+baseline restent reflétés et affichés sur la ligne, `source` valant `toml` dans `acks` sur
+`/api/findings`, et ne se changent que dans le fichier.
+
+Ne mettez pas `[daemon.ack] enabled = false` sur ce daemon pour fermer les acquittements à
+l'exécution, parce que le daemon cesse alors de charger aussi la baseline TOML, voir
+[ACK-WORKFLOW-FR.md](https://github.com/robintra/perf-sentinel/blob/main/docs/FR/ACK-WORKFLOW-FR.md)
+du moteur.
 
 ## Sûreté
 

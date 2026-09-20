@@ -88,6 +88,7 @@ if (acks !== null) routes["/api/acks"] = acks;
 
 /** Where the Hub relays an ack, POST, or a revoke, DELETE. */
 const ACK_WRITE = /^\/api\/findings\/[^/]+\/ack$/;
+const ACK_WRITE_STATUS = {POST: 201, DELETE: 204};
 
 http
     .createServer((req, res) => {
@@ -98,7 +99,7 @@ http
         // Answered, not recorded. The listing above is a capture, and a daemon that
         // took its own writes would drift away from it mid-demo.
         if (ACK_WRITE.test(path)) {
-            res.writeHead(req.method === "POST" ? 201 : req.method === "DELETE" ? 204 : 405);
+            res.writeHead(ACK_WRITE_STATUS[req.method] ?? 405);
             res.end();
             return;
         }

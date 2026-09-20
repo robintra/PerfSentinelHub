@@ -433,10 +433,13 @@ jobs:
               try:
                   with urllib.request.urlopen('http://127.0.0.1:5082/health/ready', timeout=1) as response:
                       if response.status == 200:
-                          raise SystemExit(0)
+                          break
               except OSError:
                   time.sleep(.5)
-          raise SystemExit('image health smoke timed out')
+          else:
+              raise SystemExit('image health smoke timed out')
+          # Outside the retry loop: urlopen raises on the 404 an image without wwwroot answers.
+          urllib.request.urlopen('http://127.0.0.1:5082/', timeout=5).close()
           PY
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

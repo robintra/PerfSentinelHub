@@ -389,16 +389,14 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
         string? value,
         List<string> errors)
     {
-        var hasName = name is not null;
-        var hasValue = value is not null;
-        if (hasName != hasValue)
+        if (name is null && value is null)
+            return;
+
+        if (name is null || value is null)
         {
             errors.Add($"Source '{sourceId}' must provide both {label} header name and value.");
             return;
         }
-
-        if (name is null || value is null)
-            return;
 
         if (name.Contains('\r', StringComparison.Ordinal) ||
             name.Contains('\n', StringComparison.Ordinal) ||

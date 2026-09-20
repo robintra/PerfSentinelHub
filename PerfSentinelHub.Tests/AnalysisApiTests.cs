@@ -4,7 +4,6 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PerfSentinelHub.Configuration;
@@ -66,7 +65,7 @@ public sealed class AnalysisApiTests : IDisposable
     {
         _client.Dispose();
         _factory.Dispose();
-        SqliteConnection.ClearAllPools();
+        TestPool.ClearFor(Path.Combine(_workspace, "hub.db"));
         if (Directory.Exists(_workspace))
             Directory.Delete(_workspace, true);
     }

@@ -27,7 +27,7 @@ public sealed class FindingIngestionTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        TestPool.ClearFor(_databasePath);
         File.Delete(_databasePath);
         File.Delete($"{_databasePath}-shm");
         File.Delete($"{_databasePath}-wal");

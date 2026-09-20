@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -15,7 +14,7 @@ public sealed class AnalysisStorageTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        TestPool.ClearFor(_databasePath);
         File.Delete(_databasePath);
         File.Delete($"{_databasePath}-shm");
         File.Delete($"{_databasePath}-wal");

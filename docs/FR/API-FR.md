@@ -26,19 +26,19 @@ push n'exerce pas.
 
 ## API de lecture
 
-| Endpoint                             | Renvoie                                                                                                                                                                                                         |
-|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport |
-| `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                    |
-| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `offset`, `limit`, `include_acked`                                                                                                   |
-| `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                              |
-| `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                    |
+| Endpoint                             | Renvoie                                                                                                                                                                                                            |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport    |
+| `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
+| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `offset`, `limit`, `include_acked`                                                                          |
+| `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
+| `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                       |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
-| `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                      |
-| `POST /api/incidents/refresh`        | Lit maintenant l'anneau d'incidents de chaque daemon, puis répond exactement comme `GET /api/incidents`. Mêmes paramètres. Voir plus bas                                                                        |
-| `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                    |
-| `GET /health/live`                   | Si le process est debout                                                                                                                                                                                        |
-| `GET /health/ready`                  | Positif après l'initialisation de SQLite                                                                                                                                                                        |
+| `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                         |
+| `POST /api/incidents/refresh`        | Lit maintenant l'anneau d'incidents de chaque daemon, puis répond exactement comme `GET /api/incidents`. Mêmes paramètres. Voir plus bas                                                                           |
+| `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                       |
+| `GET /health/live`                   | Si le process est debout                                                                                                                                                                                           |
+| `GET /health/ready`                  | Positif après l'initialisation de SQLite                                                                                                                                                                           |
 
 Sur `/api/sources`, les horodatages sont null pour une source jamais observée, ce qu'un
 lecteur ne doit pas confondre avec l'epoch. `producer_version` est null pour un backend de
@@ -51,6 +51,18 @@ tableau de bord envoie pour son choix "All". Les lignes suivent un ordre total, 
 décroissant puis `signature`, et `offset` en saute autant avant que `limit` ne s'applique.
 `offset` va de 0 à 1 000 000, et une valeur hors de cette plage est un `400` plutôt qu'une
 page ramenée dans les bornes.
+
+`environment` et `source_id` donnent un périmètre à la lecture, les sources d'un
+environnement ou une seule source. Ce sont des ensembles fermés, les sources configurées du
+Hub, et une valeur hors de ces ensembles répond `400` plutôt qu'une page vide, parce qu'une
+faute de frappe ne doit pas se lire "aucun finding". Donné vide ou composé seulement de
+blancs, chacun se lit comme absent, comme les filtres ci-dessus, donc il ne répond ni `400`
+ni une page vide. `environment` se résout en chaque source configurée avec lui. Donné avec
+`source_id`, les deux s'intersectent, donc une source hors de l'environnement nommé ne liste
+rien, la réponse d'une paire de filtres qui s'excluent. Sans l'un ni l'autre, la lecture
+couvre toute la flotte, comme elle l'a toujours fait. Une réponse avec périmètre décrit ce
+périmètre et non la flotte, voir
+[Ce que le Hub ajoute à un finding](#ce-que-le-hub-ajoute-à-un-finding).
 
 ### La vue daemon
 
@@ -185,8 +197,10 @@ calme et une copie périmée se lisent pareil.
 
 Chaque finding du daemon est conservé comme un document JSON opaque et additif. Le Hub y
 ajoute `first_seen`, `last_seen`, `max_confidence`, `status`, un `lineage` optionnel, et
-la fraîcheur de la source. Les clients d'IDE doivent ignorer les champs inconnus, comme
-ils le font avec l'API du daemon.
+`sources`, une entrée par source ayant rapporté le finding. Une entrée porte l'`id` de la
+source, celui que liste `/api/sources` et sur lequel filtre `source_id`, son `name`, son
+`environment` et sa `producer_version`, et la fraîcheur de son observation. Les clients
+d'IDE doivent ignorer les champs inconnus, comme ils le font avec l'API du daemon.
 
 `first_seen` vient de l'enveloppe du daemon (`first_seen_ms`), borné à l'heure
 d'observation du Hub et à un plancher de bon sens en millisecondes Unix. Ni une horloge de
@@ -196,6 +210,17 @@ l'heure d'observation quand un producteur omet le champ.
 `last_seen` est délibérément l'horloge d'observation du Hub. La rétention, l'ordonnancement
 et les comparaisons de fraîcheur s'appuient dessus, donc il ne vient jamais d'une horloge
 distante.
+
+Lue avec `environment` ou `source_id`, une enveloppe décrit ce périmètre et non la flotte.
+Le document du daemon est la copie de la source du périmètre qui a vu le finding en
+dernier, donc `severity` et `include_acked=false` jugent cette copie, et un finding
+acquitté en production reste listé pour la recette. `first_seen` est le plus ancien et
+`last_seen` le plus récent sur les sources du périmètre, `status` est dérivé de ce
+`last_seen` et des battements de ces seules sources, et `sources` ne liste qu'elles.
+`max_confidence` reste à l'échelle de la flotte, délibérément, la plus haute confiance
+qu'une source ait jamais rapportée. La copie propre à une source commence à sa première
+observation après la mise à niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que
+la flotte partage, la plus fraîche toutes sources confondues.
 
 ### Comment `status` est dérivé
 
@@ -210,7 +235,9 @@ Dérivé à la lecture, jamais stocké, depuis des données que le Hub garde dé
 C'est une présomption et non un verdict. Un finding qui part par rétention part toujours
 en silence, mais un lecteur peut désormais distinguer "l'endpoint tourne sans le finding"
 de "personne ne regarde". `?status=<valeur>` filtre, et le filtre s'applique avant la
-limite de page.
+limite de page. Dans une lecture avec périmètre, le statut est celui du périmètre : un
+finding que la production rapporte encore peut être `not_observed` pour la recette, et seul
+un battement venu d'une source du périmètre l'y rend `likely_resolved`.
 
 ### Filiation
 

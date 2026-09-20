@@ -177,11 +177,9 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    ///     The closed filters. A kind, a source id or an environment is
-    ///     configuration, so an unknown one is a bad request rather than an empty
-    ///     page: a typo would otherwise read as "no incidents". Given together they
-    ///     intersect, and a source outside the named environment leaves the empty
-    ///     set, since the screen offers the two as filters that both apply.
+    ///     The closed filters. A kind is as closed a set as the source scope, the
+    ///     daemon's five, so an unknown one is a bad request too rather than a
+    ///     page that reads as "no incidents".
     /// </summary>
     private static bool TryReadIncidentFilters(
         HttpRequest request,
@@ -194,25 +192,7 @@ public static partial class ApiEndpoints
         if (kind is not null && Array.IndexOf(IncidentParser.Kinds, kind) < 0)
             return false;
 
-        var sourceId = ReadOptional(request, "source_id");
-        if (sourceId is not null &&
-            !options.Sources.Any(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal)))
-            return false;
-
-        var environment = ReadOptional(request, "environment");
-        if (environment is not null)
-        {
-            sourceIds = options.Sources
-                .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
-                .Select(source => source.Id)
-                .ToArray();
-            if (sourceIds.Count == 0)
-                return false;
-        }
-
-        if (sourceId is not null)
-            sourceIds = sourceIds is null || sourceIds.Contains(sourceId) ? [sourceId] : [];
-        return true;
+        return TryReadSourceScope(request, options, out sourceIds);
     }
 
     private static bool TryReadBounded(

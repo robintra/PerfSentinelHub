@@ -146,6 +146,13 @@ All notable changes to PerfSentinelHub are recorded here.
   environment is now a Prometheus label value and a member of a closed set a query
   parameter is compared against, and the label is escaped on the way out besides.
 
+### Fixed
+
+- The container image serves the launcher. Its last stage copied the binary, the SQLite
+  library and the engine, never `wwwroot`, so `/` and every page under it answered `404`
+  in a chart or a `docker run` deployment while the API answered as usual. The CI image
+  smoke now fetches `/` beside `/health/ready`.
+
 ## [0.2.1] - 2026-09-18
 
 ### Added

@@ -23,6 +23,8 @@ WORKDIR /app
 # Root owns what it runs, so the service account cannot rewrite its own binary.
 COPY --from=build /out/PerfSentinelHub /app/PerfSentinelHub
 COPY --from=build /out/libe_sqlite3.so /app/libe_sqlite3.so
+# The launcher is static files beside the binary, and without them every page answers 404.
+COPY --from=build /out/wwwroot /app/wwwroot
 COPY --from=engine /perf-sentinel /app/perf-sentinel
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080

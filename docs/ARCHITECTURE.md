@@ -176,6 +176,7 @@ is wrong the first time anyone edits above it.
 | Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                             |
 | Hub to daemon, incidents                  | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paged by `SourcePoller` into `UpsertIncidentsAsync` |
 | Hub to daemon, acks                       | `Collection/DaemonClient.cs`, `FetchAcksAsync`, mirrored by `AckReader` into `ReplaceSourceAcksAsync`        |
+| Hub to daemon, ack relay                  | `Api/ApiEndpoints.Acks.cs`, `RelayAckAsync`, written by `AckRelay` through `SendAckAsync`                    |
 | Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                              |
 | Hub to SQLite                             | `Storage/Schema.cs`                                                                                          |
 | Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                                  |

@@ -1,8 +1,8 @@
 # HTTP API
 
-Three surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
-plugin or a CI job reads the read API. The browser uses the analysis API, reads
-`/api/incidents` for its incidents screen, and never calls `/api/findings`.
+Four surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
+plugin or a CI job reads the read API. The browser uses the analysis API and the ack relay,
+reads `/api/incidents` for its incidents screen, and never calls `/api/findings`.
 
 ## Import API
 
@@ -302,6 +302,78 @@ along the chain, and `predecessors`, the chain length. Both are denormalized ont
 link, so a finding's full lineage survives the retention purge of every earlier hop. The
 heuristic is conservative and non-destructive: the two rows stay separate findings, and the
 predecessor ages out through normal retention.
+
+## Ack relay
+
+Two routes write at the daemon behind one source, with that daemon's own ack key. Both are
+a `POST` with a JSON body, and neither is ever open: under `Hub:Auth` they need a session.
+
+| Endpoint                                   | Body                                              | Does                                    |
+|--------------------------------------------|---------------------------------------------------|-----------------------------------------|
+| `POST /api/sources/{sourceId}/acks`        | `{"signature":"…","reason":"…","expires_at":"…"}` | Acknowledges the finding at that daemon |
+| `POST /api/sources/{sourceId}/acks/revoke` | `{"signature":"…"}`                               | Revokes the ack that daemon holds       |
+
+`expires_at` is optional, and an ack without one is permanent. A `by` in the body is
+ignored: the Hub names the caller itself.
+
+The Hub judges a request in this order, and a request it refuses never reaches the daemon:
+
+1. **The caller.** The signed-in user under `Hub:Auth`. Otherwise the value of
+   `Hub:Analysis:IdentityHeader`, and only when `Hub:AckRelay:TrustIdentityHeader` is set,
+   see [AUTHENTICATION.md](AUTHENTICATION.md#how-it-works). With nobody to name, a `403`.
+   It comes first so that an unnamed caller learns nothing about the sources.
+2. **The source.** An unknown id, a trace backend and a daemon with no ack credential all
+   answer the same `404`. `ack_relay` on `/api/sources` says which sources relay.
+3. **Where the request comes from.** A `Sec-Fetch-Site` header that is present and is not
+   `same-origin` is a `403`, and a content type other than `application/json` is a `415`.
+   The Hub has no antiforgery token and no CORS policy, so these two are its defence
+   against a page on another origin: a browser sets the first by itself, and the second
+   cannot be sent across origins without a preflight nothing here answers.
+4. **Room.** Two relays run at a time, and one more gets `503` with `Retry-After: 1`. A
+   body over 8 KiB is a `413`.
+5. **The body.** `signature` is required, at most 1,024 characters, free of control
+   characters, and neither `.` nor `..`, which would leave the daemon's ack path. Its shape
+   stays the daemon's rule. `reason` is required on an ack, not blank, and held to the same
+   bounds. `expires_at` is an RFC 3339 time in the future. Anything else is a `400`.
+6. **The pair.** The Hub must hold that finding at that source. A revoke passes on that
+   too, and also on an ack of it the Hub mirrors from that source, which can outlive the
+   finding. Otherwise a `404`. A daemon acknowledges any canonical signature, so this is
+   what bounds the relay to findings the Hub knows.
+
+The Hub then writes the daemon's request itself, and nothing the caller sent travels as
+bytes. It is a `POST`, or a `DELETE` for a revoke, on `api/findings/{signature}/ack`, the
+signature percent-encoded so that one holding a slash stays one path segment. It carries the
+source's ack credential and never the read one. The body of an ack is
+`{"by":"…","reason":"…","expires_at":"…"}`, `expires_at` written back in UTC to the second.
+The caller travels as `by` on an ack and as `X-User-Id` on a revoke, unchanged when it is
+printable ASCII with no space at either end, percent-encoded otherwise, and in the same
+form on both so the two compare equal at the daemon. The whole exchange has three times
+`Hub:HttpTimeout`.
+
+| The daemon answers | The Hub answers                                                             |
+|--------------------|-----------------------------------------------------------------------------|
+| any `2xx`          | `204`                                                                       |
+| `400`              | `400`, the daemon refused the signature as not canonical                    |
+| `401`              | `502`, the daemon refused the Hub's ack credential                          |
+| `404` on a revoke  | `404`, not acked at this daemon, or only by its CI baseline                 |
+| `409`              | `409`, already acked at the daemon or by its CI baseline                    |
+| `503`              | `503`, acknowledgments are disabled on this daemon                          |
+| `507`              | `507`, the daemon's ack store is full                                       |
+| nothing in time    | `504`                                                                       |
+| anything else      | `502`, a `404` on an ack included, which means the daemon has no such route |
+
+A `401` from the daemon is never relayed as one. It says the key the Hub holds is wrong,
+which no sign-in mends, and the launcher answers a `401` by reloading into the sign-in.
+Every refusal the Hub words itself carries `{"detail":"…"}`. The `413`, the `415` and the
+`503` of a full gate have no body.
+
+After a `2xx` the Hub reads that daemon's ack listing again, so `acks[]` and
+`include_acked=false` follow at once instead of at the next poll. It does so for a source
+the poll has reached, since the read is decided by the daemon's version, and a failure of
+that read never turns the `204` into an error: the daemon took the write. Each relay logs
+one line, event `1310` when the daemon answered and `1311` when it did not, with the
+source, the action, the caller and the status. The reason and the credential are never
+logged.
 
 ## Analysis API
 

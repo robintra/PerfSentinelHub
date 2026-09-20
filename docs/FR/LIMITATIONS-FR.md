@@ -64,6 +64,18 @@ apparaissent dans `acks`, mais une liste dont la fin manque ne peut pas dire
 qu'un finding n'est pas acquitté, donc elle ne décide pas de
 `include_acked=false` et cette source retombe sur l'enveloppe.
 
+Le relais d'acquittement écrit un acquittement d'exécution sur un seul daemon,
+celui qui se trouve derrière la source nommée dans la route. Un finding que
+portent trois sources demande trois acquittements, et rien n'en diffuse un seul.
+Un acquittement tenu par la baseline de CI d'un daemon ne peut pas être révoqué
+par le relais, ni par l'API du daemon elle-même : le daemon répond `404`, et la
+baseline change par l'édition de son fichier, sous revue. Une révocation est
+relayée pour un finding que le Hub détient sur cette source, ou pour un
+acquittement qu'il reflète depuis elle. Une fois le finding retiré par la
+rétention, son acquittement ne peut être révoqué depuis le Hub qu'après qu'un
+poll l'a listé, ce qui n'arrive jamais avec un daemon antérieur à 0.24.0. Voir
+[API-FR.md](API-FR.md#relais-dacquittement).
+
 La joignabilité est à sens unique. Un daemon qui pousse avec succès prouve
 qu'il peut joindre le Hub, pas que le Hub peut le joindre, et seul un poll
 réussi efface `unreachable_since_ms`. Une source dont le push arrive alors que
@@ -127,6 +139,17 @@ faite par un proxy, et le Hub n'en vérifie rien. C'est le bon comportement
 derrière un proxy authentifiant, et aucune défense sans lui. Si le réseau n'est
 pas la frontière, posez ce proxy devant ou activez `Hub:Auth`. Voir
 [DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
+
+Le relais d'acquittement sait qui demande et n'a pas de rôles. Tout appelant que
+le Hub peut nommer, un utilisateur connecté ou, une fois
+`Hub:AckRelay:TrustIdentityHeader` posé, celui que nomme l'en-tête du proxy,
+peut acquitter ou révoquer sur toutes les sources qui portent un identifiant
+d'acquittement. Le daemon n'a pas non plus de rôle par utilisateur : sa clé
+d'acquittement est une seule clé, et le Hub la détient. Restreignez qui se
+connecte côté fournisseur, et ne posez pas l'identifiant sur une source que
+personne ne doit acquitter depuis le Hub. Le nom envoyé alimente la piste
+d'audit du daemon et n'y autorise rien. Le daemon en garde 256 octets, donc un
+nom long qu'il a fallu encoder en pourcent peut être coupé.
 
 ## Ce qui se joue hors du Hub
 

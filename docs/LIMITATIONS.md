@@ -57,6 +57,16 @@ that read `truncated`. The acks it did list appear in `acks`, but a listing with
 a missing tail cannot say a finding is not acknowledged, so it does not decide
 `include_acked=false` and that source falls back to the envelope.
 
+The ack relay writes a runtime ack at one daemon, the one behind the source
+named in the route. A finding three sources carry takes three acks, and nothing
+fans one out. An ack held by a daemon's CI baseline cannot be revoked through
+the relay, nor through the daemon's own API: the daemon answers `404`, and the
+baseline changes by editing its file under review. A revoke is relayed for a
+finding the Hub holds at that source, or for an ack it mirrors from it. Once
+retention has removed the finding, its ack can be revoked from the Hub only
+after a poll has listed it, which never happens with a daemon below 0.24.0. See
+[API.md](API.md#ack-relay).
+
 Reachability is one-directional. A daemon pushing successfully proves it can
 reach the Hub, not that the Hub can reach it, and only a successful poll clears
 `unreachable_since_ms`. A source whose push arrives while its poll fails still
@@ -117,6 +127,15 @@ and the Hub verifies nothing about it. That is the right behaviour behind an
 authenticating proxy and no defence at all without one. If the network is not
 the boundary, put that proxy in front or turn on `Hub:Auth`. See
 [DEPLOYMENT.md](DEPLOYMENT.md).
+
+The ack relay knows who asks and has no roles. Any caller the Hub can name, a
+signed-in user or, once `Hub:AckRelay:TrustIdentityHeader` is set, whoever the
+proxy header names, may ack or revoke on every source that carries an ack
+credential. The daemon has no per-user roles either: its ack key is one key, and
+the Hub holds it. Restrict who signs in on the provider side, and leave the
+credential off a source nobody should ack from the Hub. The name sent along
+feeds the daemon's audit trail and authorizes nothing there. The daemon keeps
+256 bytes of it, so a long name that had to be percent-encoded may be cut.
 
 ## What sits outside the Hub
 

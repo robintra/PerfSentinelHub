@@ -186,6 +186,7 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                               |
 | Hub vers le daemon, les incidents                 | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paginé par `SourcePoller` vers `UpsertIncidentsAsync` |
 | Hub vers le daemon, les acquittements             | `Collection/DaemonClient.cs`, `FetchAcksAsync`, reflété par `AckReader` vers `ReplaceSourceAcksAsync`          |
+| Hub vers le daemon, le relais d'acquittement      | `Api/ApiEndpoints.Acks.cs`, `RelayAckAsync`, écrit par `AckRelay` via `SendAckAsync`                           |
 | La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                               |
 | Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                            |
 | Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                                |

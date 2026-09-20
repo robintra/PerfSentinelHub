@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -16,6 +17,8 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class AuthenticationTests : IAsyncLifetime
 {
+    private const string RelayedSignature = "slow_sql:order-svc:0123456789abcdef0123456789abcdef";
+    private const string RelayBody = $$"""{"signature":"{{RelayedSignature}}","reason":"known"}""";
     private readonly HubApplicationFactory _hub = new();
     private WebApplicationFactory<Program> _factory = null!;
     private FakeDaemon _provider = null!;
@@ -31,7 +34,8 @@ public sealed class AuthenticationTests : IAsyncLifetime
                 case "/token":
                     var form = await context.Request.ReadFormAsync();
                     await context.Response.WriteAsJsonAsync(
-                        new Dictionary<string, string> { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
+                        new Dictionary<string, string>
+                        { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
                     break;
                 case "/userinfo" when context.Request.Headers.Authorization == "Bearer anon":
                     await context.Response.WriteAsJsonAsync(new Dictionary<string, string> { ["sub"] = "2" });
@@ -214,11 +218,65 @@ public sealed class AuthenticationTests : IAsyncLifetime
         Assert.DoesNotContain("Reload", line, StringComparison.OrdinalIgnoreCase);
     }
 
-    private HttpClient Client()
+    [Fact]
+    public async Task The_ack_relay_needs_a_session_and_acks_in_the_name_it_carries()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var calls = new ConcurrentQueue<AckRelayApiTests.DaemonCall>();
+        await using var daemon = await AckRelayApiTests.DaemonAsync(calls, StatusCodes.Status201Created);
+        // The header is trusted here, and the session still outranks it.
+        await using var relaying = AckRelayApiTests.Scoped(
+            _factory, true, TimeSpan.FromSeconds(10), AckRelayApiTests.Relayed("signed", daemon));
+        await AckRelayApiTests.SeedAsync(_hub.Database, "signed", RelayedSignature);
+        using var client = Client(relaying);
+
+        using var refused = await client.SendAsync(
+            AckRelayApiTests.Relay("signed", RelayBody, "mallory@example.internal"), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+        Assert.Empty(calls);
+
+        using var challenge = await client.GetAsync("/", cancellationToken);
+        var state = QueryHelpers.ParseQuery(challenge.Headers.Location!.Query)["state"];
+        using var callback = await client.GetAsync(
+            $"/auth/callback?code=abc&state={Uri.EscapeDataString(state!)}", cancellationToken);
+        using var relayed = await client.SendAsync(
+            AckRelayApiTests.Relay("signed", RelayBody, "mallory@example.internal"), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, relayed.StatusCode);
+        using var sent = JsonDocument.Parse(Assert.Single(calls, call => call.Method != "GET").Body);
+        Assert.Equal("alice@example.internal", sent.RootElement.GetProperty("by").GetString());
+    }
+
+    [Theory]
+    [InlineData(false, HttpStatusCode.Forbidden)]
+    [InlineData(true, HttpStatusCode.NoContent)]
+    public async Task Without_sign_in_the_proxy_header_names_the_caller_only_once_the_relay_opts_in(
+        bool trustIdentityHeader,
+        HttpStatusCode expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sourceId = $"header-{trustIdentityHeader}";
+        var calls = new ConcurrentQueue<AckRelayApiTests.DaemonCall>();
+        await using var daemon = await AckRelayApiTests.DaemonAsync(calls, StatusCodes.Status201Created);
+        // Off the plain factory: under Hub:Auth a request with no session never gets this far.
+        await using var relaying = AckRelayApiTests.Scoped(
+            _hub, trustIdentityHeader, TimeSpan.FromSeconds(10), AckRelayApiTests.Relayed(sourceId, daemon));
+        await AckRelayApiTests.SeedAsync(_hub.Database, sourceId, RelayedSignature);
+        using var client = relaying.CreateClient();
+
+        using var response = await client.SendAsync(
+            AckRelayApiTests.Relay(sourceId, RelayBody, "alice@example.internal"), cancellationToken);
+
+        Assert.Equal(expected, response.StatusCode);
+        Assert.Equal(trustIdentityHeader ? 1 : 0, calls.Count(call => call.Method != "GET"));
+    }
+
+    private HttpClient Client(WebApplicationFactory<Program>? factory = null)
     {
         // https: the session and correlation cookies are Secure, and the cookie
         // container would not send them back over http.
-        return _factory.CreateClient(new WebApplicationFactoryClientOptions
+        return (factory ?? _factory).CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             BaseAddress = new Uri("https://localhost")

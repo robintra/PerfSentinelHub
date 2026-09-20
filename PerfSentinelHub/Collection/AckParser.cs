@@ -87,8 +87,9 @@ public static class AckParser
     }
 
     // An absent or null expiry is a permanent ack. One that is present and
-    // unreadable is refused rather than read as permanent.
-    private static bool TryReadExpiry(JsonElement element, out string? expiresAt, out long? expiresAtMs)
+    // unreadable is refused rather than read as permanent. The relay reads the
+    // expiry a caller asks for by the same rule.
+    internal static bool TryReadExpiry(JsonElement element, out string? expiresAt, out long? expiresAtMs)
     {
         expiresAt = null;
         expiresAtMs = null;

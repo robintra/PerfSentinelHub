@@ -221,7 +221,8 @@ public static partial class ApiEndpoints
             return false;
 
         if (!TryReadBounded(request, "limit", options.DefaultReadLimit, 1, options.MaxReadLimit, out var limit) ||
-            !TryReadBounded(request, "offset", 0, 0, MaxFindingOffset, out var offset))
+            !TryReadBounded(request, "offset", 0, 0, MaxFindingOffset, out var offset) ||
+            !TryReadSourceScope(request, options, out var sourceIds))
             return false;
 
         var includeAcked = true;
@@ -240,7 +241,43 @@ public static partial class ApiEndpoints
             limit,
             includeAcked,
             status,
-            Offset: offset);
+            Offset: offset,
+            SourceIds: sourceIds);
+        return true;
+    }
+
+    /// <summary>
+    ///     The source scope the findings and the incidents reads share, null for
+    ///     the whole fleet. A source id or an environment is configuration, so an
+    ///     unknown one is a bad request rather than an empty page: a typo would
+    ///     otherwise read as "nothing there". Given together they intersect, and a
+    ///     source outside the named environment leaves the empty set, since a
+    ///     screen offers the two as filters that both apply.
+    /// </summary>
+    private static bool TryReadSourceScope(
+        HttpRequest request,
+        HubOptions options,
+        out IReadOnlyList<string>? sourceIds)
+    {
+        sourceIds = null;
+        var sourceId = ReadOptional(request, "source_id");
+        if (sourceId is not null &&
+            !options.Sources.Any(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal)))
+            return false;
+
+        var environment = ReadOptional(request, "environment");
+        if (environment is not null)
+        {
+            sourceIds = options.Sources
+                .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
+                .Select(source => source.Id)
+                .ToArray();
+            if (sourceIds.Count == 0)
+                return false;
+        }
+
+        if (sourceId is not null)
+            sourceIds = sourceIds is null || sourceIds.Contains(sourceId) ? [sourceId] : [];
         return true;
     }
 

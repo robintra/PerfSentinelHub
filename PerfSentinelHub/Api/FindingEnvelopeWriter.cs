@@ -81,8 +81,9 @@ public static partial class FindingEnvelopeWriter
     }
 
     /// <summary>
-    ///     Every source that reported this finding, oldest field first and ordered
-    ///     by id so two identical pages compare equal.
+    ///     Every source that reported this finding, those of the scope when the
+    ///     read has one, the id first and ordered by id so two identical pages
+    ///     compare equal.
     /// </summary>
     private static void WriteSources(Utf8JsonWriter writer, StoredFinding row, DateTimeOffset now)
     {
@@ -91,6 +92,7 @@ public static partial class FindingEnvelopeWriter
         {
             var ageSeconds = Math.Max(0, (now.ToUnixTimeMilliseconds() - source.LastSeenMs) / 1000);
             writer.WriteStartObject();
+            writer.WriteString("id", source.SourceId);
             writer.WriteString("name", source.SourceName);
             writer.WriteString("environment", source.Environment);
             writer.WriteString("producer_version", source.ProducerVersion);

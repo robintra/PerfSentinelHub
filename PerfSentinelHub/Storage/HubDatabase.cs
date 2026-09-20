@@ -18,34 +18,45 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // An observation day is a whole day on the Hub clock.
     private const long DayMs = 86_400_000;
 
-    // Derived at read time, never stored: a finding whose endpoint still
-    // heartbeats from a reachable source while the finding itself went
-    // quiet has presumably been fixed. A quiet endpoint or an unreachable
-    // fleet proves nothing, so those stay `not_observed`.
-    // The heartbeat must come from a source that observed THIS finding: a
-    // sibling source running the same endpoint without ever carrying the
-    // finding proves nothing about the source that did. The LEFT JOIN on
-    // source_state is load-bearing: a push-only source that never failed
-    // has no row there, and an INNER JOIN would wrongly demote it.
-    private const string StatusExpression = """
-                                            CASE
-                                              WHEN findings.last_seen_ms >= $status_now - $status_grace THEN 'active'
-                                              WHEN EXISTS (
-                                                SELECT 1 FROM endpoint_heartbeats AS eh
-                                                LEFT JOIN source_state AS hs ON hs.source_id = eh.source_id
-                                                WHERE eh.service = findings.service
-                                                  AND eh.endpoint = findings.endpoint
-                                                  AND eh.last_seen_any_ms >= findings.last_seen_ms + $status_grace
-                                                  AND hs.unreachable_since_ms IS NULL
-                                                  AND EXISTS (
-                                                    SELECT 1 FROM finding_sources AS fs
-                                                    WHERE fs.signature = findings.signature
-                                                      AND fs.source_id = eh.source_id
-                                                  )
-                                              ) THEN 'likely_resolved'
-                                              ELSE 'not_observed'
-                                            END
-                                            """;
+    // The scope of a read, one bound parameter in the shape json_each reads.
+    private const string InScope = "IN (SELECT value FROM json_each($source_ids))";
+
+    // A scoped read describes its scope: each finding as the freshest source in
+    // scope reported it, first and last seen over those sources alone. The
+    // partition and the pick share one sort. A source row written before the
+    // per-source columns has no copy of its own yet and serves the shared one.
+    // max_confidence stays fleet-wide, a source row carries no confidence of its own.
+    // ponytail: every row of the scope is read and sorted before any filter or
+    // LIMIT, so a read costs the scope and not the page. service and
+    // finding_type are fleet-wide and could move into `scope` if it ever hurts.
+    // severity and the ack filter cannot, they judge the scoped envelope.
+    private const string ScopedFindings = $"""
+                                           scope AS (
+                                             SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
+                                             FROM (
+                                               SELECT fs.signature, fs.finding_json, fs.severity,
+                                                      MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
+                                                      MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
+                                                      ROW_NUMBER() OVER (
+                                                        PARTITION BY fs.signature
+                                                        ORDER BY fs.last_seen_ms DESC, fs.source_id ASC) AS pick
+                                               FROM finding_sources AS fs
+                                               WHERE fs.source_id {InScope}
+                                               WINDOW w AS (PARTITION BY fs.signature)
+                                             )
+                                             WHERE pick = 1
+                                           ),
+                                           scoped AS (
+                                             SELECT findings.signature,
+                                                    COALESCE(scope.finding_json, findings.finding_json) AS finding_json,
+                                                    findings.service, findings.finding_type,
+                                                    COALESCE(scope.severity, findings.severity) AS severity,
+                                                    findings.endpoint, findings.sample_trace_id,
+                                                    scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
+                                             FROM scope
+                                             JOIN findings ON findings.signature = scope.signature
+                                           )
+                                           """;
 
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
 
@@ -514,37 +525,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        // The status is computed before LIMIT so a status filter fills its
-        // page instead of returning whatever survived a post-filter.
-        // Every interpolated fragment is assembled above from private constants;
-        // external values remain bound parameters.
-#pragma warning disable S2077
-        command.CommandText = $"""
-                               WITH statused AS (
-                                 SELECT findings.*, {StatusExpression} AS status
-                                 FROM findings
-                                 {where}
-                               ),
-                               selected AS (
-                                 SELECT * FROM statused
-                                 WHERE $status IS NULL OR status = $status
-                                 ORDER BY last_seen_ms DESC, signature ASC
-                                 LIMIT $limit OFFSET $offset
-                               )
-                               SELECT
-                                 f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
-                                 fs.source_id, fs.source_name, fs.environment, fs.producer_version,
-                                 fs.last_seen_ms, ss.unreachable_since_ms, f.status,
-                                 fl.origin_first_seen_ms, fl.depth
-                               FROM selected AS f
-                               LEFT JOIN finding_sources AS fs ON fs.signature = f.signature
-                               LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
-                               LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
-                               ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
-                               """;
-#pragma warning restore S2077
+        command.CommandText = FindingsSql(where, query.SourceIds is not null);
         foreach (var (name, value) in parameters)
             command.Parameters.AddWithValue(name, value);
+        command.Parameters.AddWithValue(
+            "$source_ids",
+            query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));
         command.Parameters.AddWithValue("$limit", query.Limit);
         command.Parameters.AddWithValue("$offset", query.Offset);
         command.Parameters.AddWithValue("$status", (object?)query.Status ?? DBNull.Value);
@@ -585,6 +571,77 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
 
         return rows;
+    }
+
+    // The status is computed before LIMIT so a status filter fills its page
+    // instead of returning whatever survived a post-filter, and a scope is
+    // resolved before it for the same reason. A read of the whole fleet keeps
+    // the statement it always had. Every interpolated fragment is assembled
+    // from private constants. External values remain bound parameters.
+    private static string FindingsSql(StringBuilder where, bool scoped)
+    {
+        var (with, row, heartbeatScope, sourceScope) = scoped
+            ? ($"WITH {ScopedFindings},", "scoped", $" AND eh.source_id {InScope}", $" AND fs.source_id {InScope}")
+            : ("WITH", "findings", "", "");
+#pragma warning disable S2077
+        return $"""
+                {with} statused AS (
+                  SELECT {row}.*, {StatusCase(row, heartbeatScope)} AS status
+                  FROM {row}
+                  {where}
+                ),
+                selected AS (
+                  SELECT * FROM statused
+                  WHERE $status IS NULL OR status = $status
+                  ORDER BY last_seen_ms DESC, signature ASC
+                  LIMIT $limit OFFSET $offset
+                )
+                SELECT
+                  f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
+                  fs.source_id, fs.source_name, fs.environment, fs.producer_version,
+                  fs.last_seen_ms, ss.unreachable_since_ms, f.status,
+                  fl.origin_first_seen_ms, fl.depth
+                FROM selected AS f
+                LEFT JOIN finding_sources AS fs ON fs.signature = f.signature{sourceScope}
+                LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
+                LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
+                ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
+                """;
+#pragma warning restore S2077
+    }
+
+    // Derived at read time, never stored: a finding whose endpoint still
+    // heartbeats from a reachable source while the finding itself went
+    // quiet has presumably been fixed. A quiet endpoint or an unreachable
+    // fleet proves nothing, so those stay `not_observed`.
+    // The heartbeat must come from a source that observed THIS finding: a
+    // sibling source running the same endpoint without ever carrying the
+    // finding proves nothing about the source that did. The LEFT JOIN on
+    // source_state is load-bearing: a push-only source that never failed
+    // has no row there, and an INNER JOIN would wrongly demote it.
+    // `row` names the relation the CASE judges and `heartbeatScope` is a
+    // further predicate on the heartbeats, empty for the whole fleet.
+    private static string StatusCase(string row, string heartbeatScope)
+    {
+        return $"""
+                CASE
+                  WHEN {row}.last_seen_ms >= $status_now - $status_grace THEN 'active'
+                  WHEN EXISTS (
+                    SELECT 1 FROM endpoint_heartbeats AS eh
+                    LEFT JOIN source_state AS hs ON hs.source_id = eh.source_id
+                    WHERE eh.service = {row}.service
+                      AND eh.endpoint = {row}.endpoint
+                      AND eh.last_seen_any_ms >= {row}.last_seen_ms + $status_grace
+                      AND hs.unreachable_since_ms IS NULL{heartbeatScope}
+                      AND EXISTS (
+                        SELECT 1 FROM finding_sources AS fs
+                        WHERE fs.signature = {row}.signature
+                          AND fs.source_id = eh.source_id
+                      )
+                  ) THEN 'likely_resolved'
+                  ELSE 'not_observed'
+                END
+                """;
     }
 
     private static void AddFilter(

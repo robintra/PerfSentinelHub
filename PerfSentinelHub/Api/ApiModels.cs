@@ -88,6 +88,7 @@ public sealed record SourceResponse(
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 
+// SourceIds is the resolved scope, as on IncidentQuery below.
 public sealed record FindingQuery(
     string? Service,
     string? FindingType,
@@ -95,7 +96,8 @@ public sealed record FindingQuery(
     int Limit,
     bool IncludeAcked = true,
     string? Status = null,
-    int Offset = 0);
+    int Offset = 0,
+    IReadOnlyList<string>? SourceIds = null);
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.

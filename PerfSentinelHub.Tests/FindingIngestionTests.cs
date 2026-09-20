@@ -507,6 +507,95 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal(batch.Findings[0].Signature, Assert.Single(resolved).Signature);
     }
 
+    /// <summary>
+    ///     A scope answers for itself: production still carrying the finding
+    ///     says nothing about staging, and neither does production's heartbeat.
+    /// </summary>
+    [Fact]
+    public async Task The_scoped_status_is_the_environments_own()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_786_190_000_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            clock);
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var staging = new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2");
+        var fleet = new FindingQuery(null, null, null, 100);
+        var scope = fleet with { SourceIds = ["staging-a"] };
+        var signature = batch.Findings[0].Signature;
+
+        await database.UpsertBatchAsync(staging, batch, clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
+        clock.Advance(TimeSpan.FromDays(8));
+        await database.UpsertBatchAsync(
+            ProductionA, batch, clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
+
+        Assert.Equal("active", Assert.Single(await database.QueryFindingsAsync(fleet, cancellationToken)).Status);
+        // Production heartbeats the endpoint and saw the finding, from outside the scope.
+        Assert.Equal("not_observed", Assert.Single(await database.QueryFindingsAsync(scope, cancellationToken)).Status);
+
+        // Staging's own endpoint heartbeats again through another finding.
+        var other = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:other",
+            TemplateHash = "other-hash"
+        };
+        await database.UpsertBatchAsync(
+            staging,
+            new ParsedBatch([other], 0),
+            clock.GetUtcNow().ToUnixTimeMilliseconds(),
+            cancellationToken);
+        Assert.Equal(
+            "likely_resolved",
+            Assert.Single(
+                await database.QueryFindingsAsync(scope, cancellationToken),
+                row => row.Signature == signature).Status);
+        Assert.Equal(
+            "active",
+            Assert.Single(
+                await database.QueryFindingsAsync(fleet, cancellationToken),
+                row => row.Signature == signature).Status);
+    }
+
+    [Fact]
+    public async Task A_scope_of_several_sources_serves_its_freshest_copy()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        ParsedBatch Copy(string name, string severity)
+        {
+            return new ParsedBatch(
+                [batch.Findings[0] with { Severity = severity, EnvelopeJson = $$"""{"copy":"{{name}}"}""" }], 0);
+        }
+
+        await database.UpsertBatchAsync(ProductionA, Copy("a", "info"), 1000, cancellationToken);
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("production-b", "Production B", "production", "0.11.2"),
+            Copy("b", "warning"),
+            3000,
+            cancellationToken);
+        // Fresher than both, and outside the scope.
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
+            Copy("staging", "critical"),
+            5000,
+            cancellationToken);
+
+        var scope = new FindingQuery(null, null, null, 100, SourceIds: ["production-a", "production-b"]);
+        var row = Assert.Single(await database.QueryFindingsAsync(scope, cancellationToken));
+
+        Assert.Equal("""{"copy":"b"}""", row.EnvelopeJson);
+        Assert.Equal(1000, row.FirstSeenMs);
+        Assert.Equal(3000, row.LastSeenMs);
+        Assert.Equal(["production-a", "production-b"], row.Sources.Select(source => source.SourceId));
+        Assert.Single(await database.QueryFindingsAsync(scope with { Severity = "warning" }, cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(scope with { Severity = "critical" }, cancellationToken));
+    }
+
     [Fact]
     public async Task Each_source_keeps_its_own_envelope_and_severity()
     {

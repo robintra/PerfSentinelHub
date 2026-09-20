@@ -28,7 +28,7 @@ the Hub's route to the daemon, which a push does not exercise.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
-| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `offset`, `limit`, `include_acked`                                                                                  |
+| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `offset`, `limit`, `include_acked`                                                      |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
@@ -48,6 +48,16 @@ or `status` given empty or as whitespace only reads as absent, which is what a d
 sends for its "All" choice. The rows come in a total order, `last_seen` descending then
 `signature`, and `offset` skips that many of them before `limit` applies. `offset` runs
 from 0 to 1,000,000, and a value outside that range is a `400` rather than a clamped page.
+
+`environment` and `source_id` scope the read, to the sources of one environment or to one
+source. Both are closed sets, the Hub's configured sources, and a value outside them is a
+`400` rather than an empty page, because a typo must not read as "no findings". Given empty
+or as whitespace only, either reads as absent like the filters above, so it is neither a
+`400` nor an empty page. `environment` resolves to every source configured with it. Given
+together with `source_id` the two intersect, so a source outside the named environment
+lists nothing, the answer a pair of filters that exclude each other has. Without either, the
+read covers the whole fleet as it always has. A scoped answer describes its scope rather
+than the fleet, see [What the Hub adds to a finding](#what-the-hub-adds-to-a-finding).
 
 ### The daemon view
 
@@ -173,9 +183,11 @@ copy read the same.
 ### What the Hub adds to a finding
 
 Each daemon finding is preserved as an opaque, additive JSON document. The Hub adds
-`first_seen`, `last_seen`, `max_confidence`, `status`, an optional `lineage`, and source
-freshness metadata. IDE clients should ignore unknown fields, as they do with the daemon
-API.
+`first_seen`, `last_seen`, `max_confidence`, `status`, an optional `lineage`, and
+`sources`, one entry per source that reported the finding. An entry carries the source's
+`id`, the one `/api/sources` lists and `source_id` filters on, its `name`, `environment`
+and `producer_version`, and how fresh its observation is. IDE clients should ignore unknown
+fields, as they do with the daemon API.
 
 `first_seen` comes from the daemon envelope (`first_seen_ms`), clamped to the Hub's
 observation time and to a Unix-ms sanity floor. Neither a daemon clock running ahead nor a
@@ -184,6 +196,16 @@ omits the field.
 
 `last_seen` is deliberately the Hub's own observation clock. Retention, ordering and
 freshness comparisons rely on it, so it never comes from a remote clock.
+
+Read with `environment` or `source_id`, an envelope describes that scope and not the fleet.
+The daemon's document is the copy of the source in scope that saw the finding last, so
+`severity` and `include_acked=false` judge that copy, and a finding acknowledged in
+production stays listed for staging. `first_seen` is the earliest and `last_seen` the
+latest over the sources in scope, `status` is derived from that `last_seen` and from the
+heartbeats of those sources alone, and `sources` lists only them. `max_confidence` stays
+fleet-wide on purpose, the highest confidence any source ever reported. A source's own copy
+starts at its first observation after the upgrade that records it. Until then its row
+serves the copy the fleet shares, the freshest one from any source.
 
 ### How `status` is derived
 
@@ -197,7 +219,10 @@ Derived at read time, never stored, from data the Hub already keeps:
 
 It is a presumption, not a verdict. A finding leaving by retention still leaves silently,
 but a reader can now tell "the endpoint runs without the finding" apart from "nobody is
-looking". `?status=<value>` filters, and the filter applies before the page limit.
+looking". `?status=<value>` filters, and the filter applies before the page limit. In a
+scoped read the status is the scope's own: a finding production still reports can be
+`not_observed` for staging, and only a heartbeat from a source in scope makes it
+`likely_resolved` there.
 
 ### Lineage
 

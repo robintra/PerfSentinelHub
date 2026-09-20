@@ -93,6 +93,10 @@ var app = builder.Build();
 await app.Services.GetRequiredService<HubDatabase>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 
+HubAuthentication.WarnWhenAckRelayIdentifiesNobody(
+    app.Services.GetRequiredService<IOptions<HubOptions>>().Value,
+    app.Services.GetRequiredService<ILogger<Program>>());
+
 // Before the static files: the fallback policy guards the launcher itself.
 if (authenticates) app.UseHubAuthentication();
 

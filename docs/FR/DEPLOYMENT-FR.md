@@ -12,6 +12,7 @@ se lise avant de déployer quoi que ce soit.
 |----------------------------|---------|-----------------------------------------------------------------------------------------------------------------|
 | daemon vers Hub            | entrant | le chemin principal des findings, `POST /api/import/findings` avec `X-API-Key`                                  |
 | Hub vers daemon            | sortant | le poll, lecture de la liste `api/acks` comprise, la joignabilité, et `api/export/report` au lancement d'un run |
+| Hub vers daemon, relais    | sortant | un acquittement ou une révocation, envoyés avec l'`AckHeaderName/Value` de la source, jamais sans lui           |
 | Hub vers backend de traces | sortant | pendant un run, et jamais autrement                                                                             |
 | navigateur vers Hub        | entrant | le lanceur et les rapports qu'il ouvre                                                                          |
 | greffon d'IDE ou job de CI | entrant | `GET /api/findings`, rien d'autre                                                                               |
@@ -23,11 +24,11 @@ est dessinée dans [ARCHITECTURE-FR.md](ARCHITECTURE-FR.md).
 
 ## Trois formes, et le prix de chacune
 
-| Forme                  | Réseau à ouvrir       | Ce qui fonctionne                                                                           | URL pour les clients machine |
-|------------------------|-----------------------|---------------------------------------------------------------------------------------------|------------------------------|
-| un Hub par cluster     | rien                  | tout                                                                                        | une par environnement        |
-| Hub central, deux sens | deux flux par cluster | tout                                                                                        | une seule                    |
-| Hub central, push seul | un flux par cluster   | findings oui, joignabilité et dépliage d'une rangée daemon et run sur une source daemon non | une seule                    |
+| Forme                  | Réseau à ouvrir       | Ce qui fonctionne                                                                                                    | URL pour les clients machine |
+|------------------------|-----------------------|----------------------------------------------------------------------------------------------------------------------|------------------------------|
+| un Hub par cluster     | rien                  | tout                                                                                                                 | une par environnement        |
+| Hub central, deux sens | deux flux par cluster | tout                                                                                                                 | une seule                    |
+| Hub central, push seul | un flux par cluster   | findings oui, joignabilité et dépliage d'une rangée daemon et run sur une source daemon et relais d'acquittement non | une seule                    |
 
 Un Hub déployé dans le cluster qu'il collecte joint ses daemons et ses backends
 de traces en ClusterIP, donc la première forme n'ouvre aucune règle de
@@ -53,13 +54,15 @@ que l'instantané peut être en deçà de ce que le daemon détient. Voir
 
 ## Ce que le push seul abandonne
 
-Quatre choses exigent que le Hub joigne le daemon, et non l'inverse. La
+Cinq choses exigent que le Hub joigne le daemon, et non l'inverse. La
 joignabilité est écrite par le poll et par rien d'autre, donc une source en
 push seul n'affiche aucun dernier succès. Déplier une rangée daemon dans
 l'écran de flotte lit cette source à la demande. Lancer un run sur une source
-daemon commence par lui demander `api/export/report`. Et un finding qui a cessé
-de récidiver pendant une coupure n'est plus jamais poussé, parce que seule la
-récidive le pousse.
+daemon commence par lui demander `api/export/report`. Relayer un acquittement
+ou une révocation écrit sur le daemon, quel que soit l'identifiant
+d'acquittement que porte la source. Et un finding qui a cessé de récidiver
+pendant une coupure n'est plus jamais poussé, parce que seule la récidive le
+pousse.
 
 Une chose borne la gravité de tout cela. L'exportateur du daemon pousse une
 signature dès sa découverte ou dès que sa sévérité empire, puis en rafraîchit une

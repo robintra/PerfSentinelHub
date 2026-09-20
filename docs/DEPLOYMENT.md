@@ -12,6 +12,7 @@ before any of it is deployed.
 |-------------------------------|-----------|----------------------------------------------------------------------------------------------------------------|
 | daemon to Hub                 | inbound   | the primary findings path, `POST /api/import/findings` with `X-API-Key`                                        |
 | Hub to daemon                 | outbound  | the poll, its read of the `api/acks` listing included, reachability, and `api/export/report` when a run starts |
+| Hub to daemon, ack relay      | outbound  | an ack or a revoke, sent with the source's `AckHeaderName/Value` and never when that credential is absent      |
 | Hub to trace backend          | outbound  | during a run, and never otherwise                                                                              |
 | browser to Hub                | inbound   | the launcher and the reports it opens                                                                          |
 | IDE plugin or CI job to Hub   | inbound   | `GET /api/findings`, nothing else                                                                              |
@@ -23,11 +24,11 @@ is drawn in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Three shapes, and what each one costs
 
-| Shape                       | Network to open       | What works                                                                              | URL for machine clients |
-|-----------------------------|-----------------------|-----------------------------------------------------------------------------------------|-------------------------|
-| one Hub per cluster         | nothing               | everything                                                                              | one per environment     |
-| central Hub, both ways      | two flows per cluster | everything                                                                              | a single one            |
-| central Hub, push only      | one flow per cluster  | findings yes, reachability and daemon row unfolding and runs on a daemon source no      | a single one            |
+| Shape                       | Network to open       | What works                                                                                           | URL for machine clients |
+|-----------------------------|-----------------------|------------------------------------------------------------------------------------------------------|-------------------------|
+| one Hub per cluster         | nothing               | everything                                                                                           | one per environment     |
+| central Hub, both ways      | two flows per cluster | everything                                                                                           | a single one            |
+| central Hub, push only      | one flow per cluster  | findings yes, reachability and daemon row unfolding and runs on a daemon source and the ack relay no | a single one            |
 
 A Hub deployed in the cluster it collects reaches its daemons and its trace
 backends over ClusterIP, so the first shape opens no firewall rule at all. It
@@ -51,12 +52,14 @@ snapshot may be short of what the daemon holds. See
 
 ## What push alone gives up
 
-Four things need the Hub to reach the daemon rather than the reverse.
+Five things need the Hub to reach the daemon rather than the reverse.
 Reachability is written by the poll and by nothing else, so a push-only source
 reports no last success. Unfolding a daemon row in the fleet screen reads that
 source on demand. Launching a run against a daemon source starts by fetching
-`api/export/report` from it. And a finding that stopped recurring during an
-outage is never pushed again, because only recurrence pushes it.
+`api/export/report` from it. Relaying an ack or a revoke writes to the daemon,
+whatever ack credential the source carries. And a finding that stopped
+recurring during an outage is never pushed again, because only recurrence
+pushes it.
 
 One thing bounds how much any of that matters. The daemon's exporter pushes a
 signature the moment it is discovered or its severity worsens, then refreshes a

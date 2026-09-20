@@ -57,6 +57,13 @@ spec:
                   name: {{ $source.authSecretName }}
                   key: {{ $source.authSecretKey }}
             {{- end }}
+            {{- if $source.ackSecretName }}
+            - name: Hub__Sources__{{ $index }}__AckHeaderValue
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $source.ackSecretName }}
+                  key: {{ $source.ackSecretKey }}
+            {{- end }}
             {{- if $source.importSecretName }}
             - name: Hub__Sources__{{ $index }}__ImportApiKey
               valueFrom:

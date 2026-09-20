@@ -24,6 +24,12 @@
         "resolutionGrace": { "type": "string", "minLength": 1 },
         "defaultReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
         "maxReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "ackRelay": {
+          "type": "object",
+          "properties": {
+            "trustIdentityHeader": { "type": "boolean" }
+          }
+        },
         "auth": {
           "type": "object",
           "properties": {
@@ -62,6 +68,9 @@
           "authHeaderName": ["authSecretName", "authSecretKey"],
           "authSecretName": ["authHeaderName", "authSecretKey"],
           "authSecretKey": ["authHeaderName", "authSecretName"],
+          "ackHeaderName": ["ackSecretName", "ackSecretKey"],
+          "ackSecretName": ["ackHeaderName", "ackSecretKey"],
+          "ackSecretKey": ["ackHeaderName", "ackSecretName"],
           "importSecretName": ["importSecretKey"],
           "importSecretKey": ["importSecretName"],
           "publicAuthHeaderName": ["publicUrl"]
@@ -76,6 +85,9 @@
           "authHeaderName": { "type": "string", "minLength": 1 },
           "authSecretName": { "type": "string", "minLength": 1 },
           "authSecretKey": { "type": "string", "minLength": 1 },
+          "ackHeaderName": { "type": "string", "minLength": 1 },
+          "ackSecretName": { "type": "string", "minLength": 1 },
+          "ackSecretKey": { "type": "string", "minLength": 1 },
           "importSecretName": { "type": "string", "minLength": 1 },
           "importSecretKey": { "type": "string", "minLength": 1 }
         }

@@ -48,6 +48,10 @@ and when it was taken, both null when none has run. The states are those of
 plus `truncated`: the listing reached the daemon's cap of a thousand acks, so its tail may
 be missing.
 
+`ack_relay` is true when the Hub holds a credential to write acks to that daemon, see
+[CONFIGURATION.md](CONFIGURATION.md#the-ack-credential). Neither its header nor its value is
+ever published.
+
 On `/api/findings`, `include_acked` defaults to `true`. Set to `false`, it lists a finding
 only while at least one source in scope holds it un-acknowledged, every source counting when
 the read has no scope, see

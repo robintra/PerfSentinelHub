@@ -157,4 +157,28 @@ internal static class Schema
                                  last_error_code TEXT
                                );
                                """;
+
+    // One row per day a source observed a finding, on the Hub clock, holding
+    // the worst severity seen that day. No foreign key on purpose: a cascade
+    // from one purge chunk of findings could delete a large multiple of it
+    // while holding the write gate. An orphan row is never read, reads start
+    // from finding_sources, and it leaves with its day. Kept a rowid table
+    // because the purge deletes by rowid. The finding_sources index serves a
+    // read scoped to a source, which the primary key cannot (it leads with
+    // signature). That table's per-source columns are added by
+    // HubDatabase.EnsureFindingSourceColumnsAsync, on a fresh database too, so
+    // both end with one shape.
+    internal const string V6 = """
+                               CREATE TABLE IF NOT EXISTS finding_observations (
+                                 signature TEXT NOT NULL,
+                                 source_id TEXT NOT NULL,
+                                 day INTEGER NOT NULL,
+                                 severity TEXT NOT NULL,
+                                 severity_rank INTEGER NOT NULL,
+                                 PRIMARY KEY(signature, source_id, day)
+                               );
+                               CREATE INDEX IF NOT EXISTS ix_observations_day ON finding_observations(day);
+                               CREATE INDEX IF NOT EXISTS ix_finding_sources_source
+                                 ON finding_sources(source_id, signature);
+                               """;
 }

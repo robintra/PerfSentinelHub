@@ -76,11 +76,18 @@ different mechanisms.
 
 Findings expire on a worker that runs once a day and purges in chunks, so a long purge
 cannot reject imports for its whole duration. Incidents copied from a daemon ride that
-same clock, purged on the Hub's own `last_seen_ms` and never on the alerting's `at_ms`. The status window is not a worker at all,
-it is a `CASE` evaluated at read time, which is why a finding's status can change
-without anything having been written. Rendered reports expire on a sweep that runs
-every sixty seconds, finer than the lifetime it enforces, so the countdown a reader
-sees never outlives the file it counts down to.
+same clock, purged on the Hub's own `last_seen_ms` and never on the alerting's `at_ms`.
+Observation days, the record of which days each source saw a finding, ride it too, on
+the Hub clock and by whole day: a day leaves once it lies entirely before the cutoff, so
+the day the cutoff falls in is kept. They carry no foreign key, because a cascade from
+one purge chunk would hold the write lock far longer than the chunk itself, so a purged
+finding can leave an observation row behind. That orphan is invisible, a read reaches an
+observation only through its source's row, and it leaves with its day.
+
+The status window is not a worker at all, it is a `CASE` evaluated at read time, which
+is why a finding's status can change without anything having been written. Rendered
+reports expire on a sweep that runs every sixty seconds, finer than the lifetime it
+enforces, so the countdown a reader sees never outlives the file it counts down to.
 
 The trap the diagram exists to prevent: a poll that omits a finding does not resolve
 it. The daemon's ring buffer may simply have evicted it, and missing is not the same as
@@ -137,18 +144,18 @@ The first diagram claims a topology. This is where that claim is checked: each a
 it corresponds to a real call. Named by symbol rather than by line, because a line number
 is wrong the first time anyone edits above it.
 
-| Arrow                                     | Where it lives                                                                                     |
-|-------------------------------------------|----------------------------------------------------------------------------------------------------|
-| Browser to Hub, the launcher reads        | `Api/ApiEndpoints.Analysis.cs`, the four routes it maps                                            |
-| Plugin or CI to Hub                       | `Api/ApiEndpoints.cs`, `GetFindingsAsync`                                                          |
-| Daemon to Hub, push                       | `Api/ApiEndpoints.cs`, `ImportFindingsAsync`, storing via `TryUpsertBatchAsync`                    |
-| Hub to daemon, poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` and `FetchFindingsAsync`                          |
-| Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                           |
-| Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                   |
+| Arrow                                     | Where it lives                                                                                               |
+|-------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| Browser to Hub, the launcher reads        | `Api/ApiEndpoints.Analysis.cs`, the four routes it maps                                                      |
+| Plugin or CI to Hub                       | `Api/ApiEndpoints.cs`, `GetFindingsAsync`                                                                    |
+| Daemon to Hub, push                       | `Api/ApiEndpoints.cs`, `ImportFindingsAsync`, storing via `TryUpsertBatchAsync`                              |
+| Hub to daemon, poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` and `FetchFindingsAsync`                                    |
+| Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                     |
+| Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                             |
 | Hub to daemon, incidents                  | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paged by `SourcePoller` into `UpsertIncidentsAsync` |
-| Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                    |
-| Hub to SQLite                             | `Storage/Schema.cs`                                                                                |
-| Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                        |
-| Engine writes the report                  | `Analysis/AnalysisRunner.cs`                                                                       |
-| Report served into the iframe             | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                   |
-| Hub to api.github.com                     | `Collection/UpdateChecker.cs`, `ReadAsync`, the only outbound call that is not a configured source |
+| Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                              |
+| Hub to SQLite                             | `Storage/Schema.cs`                                                                                          |
+| Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                                  |
+| Engine writes the report                  | `Analysis/AnalysisRunner.cs`                                                                                 |
+| Report served into the iframe             | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                             |
+| Hub to api.github.com                     | `Collection/UpdateChecker.cs`, `ReadAsync`, the only outbound call that is not a configured source           |

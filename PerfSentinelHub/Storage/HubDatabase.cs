@@ -15,6 +15,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private const string ObservedAtParameter = "$observed_at";
     private const string FirstSeenParameter = "$first_seen";
 
+    // An observation day is a whole day on the Hub clock.
+    private const long DayMs = 86_400_000;
+
     // Derived at read time, never stored: a finding whose endpoint still
     // heartbeats from a reachable source while the finding itself went
     // quiet has presumably been fixed. A quiet endpoint or an unreachable
@@ -88,11 +91,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             await using (var migration = connection.CreateCommand())
             {
                 migration.Transaction = transaction;
-                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5;
+                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
             {
@@ -100,7 +104,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 version.CommandText = """
                                       INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
-                                             (4, $applied_at_ms), (5, $applied_at_ms);
+                                             (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -130,19 +134,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         SqliteTransaction transaction,
         CancellationToken cancellationToken)
     {
-        var columns = new HashSet<string>(StringComparer.Ordinal);
-        await using (var probe = connection.CreateCommand())
-        {
-            probe.Transaction = transaction;
-            probe.CommandText = "SELECT name FROM pragma_table_info('finding_lineage');";
-            await using var reader = await probe.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-                columns.Add(reader.GetString(0));
-        }
-
         // Schema.V2's CREATE TABLE ran earlier in this transaction, so the
         // table exists. Only its column set is in question.
-        if (columns.Contains("origin_first_seen_ms"))
+        if (await HasColumnAsync(
+                connection, transaction, "finding_lineage", "origin_first_seen_ms", cancellationToken))
             return;
 
         await using var alter = connection.CreateCommand();
@@ -153,6 +148,46 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                             UPDATE finding_lineage SET origin_first_seen_ms = predecessor_first_seen_ms;
                             """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Each source's own copy of a finding. The columns are nullable and
+    ///     nothing is backfilled: a row written before them reads NULL until
+    ///     its source is observed again, and a read falls back to the shared
+    ///     findings row meanwhile. The three land together, so one probe
+    ///     answers for all of them.
+    /// </summary>
+    private static async Task EnsureFindingSourceColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "finding_sources", "finding_json", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE finding_sources ADD COLUMN finding_json TEXT;
+                            ALTER TABLE finding_sources ADD COLUMN severity TEXT;
+                            ALTER TABLE finding_sources ADD COLUMN first_observed_day INTEGER;
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<bool> HasColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string table,
+        string column,
+        CancellationToken cancellationToken)
+    {
+        await using var probe = connection.CreateCommand();
+        probe.Transaction = transaction;
+        probe.CommandText = "SELECT 1 FROM pragma_table_info($table) WHERE name = $column;";
+        probe.Parameters.AddWithValue("$table", table);
+        probe.Parameters.AddWithValue("$column", column);
+        return await probe.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
     public async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
@@ -371,12 +406,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM incidents WHERE rowid IN (
                                      SELECT rowid FROM incidents WHERE last_seen_ms < $cutoff LIMIT $chunk);
+                                   DELETE FROM finding_observations WHERE rowid IN (
+                                     SELECT rowid FROM finding_observations WHERE day < $cutoff_day LIMIT $chunk);
                                    DELETE FROM analysis_runs WHERE rowid IN (
                                      SELECT rowid FROM analysis_runs
                                      WHERE status NOT IN ('{AnalysisStatuses.Pending}', '{AnalysisStatuses.Running}')
                                        AND COALESCE(finished_at_ms, created_at_ms) < $run_cutoff LIMIT $chunk);
                                    """;
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
+            // Floored, so the day the cutoff falls in is kept whole.
+            command.Parameters.AddWithValue("$cutoff_day", cutoffMs / DayMs);
             command.Parameters.AddWithValue("$run_cutoff", runCutoffMs);
             command.Parameters.AddWithValue("$chunk", PurgeChunkSize);
             var deleted = await command.ExecuteNonQueryAsync(cancellationToken);
@@ -739,16 +778,33 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.CommandText = """
                               INSERT INTO finding_sources(
                                 signature, source_id, source_name, environment, producer_version,
-                                first_seen_ms, last_seen_ms)
+                                first_seen_ms, last_seen_ms, finding_json, severity, first_observed_day)
                               VALUES (
                                 $signature, $source_id, $source_name, $environment, $producer_version,
-                                $first_seen, $observed_at)
+                                $first_seen, $observed_at, $finding_json, $severity, $day)
                               ON CONFLICT(signature, source_id) DO UPDATE SET
                                 source_name = excluded.source_name,
                                 environment = excluded.environment,
                                 producer_version = excluded.producer_version,
+                                -- A push and a poll of one source each read the clock before waiting on the
+                                -- write gate, so the older observation can commit last and must not win.
+                                finding_json = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
+                                  excluded.finding_json, finding_sources.finding_json),
+                                severity = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
+                                  excluded.severity, finding_sources.severity),
+                                -- Set once: a MIN(day) read later would move with the purge.
+                                first_observed_day = COALESCE(
+                                  finding_sources.first_observed_day, excluded.first_observed_day),
                                 first_seen_ms = MIN(finding_sources.first_seen_ms, excluded.first_seen_ms),
                                 last_seen_ms = MAX(finding_sources.last_seen_ms, excluded.last_seen_ms);
+                              -- The WHERE keeps the worst severity of the day and makes a repeated
+                              -- observation a true no-op.
+                              INSERT INTO finding_observations(signature, source_id, day, severity, severity_rank)
+                              VALUES ($signature, $source_id, $day, $severity, $severity_rank)
+                              ON CONFLICT(signature, source_id, day) DO UPDATE SET
+                                severity = excluded.severity,
+                                severity_rank = excluded.severity_rank
+                              WHERE excluded.severity_rank > finding_observations.severity_rank;
                               """;
         command.Parameters.AddWithValue("$signature", finding.Signature);
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
@@ -757,6 +813,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
         command.Parameters.AddWithValue(FirstSeenParameter, firstSeenMs);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
+        command.Parameters.AddWithValue("$severity", finding.Severity);
+        command.Parameters.AddWithValue("$severity_rank", FindingParser.SeverityRank(finding.Severity));
+        command.Parameters.AddWithValue("$day", observedAtMs / DayMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

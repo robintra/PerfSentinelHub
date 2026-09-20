@@ -12,6 +12,10 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class FindingIngestionTests : IDisposable
 {
+    private const long DayMs = 86_400_000;
+
+    private static readonly SourceSnapshot ProductionA = new("production-a", "Production A", "production", "0.11.2");
+
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-ingestion-{Guid.NewGuid():N}.db");
@@ -501,6 +505,150 @@ public sealed class FindingIngestionTests : IDisposable
             new FindingQuery(null, null, null, 1, Status: "likely_resolved"),
             cancellationToken);
         Assert.Equal(batch.Findings[0].Signature, Assert.Single(resolved).Signature);
+    }
+
+    [Fact]
+    public async Task Each_source_keeps_its_own_envelope_and_severity()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var staged = batch.Findings[0] with { Severity = "warning", EnvelopeJson = """{"copy":"staging"}""" };
+
+        await database.UpsertBatchAsync(ProductionA, batch, 2000, cancellationToken);
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
+            new ParsedBatch([staged], 0),
+            1000,
+            cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            $"critical {batch.Findings[0].EnvelopeJson}",
+            await SourceCopyAsync(connection, "production-a", cancellationToken));
+        // The shared findings row kept production's fresher copy, staging's own survives here.
+        Assert.Equal(
+            """warning {"copy":"staging"}""",
+            await SourceCopyAsync(connection, "staging-a", cancellationToken));
+    }
+
+    /// <summary>
+    ///     A push and a poll of one source each read the clock before waiting
+    ///     on the write gate, so the older observation can commit last.
+    /// </summary>
+    [Fact]
+    public async Task A_source_keeps_its_newest_copy_when_an_older_observation_commits_late()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var late = batch.Findings[0] with { Severity = "warning", EnvelopeJson = """{"copy":"late"}""" };
+
+        await database.UpsertBatchAsync(ProductionA, batch, 2000, cancellationToken);
+        Assert.True(await database.TryUpsertBatchAsync(
+            ProductionA, new ParsedBatch([late], 0), 1000, cancellationToken));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            $"critical {batch.Findings[0].EnvelopeJson}",
+            await SourceCopyAsync(connection, "production-a", cancellationToken));
+    }
+
+    [Fact]
+    public async Task First_observed_day_is_set_once_and_never_moves()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        await database.UpsertBatchAsync(ProductionA, batch, 5 * DayMs + 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, batch, 7 * DayMs, cancellationToken);
+        // Not even backwards, for an observation that commits late.
+        await database.UpsertBatchAsync(ProductionA, batch, 3 * DayMs, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            5L,
+            await ScalarAsync(connection, "SELECT first_observed_day FROM finding_sources;", cancellationToken));
+        Assert.Equal("3 critical 3,5 critical 3,7 critical 3", await ObservationsAsync(connection, cancellationToken));
+    }
+
+    [Fact]
+    public async Task The_worst_severity_of_the_day_is_kept_and_a_repeated_observation_is_a_no_op()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var milder = new ParsedBatch([batch.Findings[0] with { Severity = "warning" }], 0);
+
+        await database.UpsertBatchAsync(ProductionA, milder, 9 * DayMs + 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, batch, 9 * DayMs + 2000, cancellationToken);
+
+        // From here on, rewriting a day's row aborts the batch.
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using (var trigger = connection.CreateCommand())
+        {
+            trigger.CommandText = """
+                                  CREATE TRIGGER fail_observation_rewrite BEFORE UPDATE ON finding_observations
+                                  BEGIN SELECT RAISE(ABORT, 'observation rewritten'); END;
+                                  """;
+            await trigger.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await database.UpsertBatchAsync(ProductionA, batch, 9 * DayMs + 3000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, milder, 9 * DayMs + 4000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, milder, 10 * DayMs, cancellationToken);
+
+        Assert.Equal("9 critical 3,10 warning 2", await ObservationsAsync(connection, cancellationToken));
+    }
+
+    [Theory]
+    [InlineData("critical", 3)]
+    [InlineData("warning", 2)]
+    [InlineData("info", 1)]
+    [InlineData("notice", 0)]
+    public async Task Severity_is_ranked_when_the_observation_is_written(string severity, int expectedRank)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        await database.UpsertBatchAsync(
+            ProductionA,
+            new ParsedBatch([batch.Findings[0] with { Severity = severity }], 0),
+            1000,
+            cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal($"0 {severity} {expectedRank}", await ObservationsAsync(connection, cancellationToken));
+    }
+
+    private static async Task<string> SourceCopyAsync(
+        SqliteConnection connection,
+        string sourceId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT severity || ' ' || finding_json FROM finding_sources WHERE source_id = $source_id;";
+        command.Parameters.AddWithValue("$source_id", sourceId);
+        return (string)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    private static Task<string> ObservationsAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        return TextScalarAsync(
+            connection,
+            """
+            SELECT group_concat(day || ' ' || severity || ' ' || severity_rank, ',')
+            FROM (SELECT * FROM finding_observations ORDER BY day);
+            """,
+            cancellationToken);
     }
 
     private HubDatabase CreateDatabase()

@@ -80,6 +80,15 @@ Les findings expirent sur un worker qui tourne une fois par jour et purge par tr
 de sorte qu'une purge longue ne puisse pas rejeter les imports pendant toute sa durée. Les
 incidents copiés depuis un daemon suivent cette même horloge, purgés sur le `last_seen_ms`
 du Hub et jamais sur le `at_ms` de l'alerte.
+Les jours d'observation, le relevé des jours où chaque source a vu un finding, la suivent
+aussi, sur l'horloge du Hub et par jour entier : un jour part une fois qu'il se trouve
+tout entier avant la date limite, donc le jour où tombe cette limite est gardé. Ils ne
+portent aucune clé étrangère, parce qu'une cascade depuis une tranche de purge tiendrait
+le verrou d'écriture bien plus longtemps que la tranche elle-même, donc un finding purgé
+peut laisser une ligne d'observation derrière lui. Cette orpheline est invisible, une
+lecture n'atteint une observation qu'à travers la ligne de sa source, et elle part avec
+son jour.
+
 La fenêtre de statut n'est pas un worker du tout, c'est un `CASE` évalué à la lecture,
 ce qui explique que le statut d'un finding puisse changer sans que rien n'ait été écrit.
 Les rapports rendus expirent sur un balayage qui tourne toutes les soixante secondes,
@@ -141,18 +150,18 @@ Le premier schéma affirme une topologie. C'est ici qu'elle se vérifie : chaque
 correspond à un appel réel. Désigné par symbole plutôt que par ligne, un numéro de ligne
 étant faux dès la première édition au-dessus de lui.
 
-| Flèche                                            | Où elle vit                                                                                             |
-|---------------------------------------------------|---------------------------------------------------------------------------------------------------------|
-| Navigateur vers le Hub, le lanceur lit            | `Api/ApiEndpoints.Analysis.cs`, les quatre routes qu'il déclare                                         |
-| Greffon ou CI vers le Hub                         | `Api/ApiEndpoints.cs`, `GetFindingsAsync`                                                               |
-| Daemon vers le Hub, le push                       | `Api/ApiEndpoints.cs`, `ImportFindingsAsync`, qui range par `TryUpsertBatchAsync`                       |
-| Hub vers le daemon, le poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` et `FetchFindingsAsync`                                |
-| Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                |
-| Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                        |
+| Flèche                                            | Où elle vit                                                                                                    |
+|---------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| Navigateur vers le Hub, le lanceur lit            | `Api/ApiEndpoints.Analysis.cs`, les quatre routes qu'il déclare                                                |
+| Greffon ou CI vers le Hub                         | `Api/ApiEndpoints.cs`, `GetFindingsAsync`                                                                      |
+| Daemon vers le Hub, le push                       | `Api/ApiEndpoints.cs`, `ImportFindingsAsync`, qui range par `TryUpsertBatchAsync`                              |
+| Hub vers le daemon, le poll                       | `Collection/DaemonClient.cs`, `FetchStatusAsync` et `FetchFindingsAsync`                                       |
+| Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                       |
+| Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                               |
 | Hub vers le daemon, les incidents                 | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paginé par `SourcePoller` vers `UpsertIncidentsAsync` |
-| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                        |
-| Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                     |
-| Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                         |
-| Le moteur écrit le rapport                        | `Analysis/AnalysisRunner.cs`                                                                            |
-| Le rapport servi dans l'iframe                    | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                        |
-| Hub vers api.github.com                           | `Collection/UpdateChecker.cs`, `ReadAsync`, seul appel sortant qui ne soit pas une source configurée    |
+| La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                               |
+| Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                            |
+| Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                                |
+| Le moteur écrit le rapport                        | `Analysis/AnalysisRunner.cs`                                                                                   |
+| Le rapport servi dans l'iframe                    | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                               |
+| Hub vers api.github.com                           | `Collection/UpdateChecker.cs`, `ReadAsync`, seul appel sortant qui ne soit pas une source configurée           |

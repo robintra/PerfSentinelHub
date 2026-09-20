@@ -28,6 +28,13 @@ Un poll qui omet un finding ne le résout pas. Le tampon circulaire du daemon
 peut simplement l'avoir évincé, et absent n'est pas la même chose que disparu.
 Seule la rétention retire une ligne.
 
+Le Hub relève les jours où chaque source a observé un finding, et ce relevé
+commence le jour où la version qui l'écrit est déployée. Rien n'est rempli
+après coup : pour un jour antérieur, le Hub ne détient que le `first_seen` et le
+`last_seen` d'un finding, pas les jours entre les deux. La copie d'un finding
+propre à une source commence de la même façon, à sa première observation après
+la mise à niveau.
+
 La joignabilité est à sens unique. Un daemon qui pousse avec succès prouve
 qu'il peut joindre le Hub, pas que le Hub peut le joindre, et seul un poll
 réussi efface `unreachable_since_ms`. Une source dont le push arrive alors que

@@ -57,7 +57,10 @@ public sealed class WorkerAndRetentionTests : IDisposable
                                   INSERT INTO endpoint_heartbeats VALUES
                                     ('a','svc','/old',500),
                                     ('a','svc','/recent',1500);
-                                  INSERT INTO finding_sources VALUES
+                                  INSERT INTO finding_sources
+                                    (signature,source_id,source_name,environment,producer_version,
+                                     first_seen_ms,last_seen_ms)
+                                  VALUES
                                     ('seen-again','stale','Stale','staging','0.11.2',100,500),
                                     ('seen-again','fresh','Fresh','production','0.11.2',100,1500);
                                   INSERT INTO source_state(source_id, last_attempt_ms) VALUES
@@ -80,6 +83,39 @@ public sealed class WorkerAndRetentionTests : IDisposable
         // On the Hub clock, like a finding: at_ms is the alerting clock and says
         // nothing about when this copy was last refreshed.
         Assert.Equal(1L, await CountAsync(reopened, "incidents", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Purge_drops_observation_days_before_the_cutoff_day_and_keeps_the_boundary_day()
+    {
+        const long dayMs = 86_400_000;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            // No findings row behind them: an orphan observation leaves with its day too.
+            command.CommandText = """
+                                  INSERT INTO finding_observations(signature, source_id, day, severity, severity_rank)
+                                  VALUES
+                                    ('orphan','a',1,'warning',2),
+                                    ('orphan','a',2,'warning',2),
+                                    ('orphan','a',3,'warning',2),
+                                    ('orphan','a',4,'critical',3);
+                                  """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // The cutoff falls inside day 3, which is kept whole.
+        await database.PurgeAsync(3 * dayMs + dayMs / 2, 0, cancellationToken);
+
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = "SELECT group_concat(day, ',') FROM (SELECT day FROM finding_observations ORDER BY day);";
+        Assert.Equal("3,4", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]

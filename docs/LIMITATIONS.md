@@ -25,6 +25,12 @@ A poll that omits a finding does not resolve it. The daemon's ring buffer may
 have evicted it, so missing is not the same as gone. Only retention removes a
 row.
 
+The Hub records which days each source observed a finding, and that record
+starts the day the version that writes it is deployed. Nothing is backfilled:
+for an earlier day the Hub holds only a finding's `first_seen` and `last_seen`,
+not the days in between. A source's own copy of a finding starts the same way,
+at its first observation after the upgrade.
+
 Reachability is one-directional. A daemon pushing successfully proves it can
 reach the Hub, not that the Hub can reach it, and only a successful poll clears
 `unreachable_since_ms`. A source whose push arrives while its poll fails still

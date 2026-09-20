@@ -152,6 +152,17 @@ public static class FindingParser
             _ => 0
         };
     }
+
+    internal static int SeverityRank(string severity)
+    {
+        return severity switch
+        {
+            "critical" => 3,
+            "warning" => 2,
+            "info" => 1,
+            _ => 0
+        };
+    }
 }
 // ReSharper restore ConvertIfStatementToReturnStatement
 // ReSharper restore ConvertIfStatementToSwitchStatement

@@ -32,8 +32,9 @@ public sealed class StorageTests
             names.Add(reader.GetString(0));
         Assert.Equal(
             [
-                "analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_sources", "findings",
-                "incident_reads", "incidents", "schema_migrations", "source_imports", "source_state"
+                "analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_observations",
+                "finding_sources", "findings", "incident_reads", "incidents", "schema_migrations",
+                "source_imports", "source_state"
             ],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);
@@ -149,6 +150,104 @@ public sealed class StorageTests
         // to 1970.
         Assert.Equal(100, reader.GetInt64(0));
         Assert.Equal(1, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task Initialize_adds_the_source_copy_columns_to_a_pre_migration_database()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+        List<string> freshShape;
+
+        // Rolled back the way the lineage case above is: drop everything the
+        // migration adds rather than hand-write the old seven-column DDL.
+        // Dropping the table takes ix_observations_day with it.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        {
+            freshShape = await SourceColumnsAsync(connection, cancellationToken);
+            await using var seed = connection.CreateCommand();
+            seed.CommandText = """
+                               INSERT INTO findings(
+                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                 max_confidence, max_confidence_rank)
+                               VALUES ('signature', '{}', 'checkout', 'slow_sql', 'warning',
+                                 'POST /checkout', 'template-hash', 'trace', 500, 900, 'daemon_production', 4);
+                               INSERT INTO finding_sources(
+                                 signature, source_id, source_name, environment, producer_version,
+                                 first_seen_ms, last_seen_ms)
+                               VALUES ('signature', 'production-a', 'Production A', 'production', '0.11.2', 500, 900);
+                               ALTER TABLE finding_sources DROP COLUMN finding_json;
+                               ALTER TABLE finding_sources DROP COLUMN severity;
+                               ALTER TABLE finding_sources DROP COLUMN first_observed_day;
+                               DROP INDEX ix_finding_sources_source;
+                               DROP TABLE finding_observations;
+                               DELETE FROM schema_migrations WHERE version = 6;
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER, which throws "duplicate column".
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        var upgradedShape = await SourceColumnsAsync(reopened, cancellationToken);
+        Assert.Equal(freshShape, upgradedShape);
+        Assert.Equal(
+            ["finding_json TEXT 0", "severity TEXT 0", "first_observed_day INTEGER 0"],
+            upgradedShape.Skip(7));
+
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT COUNT(*) FROM sqlite_master WHERE type = 'index'
+                             AND name IN ('ix_observations_day', 'ix_finding_sources_source');
+                           """;
+        Assert.Equal(2L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+        read.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 6;";
+        Assert.Equal(1L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+
+        // No backfill: the old row reads NULL until its source is observed again.
+        read.CommandText = """
+                           SELECT COUNT(*) FROM finding_sources
+                           WHERE finding_json IS NULL AND severity IS NULL AND first_observed_day IS NULL;
+                           """;
+        Assert.Equal(1L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+
+        // The columns existing is not enough: the upgraded table must accept
+        // the write the production path issues.
+        await restartedAgain.Database.UpsertBatchAsync(
+            new SourceSnapshot("production-a", "Production A", "production", "0.11.3"),
+            new ParsedBatch(
+                [
+                    new ParsedFinding(
+                        "signature", "{}", "checkout", "slow_sql", "warning", "POST /checkout",
+                        "template-hash", "trace", "daemon_production", 4, null)
+                ],
+                0),
+            86_400_000,
+            cancellationToken);
+        read.CommandText = "SELECT severity || ' ' || first_observed_day FROM finding_sources;";
+        Assert.Equal("warning 1", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    private static async Task<List<string>> SourceColumnsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT name || ' ' || type || ' ' || "notnull"
+                              FROM pragma_table_info('finding_sources') ORDER BY cid;
+                              """;
+        var columns = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            columns.Add(reader.GetString(0));
+        return columns;
     }
 
     private sealed class TestDatabase : IDisposable

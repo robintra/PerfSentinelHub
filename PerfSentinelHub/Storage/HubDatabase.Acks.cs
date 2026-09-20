@@ -76,7 +76,7 @@ public sealed partial class HubDatabase
                                 $expires_at, $expires_at_ms, $observed_at);
                               """;
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
-        command.Parameters.AddWithValue("$signature", ack.Signature);
+        command.Parameters.AddWithValue(SignatureParameter, ack.Signature);
         command.Parameters.AddWithValue("$origin", ack.Origin);
         command.Parameters.AddWithValue("$acked_by", ack.By);
         command.Parameters.AddWithValue("$reason", (object?)ack.Reason ?? DBNull.Value);
@@ -120,7 +120,7 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = revoke ? RevocableAckExists : CarriedFindingExists;
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
-        command.Parameters.AddWithValue("$signature", signature);
+        command.Parameters.AddWithValue(SignatureParameter, signature);
         return await command.ExecuteScalarAsync(cancellationToken) is 1L;
     }
 

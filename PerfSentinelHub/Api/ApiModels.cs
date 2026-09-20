@@ -88,7 +88,8 @@ public sealed record SourceResponse(
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 
-// SourceIds is the resolved scope, as on IncidentQuery below.
+// SourceIds is the resolved scope, as on IncidentQuery below. FromMs and ToMs
+// bound the observation window in epoch milliseconds, each side open when null.
 public sealed record FindingQuery(
     string? Service,
     string? FindingType,
@@ -97,7 +98,9 @@ public sealed record FindingQuery(
     bool IncludeAcked = true,
     string? Status = null,
     int Offset = 0,
-    IReadOnlyList<string>? SourceIds = null);
+    IReadOnlyList<string>? SourceIds = null,
+    long? FromMs = null,
+    long? ToMs = null);
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.

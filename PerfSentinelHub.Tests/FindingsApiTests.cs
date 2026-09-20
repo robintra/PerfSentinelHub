@@ -10,6 +10,8 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
+    private const long DayMs = 86_400_000;
+
     private static readonly string[] FindingStatuses = ["active", "likely_resolved", "not_observed"];
 
     private static readonly SourceSnapshot Production = new("production-a", "Production A", "production", "0.11.2");
@@ -68,6 +70,10 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     [InlineData("/api/findings?offset=1000001")]
     [InlineData("/api/findings?environment=nope")]
     [InlineData("/api/findings?source_id=nope")]
+    [InlineData("/api/findings?from=x")]
+    [InlineData("/api/findings?from=-1")]
+    [InlineData("/api/findings?to=x")]
+    [InlineData("/api/findings?from=2&to=1")]
     public async Task Invalid_query_is_rejected(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
@@ -82,6 +88,8 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     [InlineData("status")]
     [InlineData("environment")]
     [InlineData("source_id")]
+    [InlineData("from")]
+    [InlineData("to")]
     public async Task A_blank_filter_reads_as_absent(string name)
     {
         await SeedAsync();
@@ -128,6 +136,23 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal(2, first.Length);
         Assert.Equal(expected, first.Concat(second));
         Assert.Empty(await SignaturesAsync("/api/findings?service=paged&offset=4"));
+    }
+
+    [Fact]
+    public async Task From_and_to_bound_the_read_to_an_observation_window()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = new ParsedBatch([await VariantAsync("window:x", "window")], 0);
+        await factory.Database.UpsertBatchAsync(Production, batch, 10 * DayMs + 1000, cancellationToken);
+
+        const string path = "/api/findings?service=window";
+        Assert.Equal(1, await CountAsync($"{path}&from={10 * DayMs}&to={11 * DayMs - 1}"));
+        Assert.Equal(1, await CountAsync($"{path}&from={10 * DayMs}&to={10 * DayMs}"));
+        // Either side stays open when its bound is absent.
+        Assert.Equal(1, await CountAsync($"{path}&from={10 * DayMs}"));
+        Assert.Equal(1, await CountAsync($"{path}&to={10 * DayMs}"));
+        Assert.Equal(0, await CountAsync($"{path}&from={11 * DayMs}"));
+        Assert.Equal(0, await CountAsync($"{path}&to={10 * DayMs - 1}"));
     }
 
     [Fact]

@@ -222,7 +222,10 @@ public static partial class ApiEndpoints
 
         if (!TryReadBounded(request, "limit", options.DefaultReadLimit, 1, options.MaxReadLimit, out var limit) ||
             !TryReadBounded(request, "offset", 0, 0, MaxFindingOffset, out var offset) ||
-            !TryReadSourceScope(request, options, out var sourceIds))
+            !TryReadSourceScope(request, options, out var sourceIds) ||
+            !TryReadEpochMs(request, "from", out var fromMs) ||
+            !TryReadEpochMs(request, "to", out var toMs) ||
+            fromMs > toMs)
             return false;
 
         var includeAcked = true;
@@ -242,7 +245,9 @@ public static partial class ApiEndpoints
             includeAcked,
             status,
             Offset: offset,
-            SourceIds: sourceIds);
+            SourceIds: sourceIds,
+            FromMs: fromMs,
+            ToMs: toMs);
         return true;
     }
 
@@ -278,6 +283,20 @@ public static partial class ApiEndpoints
 
         if (sourceId is not null)
             sourceIds = sourceIds is null || sourceIds.Contains(sourceId) ? [sourceId] : [];
+        return true;
+    }
+
+    // Null when absent or blank. No sign and no padding: a dashboard passes its
+    // time range as plain epoch milliseconds, and anything else is a mistake.
+    private static bool TryReadEpochMs(HttpRequest request, string name, out long? value)
+    {
+        value = null;
+        var raw = ReadOptional(request, name);
+        if (raw is null)
+            return true;
+        if (!long.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
+            return false;
+        value = parsed;
         return true;
     }
 

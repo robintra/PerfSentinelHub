@@ -31,6 +31,20 @@ for an earlier day the Hub holds only a finding's `first_seen` and `last_seen`,
 not the days in between. A source's own copy of a finding starts the same way,
 at its first observation after the upgrade.
 
+A `from` and `to` window on `/api/findings` matches whole days, cut at midnight
+UTC on the Hub's clock, so a window narrower than a day still lists whatever a
+source observed at any hour of that day. Presence is assumed where nothing was
+recorded: between a source's `first_seen` of a finding and the first day the Hub
+recorded for it, and up to its `last_seen` for a pair with no recorded day at
+all, which is every pair of a database that predates the record. Without that
+rule an upgraded Hub would read as empty over its whole past. With it, a finding
+that went away and came back before its first recorded day reads as continuous.
+
+Retention (`Hub:Retention`) removes a recorded day while the finding itself can
+stay, and the first recorded day does not move. A window that falls wholly on
+removed days after that first one therefore lists nothing, even for a finding
+present all along.
+
 Reachability is one-directional. A daemon pushing successfully proves it can
 reach the Hub, not that the Hub can reach it, and only a successful poll clears
 `unreachable_since_ms`. A source whose push arrives while its poll fails still

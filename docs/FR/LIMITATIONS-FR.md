@@ -35,6 +35,21 @@ après coup : pour un jour antérieur, le Hub ne détient que le `first_seen` et
 propre à une source commence de la même façon, à sa première observation après
 la mise à niveau.
 
+Une fenêtre `from` et `to` sur `/api/findings` retient des jours entiers, coupés
+à minuit UTC sur l'horloge du Hub, donc une fenêtre plus étroite qu'un jour liste
+quand même ce qu'une source a observé à n'importe quelle heure de ce jour. La
+présence est supposée là où rien n'a été relevé : entre le `first_seen` d'un
+finding pour une source et le premier jour que le Hub a relevé pour elle, et
+jusqu'à son `last_seen` pour une paire sans aucun jour relevé, ce qui est le cas
+de toutes les paires d'une base antérieure au relevé. Sans cette règle, un Hub
+mis à niveau se lirait vide sur tout son passé. Avec elle, un finding disparu
+puis revenu avant son premier jour relevé se lit comme continu.
+
+La rétention (`Hub:Retention`) retire un jour relevé alors que le finding
+lui-même peut rester, et le premier jour relevé ne bouge pas. Une fenêtre qui
+tombe tout entière sur des jours retirés, après ce premier jour, ne liste donc
+rien, même pour un finding présent tout du long.
+
 La joignabilité est à sens unique. Un daemon qui pousse avec succès prouve
 qu'il peut joindre le Hub, pas que le Hub peut le joindre, et seul un poll
 réussi efface `unreachable_since_ms`. Une source dont le push arrive alors que

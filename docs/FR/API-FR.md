@@ -30,7 +30,7 @@ push n'exerce pas.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport    |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
-| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `offset`, `limit`, `include_acked`                                                                          |
+| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                                            |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                       |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
@@ -63,6 +63,23 @@ rien, la réponse d'une paire de filtres qui s'excluent. Sans l'un ni l'autre, l
 couvre toute la flotte, comme elle l'a toujours fait. Une réponse avec périmètre décrit ce
 périmètre et non la flotte, voir
 [Ce que le Hub ajoute à un finding](#ce-que-le-hub-ajoute-à-un-finding).
+
+`from` et `to` bornent la lecture à une fenêtre d'observation, en millisecondes depuis
+l'epoch, chacun facultatif et tous deux inclus. Un finding est listé quand une source du
+périmètre l'a observé dans la fenêtre, donc la fenêtre respecte `environment` et
+`source_id`. Elle choisit des lignes et ne les réécrit pas : `first_seen`, `last_seen` et
+`status` décrivent toujours le finding tel qu'il est maintenant. Une valeur qui n'est pas
+un entier positif ou nul sans fioriture, signe compris, répond `400`, et un `from` supérieur
+à `to` aussi. Donné vide ou composé seulement de blancs, chacun se lit comme absent et
+laisse son côté ouvert.
+
+La fenêtre a la granularité du jour. Le Hub relève les jours où chaque source a observé un
+finding, des jours UTC entiers sur sa propre horloge, donc une borne qui tombe dans un jour
+prend ce jour entier. Avant le premier jour que le Hub a relevé pour une source, cette
+source est supposée avoir porté le finding de son `first_seen` au début de ce jour, et
+jusqu'à son `last_seen` quand aucun jour n'a jamais été relevé, ce qui est le cas d'une base
+écrite avant que le relevé n'existe. [LIMITATIONS-FR.md](LIMITATIONS-FR.md) dit ce que
+coûte cette supposition.
 
 ### La vue daemon
 

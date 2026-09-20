@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
@@ -67,7 +66,7 @@ public sealed class MetricsEndpointTests : IDisposable
     {
         _client.Dispose();
         _factory.Dispose();
-        SqliteConnection.ClearAllPools();
+        TestPool.ClearFor(_databasePath);
         foreach (var suffix in new[] { "", "-wal", "-shm" })
         {
             var path = _databasePath + suffix;

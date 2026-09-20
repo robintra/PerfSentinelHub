@@ -226,6 +226,11 @@ Dessous, un seul formulaire : une raison obligatoire, une expiration facultative
 ligne par source qui porte le finding. L'expiration est un jour, envoyé comme la dernière
 seconde de ce jour en UTC, et une expiration vide est un acquittement permanent.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
+  <img alt="La page d'acquittement sur un finding porté par quatre daemons, une ligne par cas" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack.png">
+</picture>
+
 Un acquittement masque un finding, donc le contexte du lien décide des lignes cochées au
 départ, parmi celles où l'on peut faire quelque chose. Quand le lien nomme une source,
 cette ligne seule est cochée. Sinon, quand il nomme un environnement, les lignes de cet

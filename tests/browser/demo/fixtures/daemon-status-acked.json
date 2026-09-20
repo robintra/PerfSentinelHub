@@ -1,9 +1,9 @@
 {
   "version": "0.24.0",
-  "uptime_seconds": 888120,
-  "active_traces": 912,
+  "uptime_seconds": 511500,
+  "active_traces": 344,
   "max_active_traces": 1000,
-  "analysis_queue_depth": 41,
+  "analysis_queue_depth": 7,
   "analysis_queue_capacity": 1024,
   "stored_findings": 11,
   "max_retained_findings": 10000

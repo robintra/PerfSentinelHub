@@ -2,8 +2,8 @@
 
 Quatre surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
 greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse et
-le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et n'appelle
-jamais `/api/findings`.
+le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et ne lit
+`/api/findings` que sur la page d'acquittement, par signature.
 
 ## API d'import
 

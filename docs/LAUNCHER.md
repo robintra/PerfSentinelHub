@@ -208,6 +208,11 @@ Below it sits one form: a required reason, an optional expiry, and one row per s
 carries the finding. The expiry is a day, sent as the last second of that day in UTC, and
 an empty one is a permanent ack.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
+  <img alt="The ack page on a finding four daemons carry, one row per case" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack.png">
+</picture>
+
 An ack hides a finding, so the link's context decides which rows start checked, among the
 rows something can be done on. When the link names a source, that row alone is checked.
 Otherwise, when it names an environment, the rows of that environment are. With no context

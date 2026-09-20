@@ -35,6 +35,12 @@
         "lineno": 42,
         "namespace": "com.example.order.repository"
       },
+      "suggested_fix": {
+        "pattern": "n_plus_one_sql",
+        "framework": "java_generic",
+        "recommendation": "Rewrite the per-id loop as a single query with a `JOIN` or `WHERE id IN (...)`. With `JdbcTemplate`, bind the id list through `NamedParameterJdbcTemplate`, or on PostgreSQL pass one array via `= ANY(?)`.",
+        "reference_url": "https://docs.spring.io/spring-framework/reference/data-access/jdbc/parameter-handling.html#jdbc-in-clause"
+      },
       "signature": "n_plus_one_sql:order-svc:POST__api_orders_42_submit:c69d2f3ae7f5c6cdb2c6762367852ec7"
     },
     {
@@ -294,7 +300,7 @@
         "window_ms": 300,
         "distinct_params": 16
       },
-      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET message-svc/api/messages/inbox x1, GET friend-svc/api/friends/list x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
+      "suggestion": "Chatty trace: GET /api/dashboard/home triggers 16 inter-service HTTP calls (top: GET calendar-svc/api/calendar/today x1, GET mail-svc/api/mail/inbox x1). Consider aggregating calls with a batch endpoint or a BFF (Backend for Frontend) layer",
       "first_timestamp": "2025-07-10T14:32:12.000Z",
       "last_timestamp": "2025-07-10T14:32:12.300Z",
       "green_impact": {
@@ -554,7 +560,7 @@
       "io_ops": 3
     }
   ],
-  "binary_version": "0.20.0",
+  "binary_version": "0.24.0",
   "detection_config": {
     "n_plus_one_threshold": 5,
     "window_ms": 500,

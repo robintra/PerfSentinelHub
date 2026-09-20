@@ -10,9 +10,17 @@ npx playwright install chromium
 npm run demo
 ```
 
-Le résultat arrive dans `docs/img/hub/` : six écrans en `<nom>.png` (clair) et
+Le résultat arrive dans `docs/img/hub/` : sept écrans en `<nom>.png` (clair) et
 `<nom>-dark.png` (sombre), plus `launcher-handoff.png`, New analysis tel qu'un lien
-d'incident le remplit, et `launcher_light.gif` et `launcher_dark.gif`.
+d'incident le remplit, et `launcher_light.gif` et `launcher_dark.gif`. Le septième
+est `launcher-ack.png`, la page d'acquittement ouverte comme un lien Grafana
+l'ouvre. Les GIF parcourent les quatre écrans à onglet, plus l'analyse et le
+rapport ouverts depuis eux, et se terminent sur le passage à New analysis. La
+page d'acquittement reste hors de la visite : elle s'atteint par un lien depuis
+l'extérieur du lanceur, et le lien Ack du tableau des incidents n'a aucun
+finding où atterrir dans ces fixtures, parce que le daemon des incidents est
+semé avec ses propres endpoints alors que les findings de la flotte viennent du
+fichier de traces de démonstration du moteur.
 
 ## Ce que global-setup doit monter d'abord
 
@@ -22,7 +30,7 @@ que depuis le stockage. Une capture non vide exige donc un Hub qui tourne
 vraiment contre des daemons qui répondent vraiment, alors `global-setup.ts`
 monte :
 
-- deux faux daemons (`demo/fake-daemon.js`) rejouant les captures de
+- quatre faux daemons (`demo/fake-daemon.js`) rejouant les captures de
   `demo/fixtures/`,
 - le Hub, construit depuis ce dépôt et lancé depuis son propre binaire,
 - quatre analyses soumises par l'API, choisies pour les états où elles
@@ -47,6 +55,29 @@ daemon au repos rapporte des zéros, et une capture de zéros n'apprend rien. Un
 daemon est proche de son plafond pour que la coloration se voie, l'autre est à
 l'aise.
 
+Les acquittements sont capturés de la même façon, depuis deux exécutions de
+daemon supplémentaires, parce qu'un seul daemon ne peut pas porter les deux
+sortes d'acquittement sur une même signature : il refuse un acquittement à lui
+sur une signature que sa base CI porte déjà. Une exécution prend l'acquittement
+à chaud, l'autre charge une base qui le porte, et les trois listes qui en
+sortent donnent à la page d'acquittement une ligne par cas sur un seul finding :
+un daemon qui relaie et ne porte aucun acquittement, un qui porte le sien, un
+dont la base CI le porte. La quatrième ligne est le daemon sans identifiant
+d'acquittement, ce qui relève de la configuration et non d'une capture.
+
+Seul l'acquittement posé sur un finding que la page n'affiche pas porte une
+expiration. Le Hub sert un acquittement miroir tant que son expiration est
+devant et l'abandonne ensuite, donc une date posée sur le finding de la page
+viderait cette ligne quelques mois après la capture et l'écran se lirait comme
+si personne n'avait jamais acquitté quoi que ce soit.
+
+Les horodatages du finding lui-même relèvent de la même règle, en sens inverse.
+`first_seen_ms` est figé dans `daemon-findings.json`, alors que le Hub date le
+`last_seen` d'un finding à sa propre horloge, donc le faux daemon glisse la
+liste des findings jusqu'au présent au moment de la servir. Sans cela, la page
+d'acquittement afficherait un finding vu pour la première fois un an avant sa
+dernière observation.
+
 Les incidents sont capturés de la même façon, depuis un daemon nourri de cinq
 livraisons Alertmanager portant trois labels `namespace` et une alerte sans, pour
 que la colonne montre une valeur et la cellule vide, et le faux daemon glisse
@@ -59,7 +90,7 @@ avant ou après le redémarrage gardent les distances mesurées par le daemon.
 ## Deux choses qu'elle attend de l'extérieur
 
 **Un binaire perf-sentinel.** Sans lui le Hub répond `503` à
-`POST /api/analyses` et trois écrans sur six sont morts. La mise en place
+`POST /api/analyses` et trois écrans sur sept sont morts. La mise en place
 cherche un dépôt `perf-sentinel` voisin avec une compilation release, ou prend
 `HUB_ENGINE_BINARY`.
 

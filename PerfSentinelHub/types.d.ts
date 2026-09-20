@@ -57,6 +57,9 @@ export interface Source {
     auth_header_name?: string | null;
     incidents_state?: string | null;
     incidents_read_ms?: number | null;
+    ack_relay?: boolean;
+    acks_state?: string | null;
+    acks_read_ms?: number | null;
 }
 
 /** One analysis run, as the analyses routes return it. */

@@ -64,6 +64,18 @@ est nommé peut acquitter sur toutes les sources qui relaient : le Hub n'a pas d
 rôles, voir
 [LIMITATIONS-FR.md](LIMITATIONS-FR.md#ce-que-le-hub-nauthentifie-pas).
 
+Les deux routes du relais jugent aussi d'où vient la requête. Un navigateur qui
+envoie `Sec-Fetch-Site: same-origin` passe, et toute autre valeur est un `403`,
+`cross-site` comme `same-site` comme le `none` que porte une adresse tapée à la
+main. Un appelant qui n'envoie pas du tout cet en-tête passe, parce que curl, un
+job de CI et un greffon d'IDE ne le posent pas, et les refuser fermerait le
+relais à tout ce qui n'est pas un navigateur. Ce qui tient ce dernier cas, c'est
+le type de contenu : le Hub prend un type de contenu JSON et rien d'autre, ce
+qu'un formulaire d'une autre origine ne sait pas produire et qu'un fetch d'une
+autre origine ne peut pas envoyer sans un preflight auquel le Hub ne répond
+jamais. Un Hub joignable depuis une session de navigateur devrait malgré tout se
+tenir derrière un proxy qui ne relaie pas des origines arbitraires.
+
 Les clés qui chiffrent le cookie vivent dans un répertoire `keys` à côté de
 `Hub:DatabasePath`, sur le volume de données, si bien qu'un redémarrage ne
 déconnecte personne. Le Hub journalise au démarrage qu'aucun chiffreur XML n'est

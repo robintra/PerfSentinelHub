@@ -94,7 +94,8 @@ public sealed record FindingQuery(
     string? Severity,
     int Limit,
     bool IncludeAcked = true,
-    string? Status = null);
+    string? Status = null,
+    int Offset = 0);
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.

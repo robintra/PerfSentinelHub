@@ -311,10 +311,10 @@
     {
       "name": "ghcr.io/robintra/perf-sentinel",
       "kind": "container",
-      "version": "0.23.0",
-      "digest_or_sha": "sha256:0d9ffe9786bb72c376d5f0312039d9022f1dc646bee240585647c283b12c762c",
-      "released_at": "2026-09-18",
-      "source": "https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.23.0",
+      "version": "0.24.0",
+      "digest_or_sha": "sha256:d7e288036af6a568fb7d56873b402f6b60f1492b48cac213742aa6c905f61444",
+      "released_at": "2026-09-20",
+      "source": "https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.24.0",
       "reason": "The analysis engine the Hub runs. Copied from the published image so the build reaches no host outside the registry."
     },
     {

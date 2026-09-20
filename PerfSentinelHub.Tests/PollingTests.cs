@@ -65,6 +65,10 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<IncidentReader>.Instance),
+            new AckReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<AckReader>.Instance),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions
@@ -109,6 +113,72 @@ public sealed class PollingTests : IDisposable
     }
 
     [Fact]
+    public async Task Poll_asks_a_daemon_that_lists_its_baseline_for_its_acks_with_the_read_credential()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await File.ReadAllBytesAsync(FixturePath, cancellationToken);
+        var acks = await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-acks-0.24.0.json"),
+            cancellationToken);
+        var requests = new List<(string Path, string? Auth)>();
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            requests.Add(
+                ($"{context.Request.Path}{context.Request.QueryString}", context.Request.Headers.Authorization));
+            if (context.Request.Path == "/api/status")
+                await context.Response.WriteAsJsonAsync(new { version = "0.24.0" }, cancellationToken);
+            else if (context.Request.Path == "/api/findings")
+                await context.Response.Body.WriteAsync(fixture, cancellationToken);
+            else if (context.Request.Path == "/api/incidents")
+                await context.Response.WriteAsync("[]", cancellationToken);
+            else if (context.Request.Path == "/api/acks")
+                await context.Response.Body.WriteAsync(acks, cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+        }, cancellationToken);
+
+        var options = new HubOptions { DatabasePath = _databasePath, HttpTimeout = TimeSpan.FromSeconds(2) };
+        var database = new HubDatabase(Options.Create(options), TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        var poller = new SourcePoller(
+            new DaemonClient(new HttpClient(), Options.Create(options)),
+            database,
+            new IncidentReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<IncidentReader>.Instance),
+            new AckReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<AckReader>.Instance),
+            TimeProvider.System,
+            NullLogger<SourcePoller>.Instance);
+        var source = new SourceOptions
+        {
+            Id = "prod",
+            Name = "Production",
+            Environment = "production",
+            BaseUrl = daemon.BaseUrl,
+            AuthHeaderName = "Authorization",
+            AuthHeaderValue = "Bearer test-secret"
+        };
+
+        var result = await poller.PollAsync(source, cancellationToken);
+
+        Assert.Equal("0.24.0", result.ProducerVersion);
+        Assert.Equal(
+            [
+                ("/api/status", "Bearer test-secret"),
+                ("/api/findings?limit=1000&include_acked=true", "Bearer test-secret"),
+                ("/api/incidents?limit=100&offset=0", "Bearer test-secret"),
+                ("/api/acks?include_toml=true", "Bearer test-secret")
+            ],
+            requests);
+        var read = Assert.Contains("prod", await database.QueryAckReadsAsync(cancellationToken));
+        Assert.Equal(AckReadStates.Ok, read.State);
+    }
+
+    [Fact]
     public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -138,6 +208,10 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<IncidentReader>.Instance),
+            new AckReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<AckReader>.Instance),
             TimeProvider.System,
             logger);
 
@@ -209,6 +283,10 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<IncidentReader>.Instance),
+            new AckReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<AckReader>.Instance),
             TimeProvider.System,
             logger);
         var source = new SourceOptions
@@ -269,6 +347,10 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<IncidentReader>.Instance),
+            new AckReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<AckReader>.Instance),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions

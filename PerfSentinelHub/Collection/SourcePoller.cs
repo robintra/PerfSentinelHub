@@ -22,6 +22,7 @@ public sealed partial class SourcePoller(
     DaemonClient client,
     HubDatabase database,
     IncidentReader incidents,
+    AckReader acks,
     TimeProvider timeProvider,
     ILogger<SourcePoller> logger)
 {
@@ -54,6 +55,9 @@ public sealed partial class SourcePoller(
             // Its own failures, filed in incident_reads and never in
             // source_state: see IncidentReader.
             var incidentCount = await incidents.ReadAsync(source, observedAtMs, cancellationToken);
+            // The same, in ack_reads. The version decides whether the daemon
+            // is asked at all: see AckReader.
+            await acks.ReadAsync(source, status.Version, observedAtMs, cancellationToken);
             return new PollResult(
                 batch.Findings.Count,
                 batch.RejectedCount,

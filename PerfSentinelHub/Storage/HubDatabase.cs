@@ -105,7 +105,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             await using (var migration = connection.CreateCommand())
             {
                 migration.Transaction = transaction;
-                migration.CommandText = Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6;
+                migration.CommandText =
+                    Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -118,7 +119,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 version.CommandText = """
                                       INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
-                                             (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms);
+                                             (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
+                                             (7, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -422,6 +424,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM incidents WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM finding_observations WHERE rowid IN (
                                      SELECT rowid FROM finding_observations WHERE day < $cutoff_day LIMIT $chunk);
+                                   DELETE FROM source_acks WHERE rowid IN (
+                                     SELECT rowid FROM source_acks WHERE read_at_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM analysis_runs WHERE rowid IN (
                                      SELECT rowid FROM analysis_runs
                                      WHERE status NOT IN ('{AnalysisStatuses.Pending}', '{AnalysisStatuses.Running}')

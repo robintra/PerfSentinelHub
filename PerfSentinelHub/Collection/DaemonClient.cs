@@ -33,6 +33,10 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     // so the poller halves the page and re-reads the same offset when a page
     // overflows, down to a single incident.
     public const int IncidentsMaxBytes = 4 * 1024 * 1024;
+
+    // The listing is unpaged and the daemon caps it at a thousand acks, so
+    // there is no smaller page to retry with: a body over this is an error.
+    private const int AcksMaxBytes = 8 * 1024 * 1024;
     internal const int FindingsLimit = 1000;
     public const int IncidentsPageSize = 100;
     private readonly TimeSpan _timeout = options.Value.HttpTimeout;
@@ -163,6 +167,32 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         }
     }
 
+    /// <summary>
+    ///     The daemon's active acknowledgments, its CI baseline included, in one
+    ///     unpaged listing. Null when the route is absent or the ack store is
+    ///     disabled (503), as for the incidents. A 401 is its own exception for
+    ///     the same reason too. A daemon before 0.24.0 ignores the parameter and
+    ///     lists its runtime acks alone, which the caller must not ask for.
+    /// </summary>
+    public async Task<byte[]?> FetchAcksAsync(
+        SourceOptions source,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SendAsync(source, "api/acks?include_toml=true", cancellationToken, maxBytes: AcksMaxBytes);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.ServiceUnavailable)
+        {
+            return null;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new AcksUnauthorizedException(exception);
+        }
+    }
+
     private async Task<byte[]> SendAsync(
         SourceOptions source,
         string path,
@@ -226,6 +256,9 @@ public sealed class ResponseTooLargeException(int maxBytes)
 
 public sealed class IncidentsUnauthorizedException(Exception innerException)
     : IOException("The daemon refused the key on its incidents route.", innerException);
+
+public sealed class AcksUnauthorizedException(Exception innerException)
+    : IOException("The daemon refused the key on its ack listing.", innerException);
 
 public sealed class InvalidStatusException : IOException
 {

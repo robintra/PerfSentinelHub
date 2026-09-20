@@ -45,6 +45,22 @@ lock because it is the Hub's own scheduled work and can wait. An import gives up
 five seconds with `503 Retry-After: 1`, because a slow uploader must not be able to
 stall the whole fleet's collection.
 
+A poll reads up to four things from one daemon, in order: its status, its findings, its
+incidents and its active acknowledgments. Only the first two decide reachability. The
+other two are filed apart, in `incident_reads` and `ack_reads`, because a refused key or
+a missing route on either says nothing about whether the daemon answers.
+
+The ack read mirrors and never writes to the daemon. It asks
+`GET /api/acks?include_toml=true` with the source's read credential and replaces that
+source's rows in `source_acks` with the answer, in one transaction, so an ack revoked at
+the daemon leaves with the next poll. Each row keeps where the ack came from, `daemon`
+for one taken at runtime and `toml` for one of the CI baseline. When a signature carries
+both, the baseline row is kept, as the daemon's own lookup does. A daemon before 0.24.0
+is never asked: it ignores the parameter and lists its runtime acks alone, an answer that
+cannot be told from a daemon with no baseline, so its read is filed `absent`. A listing
+at the daemon's cap of a thousand rows is mirrored and filed `truncated`, since its tail,
+which is where the baseline sits, may be missing.
+
 ## What a launched analysis actually does
 
 <picture>
@@ -83,6 +99,12 @@ the day the cutoff falls in is kept. They carry no foreign key, because a cascad
 one purge chunk would hold the write lock far longer than the chunk itself, so a purged
 finding can leave an observation row behind. That orphan is invisible, a read reaches an
 observation only through its source's row, and it leaves with its day.
+
+The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote
+the row. It does not age an ack: every read that succeeds rewrites its source's rows, so
+a row only grows old once the Hub has stopped mirroring that source, because it was
+retired or because its listing failed for the whole retention. `ack_reads` and
+`incident_reads` hold one row per source and are never purged.
 
 The status window is not a worker at all, it is a `CASE` evaluated at read time, which
 is why a finding's status can change without anything having been written. Rendered
@@ -153,6 +175,7 @@ is wrong the first time anyone edits above it.
 | Hub to daemon, export for a run           | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                     |
 | Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                             |
 | Hub to daemon, incidents                  | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paged by `SourcePoller` into `UpsertIncidentsAsync` |
+| Hub to daemon, acks                       | `Collection/DaemonClient.cs`, `FetchAcksAsync`, mirrored by `AckReader` into `ReplaceSourceAcksAsync`        |
 | Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                              |
 | Hub to SQLite                             | `Storage/Schema.cs`                                                                                          |
 | Hub spawns the engine                     | `Analysis/AnalysisRunner.cs`, twice per run                                                                  |

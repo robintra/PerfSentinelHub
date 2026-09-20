@@ -82,6 +82,7 @@ builder.Services.AddHttpClient(UpdateChecker.ClientName).ConfigurePrimaryHttpMes
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateChecker>());
 builder.Services.AddTransient<IncidentReader>();
+builder.Services.AddTransient<AckReader>();
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddHostedService<RetentionWorker>();

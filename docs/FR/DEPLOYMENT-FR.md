@@ -8,14 +8,14 @@ se lise avant de déployer quoi que ce soit.
 
 ## Chaque flux, et dans quel sens il va
 
-| Flux                       | Sens    | Ce qu'il porte                                                                 |
-|----------------------------|---------|--------------------------------------------------------------------------------|
-| daemon vers Hub            | entrant | le chemin principal des findings, `POST /api/import/findings` avec `X-API-Key` |
-| Hub vers daemon            | sortant | le poll, la joignabilité, et `api/export/report` au lancement d'un run         |
-| Hub vers backend de traces | sortant | pendant un run, et jamais autrement                                            |
-| navigateur vers Hub        | entrant | le lanceur et les rapports qu'il ouvre                                         |
-| greffon d'IDE ou job de CI | entrant | `GET /api/findings`, rien d'autre                                              |
-| Hub vers api.github.com    | sortant | la vérification de version, que `Hub:UpdateCheck:Enabled` désactive            |
+| Flux                       | Sens    | Ce qu'il porte                                                                                                  |
+|----------------------------|---------|-----------------------------------------------------------------------------------------------------------------|
+| daemon vers Hub            | entrant | le chemin principal des findings, `POST /api/import/findings` avec `X-API-Key`                                  |
+| Hub vers daemon            | sortant | le poll, lecture de la liste `api/acks` comprise, la joignabilité, et `api/export/report` au lancement d'un run |
+| Hub vers backend de traces | sortant | pendant un run, et jamais autrement                                                                             |
+| navigateur vers Hub        | entrant | le lanceur et les rapports qu'il ouvre                                                                          |
+| greffon d'IDE ou job de CI | entrant | `GET /api/findings`, rien d'autre                                                                               |
+| Hub vers api.github.com    | sortant | la vérification de version, que `Hub:UpdateCheck:Enabled` désactive                                             |
 
 Le Hub n'initie jamais rien vers une CI. Un build lance le moteur en mode
 batch, il n'y a pas de daemon dedans, donc rien à interroger. La même topologie

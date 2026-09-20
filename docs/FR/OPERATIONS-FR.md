@@ -37,6 +37,36 @@ barrière de deux rafraîchissements simultanés. `incidents_read_ms` sur `/api/
 quand chaque copie a été prise, ce qui distingue une flotte sans rien à signaler d'une
 copie que personne n'a rafraîchie.
 
+La dernière lecture du poll copie les acquittements du daemon, sa baseline de CI comprise,
+depuis `GET /api/acks?include_toml=true` avec l'identifiant de lecture. Elle vient après la
+lecture des incidents, sur des findings déjà stockés, et la version renvoyée par la lecture
+de statut décide si elle a lieu : un daemon antérieur à 0.24.0 ignore `include_toml` et
+liste ses seuls acquittements d'exécution, réponse que rien ne distingue de celle d'un
+daemon sans baseline, donc il n'est jamais interrogé et la lecture est classée `absent`. Une
+pré-version de ce plancher est interrogée, son suffixe retiré, et une version qui ne se
+lit pas compte pour un daemon plus ancien. Ce poll est le plancher du miroir, pas l'unique
+chemin : le relais relit la liste dès qu'un daemon prend un acquittement ou une révocation,
+ce qui peut laisser le miroir bien plus frais que l'intervalle, voir
+[API-FR.md](API-FR.md#relais-dacquittement).
+
+`acks_state` sur `/api/sources` dit ce qu'a donné cette lecture et `acks_read_ms` quand elle
+a été prise. `ok` est une liste entière, reflétée telle quelle, moins toute ligne que le Hub
+refuse, écartée et comptée dans les logs sans changer l'état. `truncated` est une liste qui
+a atteint le plafond propre du daemon, mille acquittements, qu'il ne pagine pas, donc sa fin
+peut manquer : les lignes lues sont tout de même reflétées et servies, mais une lecture
+tronquée ne suffit jamais à dire qu'un finding n'est pas acquitté, voir
+[API-FR.md](API-FR.md#comment-include_acked-juge-un-finding). `absent` couvre aussi une
+route que le daemon ne sert pas, `unauthorized` un daemon qui refuse la clé de lecture, et
+`error` tout autre échec, son code stable dans les logs. Un daemon dont les acquittements
+sont désactivés n'est pas `absent` : il répond une liste vide, classée `ok`. Aucun résultat
+de cette lecture ne marque la source injoignable ni ne fait échouer le poll, dont les
+findings ont été collectés avant elle, et une lecture échouée laisse en place le miroir
+précédent sans que rien ne dise qu'il tient encore. Sur la page d'acquittement du lanceur,
+une source qui relaie et dont l'état n'est ni `ok` ni `truncated` le voit nommé sur sa ligne
+et garde les deux boutons, quand une source pour laquelle le Hub ne détient pas
+d'identifiant d'acquittement n'en offre aucun, voir
+[LAUNCHER-FR.md](LAUNCHER-FR.md#la-page-dacquittement).
+
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt

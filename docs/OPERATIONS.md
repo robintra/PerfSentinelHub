@@ -34,6 +34,33 @@ which the stored copy is served untouched, and by a gate of two concurrent refre
 `incidents_read_ms` on `/api/sources` says when each copy was taken, which is what tells a
 fleet with nothing to report from a copy nobody has refreshed.
 
+The last read of the poll copies the daemon's acknowledgments, its CI baseline included,
+from `GET /api/acks?include_toml=true` with the read credential. It comes after the incident
+read, on findings already stored, and the version the status read returned decides whether
+it happens at all: a daemon below 0.24.0 ignores `include_toml` and lists its runtime acks
+alone, an answer nothing can tell from a daemon that holds no baseline, so it is never asked
+and the read is filed `absent`. A pre-release of that floor is asked, its suffix dropped,
+and a version that does not parse counts as an older daemon. That poll is the floor for the
+mirror, not the only path: the relay re-reads the listing as soon as a daemon takes an ack
+or a revoke, which can leave the mirror far fresher than the interval, see
+[API.md](API.md#ack-relay).
+
+`acks_state` on `/api/sources` says what that read came to and `acks_read_ms` when it was
+taken. `ok` is a whole listing, mirrored as it stands, less any row the Hub refuses, which
+is dropped and counted in the logs without changing the state. `truncated` is one that
+reached the daemon's own cap of a thousand acks, which it does not page, so its tail may be
+missing: the rows read are still mirrored and served, but a truncated listing is never
+trusted to say a finding is un-acknowledged, see
+[API.md](API.md#how-include_acked-judges-a-finding). `absent` also covers a route the daemon
+does not serve, `unauthorized` a daemon refusing the read key, and `error` any other
+failure, its stable code in the logs. A daemon whose acknowledgments are disabled is not
+`absent`: it answers an empty listing, filed `ok`. No outcome of that read marks the source
+unreachable or fails the poll, whose findings were collected before it ran, and a failed
+read leaves the previous mirror behind with nothing saying it still holds. On the launcher's
+ack page, a relaying source whose state is neither `ok` nor `truncated` has it named on its
+row and keeps both buttons, while a source the Hub holds no ack credential for offers
+neither, see [LAUNCHER.md](LAUNCHER.md#the-ack-page).
+
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather

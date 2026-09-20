@@ -12,500 +12,747 @@ require("../PerfSentinelHub/wwwroot/launcher.js");
 const PSL = globalThis.PSL;
 
 const tempo = {
-  kind: "tempo",
-  engine_subcommand: "tempo",
-  base_url: "http://tempo.obs.svc:3200",
-  auth_header_name: null
+    kind: "tempo",
+    engine_subcommand: "tempo",
+    base_url: "http://tempo.obs.svc:3200",
+    auth_header_name: null
 };
 
 test("a plain value is left unquoted", () => {
-  assert.equal(PSL.shq("order-service"), "order-service");
-  assert.equal(PSL.shq("ns/svc:v1.2"), "ns/svc:v1.2");
+    assert.equal(PSL.shq("order-service"), "order-service");
+    assert.equal(PSL.shq("ns/svc:v1.2"), "ns/svc:v1.2");
 });
 
 test("a shell expansion is quoted into a literal", () => {
-  // Double quotes would still expand this. Single quotes are the whole point.
-  assert.equal(PSL.shq("$(whoami)"), "'$(whoami)'");
-  assert.equal(PSL.shq("a`b`c"), "'a`b`c'");
+    // Double quotes would still expand this. Single quotes are the whole point.
+    assert.equal(PSL.shq("$(whoami)"), "'$(whoami)'");
+    assert.equal(PSL.shq("a`b`c"), "'a`b`c'");
 });
 
 test("an apostrophe closes and reopens rather than escaping in place", () => {
-  // A backslash escapes nothing inside single quotes.
-  assert.equal(PSL.shq("o'reilly svc"), "'o'\\''reilly svc'");
+    // A backslash escapes nothing inside single quotes.
+    assert.equal(PSL.shq("o'reilly svc"), "'o'\\''reilly svc'");
 });
 
 test("an empty value is quoted rather than dropped", () => {
-  assert.equal(PSL.shq(""), "''");
+    assert.equal(PSL.shq(""), "''");
 });
 
 test("a relative window becomes one lookback and a cap", () => {
-  assert.equal(
-    PSL.analysisCommand(tempo, { service: "order-service", max_traces: 100, lookback: "1h" }),
-    "perf-sentinel tempo --endpoint http://tempo.obs.svc:3200 --service order-service \\\n"
-      + "  --lookback 1h --max-traces 100");
+    assert.equal(
+        PSL.analysisCommand(tempo, {service: "order-service", max_traces: 100, lookback: "1h"}),
+        "perf-sentinel tempo --endpoint http://tempo.obs.svc:3200 --service order-service \\\n"
+        + "  --lookback 1h --max-traces 100");
 });
 
 test("an absolute window is whole seconds, the way the Hub writes them", () => {
-  const command = PSL.analysisCommand(
-    tempo,
-    { service: "orders", max_traces: 250, from_ms: 1787835540600, to_ms: 1787838540400 });
+    const command = PSL.analysisCommand(
+        tempo,
+        {service: "orders", max_traces: 250, from_ms: 1787835540600, to_ms: 1787838540400});
 
-  assert.match(command, /--from 2026-08-27T12:59:00Z --to 2026-08-27T13:49:00Z/);
-  // The engine refuses a lookback beside an absolute window.
-  assert.ok(!command.includes("--lookback"));
+    assert.match(command, /--from 2026-08-27T12:59:00Z --to 2026-08-27T13:49:00Z/);
+    // The engine refuses a lookback beside an absolute window.
+    assert.ok(!command.includes("--lookback"));
 });
 
 test("a trace id carries neither a window nor a cap", () => {
-  const command = PSL.analysisCommand(tempo, { trace_id: "abc123def456" });
+    const command = PSL.analysisCommand(tempo, {trace_id: "abc123def456"});
 
-  assert.equal(
-    command,
-    "perf-sentinel tempo --endpoint http://tempo.obs.svc:3200 --trace-id abc123def456");
-  assert.ok(!command.includes("--max-traces"));
+    assert.equal(
+        command,
+        "perf-sentinel tempo --endpoint http://tempo.obs.svc:3200 --trace-id abc123def456");
+    assert.ok(!command.includes("--max-traces"));
 });
 
 test("an authenticated source reads its header from the environment", () => {
-  const command = PSL.analysisCommand(
-    { ...tempo, auth_header_name: "Authorization" },
-    { service: "orders", max_traces: 10, lookback: "2h" });
+    const command = PSL.analysisCommand(
+        {...tempo, auth_header_name: "Authorization"},
+        {service: "orders", max_traces: 10, lookback: "2h"});
 
-  assert.ok(command.includes("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN"));
-  // The value never reaches the page, so it cannot reach the command.
-  assert.ok(!command.includes("Bearer"));
+    assert.ok(command.includes("--auth-header-env PERF_SENTINEL_SOURCE_TOKEN"));
+    // The value never reaches the page, so it cannot reach the command.
+    assert.ok(!command.includes("Bearer"));
 });
 
 test("changed thresholds point the engine at a file, having no flag of their own", () => {
-  const command = PSL.analysisCommand(
-    tempo,
-    { service: "orders", max_traces: 10, lookback: "1h", detection: { max_fanout: 9 } });
+    const command = PSL.analysisCommand(
+        tempo,
+        {service: "orders", max_traces: 10, lookback: "1h", detection: {max_fanout: 9}});
 
-  // Undotted: a downloaded file may not keep a leading dot, so the name the
-  // command asks for is the one the reader is most likely to actually have.
-  assert.ok(command.includes("-c perf-sentinel.toml"));
-  assert.ok(!command.includes("-c .perf-sentinel.toml"));
-  assert.equal(PSL.detectionToml({ max_fanout: 9, n_plus_one_min_occurrences: 8 }),
-    "[detection]\nmax_fanout = 9\nn_plus_one_min_occurrences = 8");
+    // Undotted: a downloaded file may not keep a leading dot, so the name the
+    // command asks for is the one the reader is most likely to actually have.
+    assert.ok(command.includes("-c perf-sentinel.toml"));
+    assert.ok(!command.includes("-c .perf-sentinel.toml"));
+    assert.equal(PSL.detectionToml({max_fanout: 9, n_plus_one_min_occurrences: 8}),
+        "[detection]\nmax_fanout = 9\nn_plus_one_min_occurrences = 8");
 });
 
 test("a string threshold is quoted in the config, a number is not", () => {
-  // TOML has no bare words: unquoted, `strict` is a parse error the engine
-  // reports before it reads anything else in the file.
-  assert.equal(PSL.detectionToml({ sanitizer_aware_classification: "strict", sanitizer_aware_min_cv: 0.75 }),
-    "[detection]\nsanitizer_aware_classification = \"strict\"\nsanitizer_aware_min_cv = 0.75");
+    // TOML has no bare words: unquoted, `strict` is a parse error the engine
+    // reports before it reads anything else in the file.
+    assert.equal(PSL.detectionToml({sanitizer_aware_classification: "strict", sanitizer_aware_min_cv: 0.75}),
+        "[detection]\nsanitizer_aware_classification = \"strict\"\nsanitizer_aware_min_cv = 0.75");
 });
 
 test("a daemon has no command at all", () => {
-  assert.equal(PSL.analysisCommand({ engine_subcommand: null, base_url: "http://d:4318" }, {}), null);
+    assert.equal(PSL.analysisCommand({engine_subcommand: null, base_url: "http://d:4318"}, {}), null);
 });
 
 test("the monitor keeps --daemon on query, where the engine puts it", () => {
-  assert.equal(
-    PSL.monitorCommand({ base_url: "http://daemon.obs.svc:4318" }),
-    "perf-sentinel query --daemon http://daemon.obs.svc:4318 monitor");
+    assert.equal(
+        PSL.monitorCommand({base_url: "http://daemon.obs.svc:4318"}),
+        "perf-sentinel query --daemon http://daemon.obs.svc:4318 monitor");
 });
 
 test("the shell note fires only when something was actually quoted", () => {
-  assert.ok(!PSL.quotedForShell(PSL.analysisCommand(tempo, { service: "orders", max_traces: 1, lookback: "1h" })));
-  assert.ok(PSL.quotedForShell(PSL.analysisCommand(tempo, { service: "two words", max_traces: 1, lookback: "1h" })));
+    assert.ok(!PSL.quotedForShell(PSL.analysisCommand(tempo, {service: "orders", max_traces: 1, lookback: "1h"})));
+    assert.ok(PSL.quotedForShell(PSL.analysisCommand(tempo, {service: "two words", max_traces: 1, lookback: "1h"})));
 });
 
 test("a light refresh classifies from its gauges plus the kept hints", () => {
-  // Mirrors DaemonView.Classify: a status-only body has no hints of its own.
-  const at = { value: 90, capacity: 100, pct: 90, at_capacity: true };
-  const under = { value: 1, capacity: 100, pct: 1, at_capacity: false };
-  const unknown = { value: 1, capacity: null, pct: null, at_capacity: false };
+    // Mirrors DaemonView.Classify: a status-only body has no hints of its own.
+    const at = {value: 90, capacity: 100, pct: 90, at_capacity: true};
+    const under = {value: 1, capacity: 100, pct: 1, at_capacity: false};
+    const unknown = {value: 1, capacity: null, pct: null, at_capacity: false};
 
-  assert.equal(PSL.lightState({ traces: at, analysis_queue: under, findings: under }, 0), "near_capacity");
-  // The full gauge outranks the hints, exactly as the server rules it.
-  assert.equal(PSL.lightState({ traces: at, analysis_queue: under, findings: under }, 3), "near_capacity");
-  assert.equal(PSL.lightState({ traces: under, analysis_queue: under, findings: under }, 2), "advised");
-  assert.equal(PSL.lightState({ traces: unknown, analysis_queue: unknown, findings: unknown }, 0), "unknown");
-  assert.equal(PSL.lightState({ traces: under, analysis_queue: unknown, findings: under }, 0), "ok");
+    assert.equal(PSL.lightState({traces: at, analysis_queue: under, findings: under}, 0), "near_capacity");
+    // The full gauge outranks the hints, exactly as the server rules it.
+    assert.equal(PSL.lightState({traces: at, analysis_queue: under, findings: under}, 3), "near_capacity");
+    assert.equal(PSL.lightState({traces: under, analysis_queue: under, findings: under}, 2), "advised");
+    assert.equal(PSL.lightState({traces: unknown, analysis_queue: unknown, findings: unknown}, 0), "unknown");
+    assert.equal(PSL.lightState({traces: under, analysis_queue: unknown, findings: under}, 0), "ok");
 });
 
 test("a light refresh only merges onto a view that carries the rest", () => {
-  const full = { error_code: null, warnings: [], config: { api_enabled: true }, state: "ok" };
+    const full = {error_code: null, warnings: [], config: {api_enabled: true}, state: "ok"};
 
-  assert.equal(PSL.mergeableView(undefined), null);
-  assert.equal(PSL.mergeableView("loading"), null);
-  assert.equal(PSL.mergeableView({ error_code: "source_unreachable" }), null);
-  // A light body has no warnings of its own, so it is never a base for another.
-  assert.equal(PSL.mergeableView({ error_code: null, traces: null }), null);
-  assert.equal(PSL.mergeableView(full), full);
+    assert.equal(PSL.mergeableView(undefined), null);
+    assert.equal(PSL.mergeableView("loading"), null);
+    assert.equal(PSL.mergeableView({error_code: "source_unreachable"}), null);
+    // A light body has no warnings of its own, so it is never a base for another.
+    assert.equal(PSL.mergeableView({error_code: null, traces: null}), null);
+    assert.equal(PSL.mergeableView(full), full);
 });
 
 test("a merged light view keeps the settings and takes the gauges", () => {
-  const under = { value: 1, capacity: 100, pct: 1, at_capacity: false };
-  const at = { value: 99, capacity: 100, pct: 99, at_capacity: true };
-  const previous = {
-    error_code: null, observed_at_ms: 1000, version: "0.16.0", uptime_seconds: 10,
-    warnings: [{ kind: "tuning", message: "m" }], warnings_dropped: 0,
-    config: { api_enabled: true }, state: "advised",
-    traces: under, analysis_queue: under, findings: under
-  };
-  const light = {
-    observed_at_ms: 2000, version: "0.16.0", uptime_seconds: 70,
-    traces: at, analysis_queue: under, findings: under
-  };
+    const under = {value: 1, capacity: 100, pct: 1, at_capacity: false};
+    const at = {value: 99, capacity: 100, pct: 99, at_capacity: true};
+    const previous = {
+        error_code: null, observed_at_ms: 1000, version: "0.16.0", uptime_seconds: 10,
+        warnings: [{kind: "tuning", message: "m"}], warnings_dropped: 0,
+        config: {api_enabled: true}, state: "advised",
+        traces: under, analysis_queue: under, findings: under
+    };
+    const light = {
+        observed_at_ms: 2000, version: "0.16.0", uptime_seconds: 70,
+        traces: at, analysis_queue: under, findings: under
+    };
 
-  const merged = PSL.mergeLight(previous, light);
+    const merged = PSL.mergeLight(previous, light);
 
-  assert.equal(merged.observed_at_ms, 2000);
-  assert.equal(merged.uptime_seconds, 70);
-  assert.deepEqual(merged.traces, at);
-  // What a light read cannot see is the last full read's, unchanged.
-  assert.deepEqual(merged.config, previous.config);
-  assert.deepEqual(merged.warnings, previous.warnings);
-  // And the state follows the new gauges, not the state that came with them.
-  assert.equal(merged.state, "near_capacity");
-  // The previous view is left alone: the panel may still be rendering it.
-  assert.equal(previous.state, "advised");
-  assert.deepEqual(previous.traces, under);
+    assert.equal(merged.observed_at_ms, 2000);
+    assert.equal(merged.uptime_seconds, 70);
+    assert.deepEqual(merged.traces, at);
+    // What a light read cannot see is the last full read's, unchanged.
+    assert.deepEqual(merged.config, previous.config);
+    assert.deepEqual(merged.warnings, previous.warnings);
+    // And the state follows the new gauges, not the state that came with them.
+    assert.equal(merged.state, "near_capacity");
+    // The previous view is left alone: the panel may still be rendering it.
+    assert.equal(previous.state, "advised");
+    assert.deepEqual(previous.traces, under);
 });
 
 test("what the next re-read of a row should cost", () => {
-  const full = { error_code: null, warnings: [] };
-  const failed = { error_code: "network_error" };
+    const full = {error_code: null, warnings: []};
+    const failed = {error_code: "network_error"};
 
-  // Nothing on screen yet, or a read in flight: only a full read renders.
-  assert.equal(PSL.refreshPlan(undefined, 0, 60000), "full");
-  assert.equal(PSL.refreshPlan("loading", 0, 60000), "full");
-  // A row that failed asks the cheap question until something answers.
-  assert.equal(PSL.refreshPlan(failed, 0, 60000), "probe");
-  assert.equal(PSL.refreshPlan(failed, 999999, 60000), "probe");
-  // A row already showing a daemon rides on light reads until the full one is due.
-  assert.equal(PSL.refreshPlan(full, 5000, 60000), "light");
-  assert.equal(PSL.refreshPlan(full, 60000, 60000), "full");
-  assert.equal(PSL.refreshPlan(full, 60001, 60000), "full");
-  // A light body is never a base for another, so it reads in full instead.
-  assert.equal(PSL.refreshPlan({ error_code: null, traces: null }, 0, 60000), "full");
+    // Nothing on screen yet, or a read in flight: only a full read renders.
+    assert.equal(PSL.refreshPlan(undefined, 0, 60000), "full");
+    assert.equal(PSL.refreshPlan("loading", 0, 60000), "full");
+    // A row that failed asks the cheap question until something answers.
+    assert.equal(PSL.refreshPlan(failed, 0, 60000), "probe");
+    assert.equal(PSL.refreshPlan(failed, 999999, 60000), "probe");
+    // A row already showing a daemon rides on light reads until the full one is due.
+    assert.equal(PSL.refreshPlan(full, 5000, 60000), "light");
+    assert.equal(PSL.refreshPlan(full, 60000, 60000), "full");
+    assert.equal(PSL.refreshPlan(full, 60001, 60000), "full");
+    // A light body is never a base for another, so it reads in full instead.
+    assert.equal(PSL.refreshPlan({error_code: null, traces: null}, 0, 60000), "full");
 });
 
 test("the download link points at the engine version the Hub runs", () => {
-  assert.equal(PSL.releaseUrl("0.16.0"),
-    "https://github.com/robintra/perf-sentinel/releases/tag/v0.16.0");
-  assert.equal(PSL.releaseUrl("0.17.0-rc.1"),
-    "https://github.com/robintra/perf-sentinel/releases/tag/v0.17.0-rc.1");
-  // No version to pin, so the release list rather than a made-up tag.
-  const list = "https://github.com/robintra/perf-sentinel/releases";
-  assert.equal(PSL.releaseUrl(null), list);
-  assert.equal(PSL.releaseUrl(""), list);
-  assert.equal(PSL.releaseUrl("unknown"), list);
-  // And nothing that is not a version is ever pasted into the path.
-  assert.equal(PSL.releaseUrl("0.16.0/../../evil"), list);
-  assert.equal(PSL.releaseUrl("0.16.0?x=1"), list);
-  assert.equal(PSL.releaseUrl("javascript:alert(1)"), list);
+    assert.equal(PSL.releaseUrl("0.16.0"),
+        "https://github.com/robintra/perf-sentinel/releases/tag/v0.16.0");
+    assert.equal(PSL.releaseUrl("0.17.0-rc.1"),
+        "https://github.com/robintra/perf-sentinel/releases/tag/v0.17.0-rc.1");
+    // No version to pin, so the release list rather than a made-up tag.
+    const list = "https://github.com/robintra/perf-sentinel/releases";
+    assert.equal(PSL.releaseUrl(null), list);
+    assert.equal(PSL.releaseUrl(""), list);
+    assert.equal(PSL.releaseUrl("unknown"), list);
+    // And nothing that is not a version is ever pasted into the path.
+    assert.equal(PSL.releaseUrl("0.16.0/../../evil"), list);
+    assert.equal(PSL.releaseUrl("0.16.0?x=1"), list);
+    assert.equal(PSL.releaseUrl("javascript:alert(1)"), list);
 });
 
 test("the monitor command carries the interval the row is re-reading on", () => {
-  const source = { id: "d", base_url: "http://daemon.svc:4318" };
-  const bare = "perf-sentinel query --daemon http://daemon.svc:4318 monitor";
+    const source = {id: "d", base_url: "http://daemon.svc:4318"};
+    const bare = "perf-sentinel query --daemon http://daemon.svc:4318 monitor";
 
-  assert.equal(PSL.monitorCommand(source, 30), bare + " --refresh 30");
-  assert.equal(PSL.monitorCommand(source, 5), bare + " --refresh 5");
-  // Not re-reading, so no interval to mirror: the engine keeps its own default.
-  assert.equal(PSL.monitorCommand(source, 0), bare);
-  assert.equal(PSL.monitorCommand(source), bare);
-  // --daemon is the parent's, --refresh is the subcommand's, in that order.
-  assert.match(PSL.monitorCommand(source, 10), /--daemon \S+ monitor --refresh 10$/);
-  // And an address that needs quoting still gets it.
-  assert.equal(PSL.monitorCommand({ base_url: "http://a b" }, 5),
-    "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
+    assert.equal(PSL.monitorCommand(source, 30), bare + " --refresh 30");
+    assert.equal(PSL.monitorCommand(source, 5), bare + " --refresh 5");
+    // Not re-reading, so no interval to mirror: the engine keeps its own default.
+    assert.equal(PSL.monitorCommand(source, 0), bare);
+    assert.equal(PSL.monitorCommand(source), bare);
+    // --daemon is the parent's, --refresh is the subcommand's, in that order.
+    assert.match(PSL.monitorCommand(source, 10), /--daemon \S+ monitor --refresh 10$/);
+    // And an address that needs quoting still gets it.
+    assert.equal(PSL.monitorCommand({base_url: "http://a b"}, 5),
+        "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
 });
 
 test("only open folds are worth remembering", () => {
-  assert.deepEqual(PSL.openFolds({ a: true, b: false, c: true }), { a: true, c: true });
-  // Closed is the default, so nothing closed is written down.
-  assert.deepEqual(PSL.openFolds({ a: false }), {});
-  assert.deepEqual(PSL.openFolds({}), {});
-  assert.deepEqual(PSL.openFolds(null), {});
-  assert.deepEqual(PSL.openFolds(undefined), {});
-  // And nothing that is not exactly true counts as open.
-  assert.deepEqual(PSL.openFolds({ a: "true", b: 1, c: {}, d: true }), { d: true });
+    assert.deepEqual(PSL.openFolds({a: true, b: false, c: true}), {a: true, c: true});
+    // Closed is the default, so nothing closed is written down.
+    assert.deepEqual(PSL.openFolds({a: false}), {});
+    assert.deepEqual(PSL.openFolds({}), {});
+    assert.deepEqual(PSL.openFolds(null), {});
+    assert.deepEqual(PSL.openFolds(undefined), {});
+    // And nothing that is not exactly true counts as open.
+    assert.deepEqual(PSL.openFolds({a: "true", b: 1, c: {}, d: true}), {d: true});
 });
 
 test("a gauge takes a tone only once it is close to a cap it published", () => {
-  // 90 is the engine's own advisor line, the one that turns the row's verdict.
-  assert.equal(PSL.gaugeTone(90), "crit");
-  assert.equal(PSL.gaugeTone(100), "crit");
-  assert.equal(PSL.gaugeTone(89.9), "warn");
-  assert.equal(PSL.gaugeTone(75), "warn");
-  assert.equal(PSL.gaugeTone(74.9), null);
-  assert.equal(PSL.gaugeTone(0), null);
-  // No published cap, so nothing is known about how close to one it is.
-  assert.equal(PSL.gaugeTone(null), null);
-  assert.equal(PSL.gaugeTone(undefined), null);
-  assert.equal(PSL.gaugeTone(NaN), null);
-  assert.equal(PSL.gaugeTone("90"), null);
+    // 90 is the engine's own advisor line, the one that turns the row's verdict.
+    assert.equal(PSL.gaugeTone(90), "crit");
+    assert.equal(PSL.gaugeTone(100), "crit");
+    assert.equal(PSL.gaugeTone(89.9), "warn");
+    assert.equal(PSL.gaugeTone(75), "warn");
+    assert.equal(PSL.gaugeTone(74.9), null);
+    assert.equal(PSL.gaugeTone(0), null);
+    // No published cap, so nothing is known about how close to one it is.
+    assert.equal(PSL.gaugeTone(null), null);
+    assert.equal(PSL.gaugeTone(undefined), null);
+    assert.equal(PSL.gaugeTone(NaN), null);
+    assert.equal(PSL.gaugeTone("90"), null);
 });
 
 test("a gauge move is what changed, and nothing when nothing did", () => {
-  const at = value => ({ value, capacity: 10000 });
+    const at = value => ({value, capacity: 10000});
 
-  assert.equal(PSL.gaugeMove(at(8057), at(9310)), 1253);
-  assert.equal(PSL.gaugeMove(at(9310), at(9251)), -59);
-  // Unchanged, unknown either side, or no earlier reading at all.
-  assert.equal(PSL.gaugeMove(at(9310), at(9310)), null);
-  assert.equal(PSL.gaugeMove(null, at(9310)), null);
-  assert.equal(PSL.gaugeMove(at(9310), null), null);
-  assert.equal(PSL.gaugeMove({ value: null }, at(9310)), null);
-  assert.equal(PSL.gaugeMove(at(9310), { value: null }), null);
-  // Zero is a real reading, not a missing one.
-  assert.equal(PSL.gaugeMove(at(0), at(12)), 12);
-  assert.equal(PSL.gaugeMove(at(12), at(0)), -12);
+    assert.equal(PSL.gaugeMove(at(8057), at(9310)), 1253);
+    assert.equal(PSL.gaugeMove(at(9310), at(9251)), -59);
+    // Unchanged, unknown either side, or no earlier reading at all.
+    assert.equal(PSL.gaugeMove(at(9310), at(9310)), null);
+    assert.equal(PSL.gaugeMove(null, at(9310)), null);
+    assert.equal(PSL.gaugeMove(at(9310), null), null);
+    assert.equal(PSL.gaugeMove({value: null}, at(9310)), null);
+    assert.equal(PSL.gaugeMove(at(9310), {value: null}), null);
+    // Zero is a real reading, not a missing one.
+    assert.equal(PSL.gaugeMove(at(0), at(12)), 12);
+    assert.equal(PSL.gaugeMove(at(12), at(0)), -12);
 });
 
 test("PowerShell quotes by doubling, and keeps its own operators out of bare words", () => {
-  // Inside single quotes everything is literal and a quote is doubled, where a
-  // POSIX shell has to close, escape and reopen.
-  assert.equal(PSL.psq("a b'c"), "'a b''c'");
-  assert.equal(PSL.shq("a b'c"), "'a b'\\''c'");
-  // A comma is PowerShell's array operator and @ opens a splat, so neither
-  // stays bare even though a POSIX shell would leave them alone.
-  assert.equal(PSL.psq("a,b"), "'a,b'");
-  assert.equal(PSL.psq("@thing"), "'@thing'");
-  assert.equal(PSL.shq("a,b"), "a,b");
-  // What both leave alone: a URL, a name, a number, an ISO timestamp.
-  assert.equal(PSL.psq("http://tempo.svc:3200"), "http://tempo.svc:3200");
-  assert.equal(PSL.psq("order-service"), "order-service");
-  // Nothing in an ISO timestamp is special to either shell, so both pass it bare.
-  assert.equal(PSL.psq("2026-08-29T09:00:00.000Z"), "2026-08-29T09:00:00.000Z");
-  assert.equal(PSL.shq("2026-08-29T09:00:00.000Z"), "2026-08-29T09:00:00.000Z");
-  // And the empty string is quoted by both, or it would vanish.
-  assert.equal(PSL.psq(""), "''");
+    // Inside single quotes everything is literal and a quote is doubled, where a
+    // POSIX shell has to close, escape and reopen.
+    assert.equal(PSL.psq("a b'c"), "'a b''c'");
+    assert.equal(PSL.shq("a b'c"), "'a b'\\''c'");
+    // A comma is PowerShell's array operator and @ opens a splat, so neither
+    // stays bare even though a POSIX shell would leave them alone.
+    assert.equal(PSL.psq("a,b"), "'a,b'");
+    assert.equal(PSL.psq("@thing"), "'@thing'");
+    assert.equal(PSL.shq("a,b"), "a,b");
+    // What both leave alone: a URL, a name, a number, an ISO timestamp.
+    assert.equal(PSL.psq("http://tempo.svc:3200"), "http://tempo.svc:3200");
+    assert.equal(PSL.psq("order-service"), "order-service");
+    // Nothing in an ISO timestamp is special to either shell, so both pass it bare.
+    assert.equal(PSL.psq("2026-08-29T09:00:00.000Z"), "2026-08-29T09:00:00.000Z");
+    assert.equal(PSL.shq("2026-08-29T09:00:00.000Z"), "2026-08-29T09:00:00.000Z");
+    // And the empty string is quoted by both, or it would vanish.
+    assert.equal(PSL.psq(""), "''");
 });
 
 test("the shell a first visit gets follows the platform", () => {
-  assert.equal(PSL.defaultShell("Win32"), "powershell");
-  assert.equal(PSL.defaultShell("Windows"), "powershell");
-  assert.equal(PSL.defaultShell("MacIntel"), "posix");
-  assert.equal(PSL.defaultShell("Linux x86_64"), "posix");
-  // Nothing to go on is not Windows, so it is the line most machines run.
-  // "Darwin" contains "win", so the test has to be anchored.
-  assert.equal(PSL.defaultShell("Darwin"), "posix");
-  assert.equal(PSL.defaultShell("darwin"), "posix");
-  assert.equal(PSL.defaultShell(null), "posix");
-  assert.equal(PSL.defaultShell(""), "posix");
-  assert.equal(PSL.shellById("nonsense").id, "posix");
-  assert.equal(PSL.shellById("powershell").label, "PowerShell");
+    assert.equal(PSL.defaultShell("Win32"), "powershell");
+    assert.equal(PSL.defaultShell("Windows"), "powershell");
+    assert.equal(PSL.defaultShell("MacIntel"), "posix");
+    assert.equal(PSL.defaultShell("Linux x86_64"), "posix");
+    // Nothing to go on is not Windows, so it is the line most machines run.
+    // "Darwin" contains "win", so the test has to be anchored.
+    assert.equal(PSL.defaultShell("Darwin"), "posix");
+    assert.equal(PSL.defaultShell("darwin"), "posix");
+    assert.equal(PSL.defaultShell(null), "posix");
+    assert.equal(PSL.defaultShell(""), "posix");
+    assert.equal(PSL.shellById("nonsense").id, "posix");
+    assert.equal(PSL.shellById("powershell").label, "PowerShell");
 });
 
 test("a command continues its line the way its own shell does", () => {
-  const source = { engine_subcommand: "tempo", base_url: "http://tempo.svc:3200" };
-  const request = { service: "orders", lookback: "1h", max_traces: 100, detection: {} };
+    const source = {engine_subcommand: "tempo", base_url: "http://tempo.svc:3200"};
+    const request = {service: "orders", lookback: "1h", max_traces: 100, detection: {}};
 
-  const posix = PSL.analysisCommand(source, request, "posix");
-  const pwsh = PSL.analysisCommand(source, request, "powershell");
-  assert.match(posix, /\\\n {2}--lookback/);
-  assert.match(pwsh, /`\n {2}--lookback/);
-  // The backslash never appears in the PowerShell line, and vice versa.
-  assert.ok(!pwsh.includes("\\"));
-  assert.ok(!posix.includes("`"));
-  // The monitor command takes its shell too.
-  assert.equal(PSL.monitorCommand({ base_url: "http://a b" }, 5, "powershell"),
-    "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
+    const posix = PSL.analysisCommand(source, request, "posix");
+    const pwsh = PSL.analysisCommand(source, request, "powershell");
+    assert.match(posix, /\\\n {2}--lookback/);
+    assert.match(pwsh, /`\n {2}--lookback/);
+    // The backslash never appears in the PowerShell line, and vice versa.
+    assert.ok(!pwsh.includes("\\"));
+    assert.ok(!posix.includes("`"));
+    // The monitor command takes its shell too.
+    assert.equal(PSL.monitorCommand({base_url: "http://a b"}, 5, "powershell"),
+        "perf-sentinel query --daemon 'http://a b' monitor --refresh 5");
 });
 
 test("setting an environment variable is written the way each shell writes it", () => {
-  const header = "Authorization: …";
-  assert.equal(PSL.exportLine("posix", "PERF_SENTINEL_SOURCE_TOKEN", header),
-    "export PERF_SENTINEL_SOURCE_TOKEN='Authorization: …'");
-  // PowerShell assigns into the env: drive, and wants the spaces.
-  assert.equal(PSL.exportLine("powershell", "PERF_SENTINEL_SOURCE_TOKEN", header),
-    "$env:PERF_SENTINEL_SOURCE_TOKEN = 'Authorization: …'");
-  // A quote in the value is escaped by each shell's own rule.
-  assert.equal(PSL.exportLine("posix", "V", "a'b"), "export V='a'\\''b'");
-  assert.equal(PSL.exportLine("powershell", "V", "a'b"), "$env:V = 'a''b'");
-  // An unknown shell is the POSIX one, as everywhere else.
-  assert.match(PSL.exportLine("nonsense", "V", "x"), /^export V=/);
+    const header = "Authorization: …";
+    assert.equal(PSL.exportLine("posix", "PERF_SENTINEL_SOURCE_TOKEN", header),
+        "export PERF_SENTINEL_SOURCE_TOKEN='Authorization: …'");
+    // PowerShell assigns into the env: drive, and wants the spaces.
+    assert.equal(PSL.exportLine("powershell", "PERF_SENTINEL_SOURCE_TOKEN", header),
+        "$env:PERF_SENTINEL_SOURCE_TOKEN = 'Authorization: …'");
+    // A quote in the value is escaped by each shell's own rule.
+    assert.equal(PSL.exportLine("posix", "V", "a'b"), "export V='a'\\''b'");
+    assert.equal(PSL.exportLine("powershell", "V", "a'b"), "$env:V = 'a''b'");
+    // An unknown shell is the POSIX one, as everywhere else.
+    assert.match(PSL.exportLine("nonsense", "V", "x"), /^export V=/);
 });
 
 test("updateState only speaks when both versions are known and one is older", () => {
-  // Nothing to say, and the three silences are different situations.
-  assert.equal(PSL.updateState(null, "0.17.0"), null, "no version running");
-  assert.equal(PSL.updateState("0.16.0", null), null, "check off or not run yet");
-  assert.equal(PSL.updateState("0.17.0", "0.17.0"), null, "current");
-  // A build ahead of the newest release is a pre-release, not a downgrade.
-  assert.equal(PSL.updateState("0.18.0", "0.17.0"), null, "ahead");
+    // Nothing to say, and the three silences are different situations.
+    assert.equal(PSL.updateState(null, "0.17.0"), null, "no version running");
+    assert.equal(PSL.updateState("0.16.0", null), null, "check off or not run yet");
+    assert.equal(PSL.updateState("0.17.0", "0.17.0"), null, "current");
+    // A build ahead of the newest release is a pre-release, not a downgrade.
+    assert.equal(PSL.updateState("0.18.0", "0.17.0"), null, "ahead");
 
-  assert.deepEqual(PSL.updateState("0.16.0", "0.17.0"), { latest: "0.17.0" });
-  assert.deepEqual(PSL.updateState("0.14.2", "0.17.0"), { latest: "0.17.0" });
-  // The Hub's own version has a fourth segment that never carries meaning.
-  assert.equal(PSL.updateState("0.1.0.0", "0.1.0"), null, "four segments, same release");
-  assert.deepEqual(PSL.updateState("0.1.0.0", "0.2.0"), { latest: "0.2.0" });
+    assert.deepEqual(PSL.updateState("0.16.0", "0.17.0"), {latest: "0.17.0"});
+    assert.deepEqual(PSL.updateState("0.14.2", "0.17.0"), {latest: "0.17.0"});
+    // The Hub's own version has a fourth segment that never carries meaning.
+    assert.equal(PSL.updateState("0.1.0.0", "0.1.0"), null, "four segments, same release");
+    assert.deepEqual(PSL.updateState("0.1.0.0", "0.2.0"), {latest: "0.2.0"});
 });
 
 test("hubReleaseUrl lands on the list, which exists before any release does", () => {
-  assert.equal(PSL.hubReleaseUrl(), "https://github.com/robintra/PerfSentinelHub/releases");
+    assert.equal(PSL.hubReleaseUrl(), "https://github.com/robintra/PerfSentinelHub/releases");
 });
 
 test("knownShell answers null for anything that is not a shell id", () => {
-  assert.equal(PSL.knownShell("posix"), "posix");
-  assert.equal(PSL.knownShell("powershell"), "powershell");
-  // shellById would answer "posix" for all of these, which is right for
-  // spelling a command and wrong for judging a remembered value.
-  assert.equal(PSL.knownShell("fish"), null);
-  assert.equal(PSL.knownShell(""), null);
-  assert.equal(PSL.knownShell(null), null);
-  assert.equal(PSL.knownShell(undefined), null);
+    assert.equal(PSL.knownShell("posix"), "posix");
+    assert.equal(PSL.knownShell("powershell"), "powershell");
+    // shellById would answer "posix" for all of these, which is right for
+    // spelling a command and wrong for judging a remembered value.
+    assert.equal(PSL.knownShell("fish"), null);
+    assert.equal(PSL.knownShell(""), null);
+    assert.equal(PSL.knownShell(null), null);
+    assert.equal(PSL.knownShell(undefined), null);
 });
 
 test("durPrecise always reaches the seconds a countdown is watched by", () => {
-  // dur() stops at two units, which hides the only figure that moves.
-  assert.equal(PSL.dur(86_399_000), "23 h 59 m");
-  assert.equal(PSL.durPrecise(86_399_000), "23 h 59 m 59 s");
-  assert.equal(PSL.durPrecise(90_061_000), "1 d 1 h 1 m 1 s");
-  assert.equal(PSL.durPrecise(59_000), "59 s");
-  assert.equal(PSL.durPrecise(0), "0 s");
-  // A report already gone must not read as one second from expiry.
-  assert.equal(PSL.durPrecise(-5_000), "0 s");
-  assert.equal(PSL.durPrecise(null), "n/a");
+    // dur() stops at two units, which hides the only figure that moves.
+    assert.equal(PSL.dur(86_399_000), "23 h 59 m");
+    assert.equal(PSL.durPrecise(86_399_000), "23 h 59 m 59 s");
+    assert.equal(PSL.durPrecise(90_061_000), "1 d 1 h 1 m 1 s");
+    assert.equal(PSL.durPrecise(59_000), "59 s");
+    assert.equal(PSL.durPrecise(0), "0 s");
+    // A report already gone must not read as one second from expiry.
+    assert.equal(PSL.durPrecise(-5_000), "0 s");
+    assert.equal(PSL.durPrecise(null), "n/a");
 });
 
 test("durMinutes keeps the units dur() drops from an uptime", () => {
-  // dur() stops at two, so a daemon up ten days and twenty-three hours reads
-  // the same as one up ten days flat.
-  assert.equal(PSL.dur(950_400_000), "11 d");
-  assert.equal(PSL.durMinutes(950_400_000), "11 d 0 h 0 m");
-  assert.equal(PSL.durMinutes(888_120_000), "10 d 6 h 42 m");
-  assert.equal(PSL.durMinutes(3_600_000), "1 h 0 m");
-  assert.equal(PSL.durMinutes(90_000), "1 m");
-  // No seconds: the figure is re-read on an interval, so they would be stale.
-  assert.equal(PSL.durMinutes(59_000), "0 m");
-  assert.equal(PSL.durMinutes(null), "n/a");
+    // dur() stops at two, so a daemon up ten days and twenty-three hours reads
+    // the same as one up ten days flat.
+    assert.equal(PSL.dur(950_400_000), "11 d");
+    assert.equal(PSL.durMinutes(950_400_000), "11 d 0 h 0 m");
+    assert.equal(PSL.durMinutes(888_120_000), "10 d 6 h 42 m");
+    assert.equal(PSL.durMinutes(3_600_000), "1 h 0 m");
+    assert.equal(PSL.durMinutes(90_000), "1 m");
+    // No seconds: the figure is re-read on an interval, so they would be stale.
+    assert.equal(PSL.durMinutes(59_000), "0 m");
+    assert.equal(PSL.durMinutes(null), "n/a");
 });
 
 test("splitByKind labels a fleet only when it holds both kinds", () => {
-  const mixed = PSL.splitByKind([
-    { kind: "daemon" }, { kind: "tempo" }, { kind: "daemon" }, { kind: "jaeger_query" }
-  ]);
-  assert.equal(mixed.split, true);
-  // The original positions survive: the fold ids on the fleet table are built
-  // from them, so a grouped row must still address its own source.
-  assert.deepEqual(mixed.daemons.map((e) => e.index), [0, 2]);
-  assert.deepEqual(mixed.backends.map((e) => e.index), [1, 3]);
+    const mixed = PSL.splitByKind([
+        {kind: "daemon"}, {kind: "tempo"}, {kind: "daemon"}, {kind: "jaeger_query"}
+    ]);
+    assert.equal(mixed.split, true);
+    // The original positions survive: the fold ids on the fleet table are built
+    // from them, so a grouped row must still address its own source.
+    assert.deepEqual(mixed.daemons.map((e) => e.index), [0, 2]);
+    assert.deepEqual(mixed.backends.map((e) => e.index), [1, 3]);
 
-  // One kind needs no label: it would name the only thing on screen.
-  assert.equal(PSL.splitByKind([{ kind: "daemon" }, { kind: "daemon" }]).split, false);
-  assert.equal(PSL.splitByKind([{ kind: "tempo" }]).split, false);
-  assert.equal(PSL.splitByKind([]).split, false);
-  assert.equal(PSL.splitByKind(null).split, false);
+    // One kind needs no label: it would name the only thing on screen.
+    assert.equal(PSL.splitByKind([{kind: "daemon"}, {kind: "daemon"}]).split, false);
+    assert.equal(PSL.splitByKind([{kind: "tempo"}]).split, false);
+    assert.equal(PSL.splitByKind([]).split, false);
+    assert.equal(PSL.splitByKind(null).split, false);
 
-  // An unknown kind is a backend, matching the engine: only a daemon is polled.
-  const odd = PSL.splitByKind([{ kind: "daemon" }, { kind: "something-new" }]);
-  assert.equal(odd.split, true);
-  assert.deepEqual(odd.backends.map((e) => e.index), [1]);
+    // An unknown kind is a backend, matching the engine: only a daemon is polled.
+    const odd = PSL.splitByKind([{kind: "daemon"}, {kind: "something-new"}]);
+    assert.equal(odd.split, true);
+    assert.deepEqual(odd.backends.map((e) => e.index), [1]);
 });
 
 test("incidentCapture reads oldest_finding_ms the way the daemon does", () => {
-  // At or below the window's start, the ring still reached the whole window.
-  assert.equal(PSL.incidentCapture({oldest_finding_ms: 100, window_from_ms: 100}), "complete");
-  assert.equal(PSL.incidentCapture({oldest_finding_ms: 99, window_from_ms: 100}), "complete");
-  // Above it, part of the window was already gone when the incident was frozen.
-  assert.equal(PSL.incidentCapture({oldest_finding_ms: 101, window_from_ms: 100}), "partial");
-  // Absent means the ring held nothing at all.
-  assert.equal(PSL.incidentCapture({window_from_ms: 100}), "empty");
-  assert.equal(PSL.incidentCapture({oldest_finding_ms: null, window_from_ms: 100}), "empty");
+    // At or below the window's start, the ring still reached the whole window.
+    assert.equal(PSL.incidentCapture({oldest_finding_ms: 100, window_from_ms: 100}), "complete");
+    assert.equal(PSL.incidentCapture({oldest_finding_ms: 99, window_from_ms: 100}), "complete");
+    // Above it, part of the window was already gone when the incident was frozen.
+    assert.equal(PSL.incidentCapture({oldest_finding_ms: 101, window_from_ms: 100}), "partial");
+    // Absent means the ring held nothing at all.
+    assert.equal(PSL.incidentCapture({window_from_ms: 100}), "empty");
+    assert.equal(PSL.incidentCapture({oldest_finding_ms: null, window_from_ms: 100}), "empty");
 });
 
 test("findingPhase places a finding before or after the incident by its stamp", () => {
-  const incident = {at_ms: 1000};
-  assert.equal(PSL.findingPhase({first_seen_ms: 999}, incident), "before");
-  assert.equal(PSL.findingPhase({first_seen_ms: 1000}, incident), "before");
-  assert.equal(PSL.findingPhase({first_seen_ms: 1001}, incident), "after");
+    const incident = {at_ms: 1000};
+    assert.equal(PSL.findingPhase({first_seen_ms: 999}, incident), "before");
+    assert.equal(PSL.findingPhase({first_seen_ms: 1000}, incident), "before");
+    assert.equal(PSL.findingPhase({first_seen_ms: 1001}, incident), "after");
 });
 
 test("every incident kind the daemon emits has a label", () => {
-  assert.deepEqual(
-    Object.keys(PSL.INCIDENT_KIND_LABEL).sort(),
-    ["deploy", "memory_saturation", "oom_kill", "other", "restart"]);
+    assert.deepEqual(
+        Object.keys(PSL.INCIDENT_KIND_LABEL).sort(),
+        ["deploy", "memory_saturation", "oom_kill", "other", "restart"]);
 });
 
 test("incidentsCopy dates a daemon's copy and names what the read came to", () => {
-  const read = {name: "Production", incidents_read_ms: 1_000_000, incidents_state: "ok"};
-  // A successful read says nothing beyond its age: the age is the answer.
-  assert.equal(PSL.incidentsCopy(read, 1_042_000), "Production: read 42 s ago");
-  // No row at all is not the epoch, and not a quiet fleet either.
-  assert.equal(PSL.incidentsCopy({name: "Production"}, 1_042_000), "Production: never read");
-  assert.equal(
-    PSL.incidentsCopy({name: "Production", incidents_read_ms: null}, 1_042_000),
-    "Production: never read");
-  // Anything else is named beside the age, or a refused key reads as silence.
-  assert.equal(
-    PSL.incidentsCopy({name: "Edge", incidents_read_ms: 0, incidents_state: "unauthorized"}, 60_000),
-    "Edge: read 1 m ago, it refused the Hub's key");
-  assert.equal(
-    PSL.incidentsCopy({name: "Edge", incidents_read_ms: 0, incidents_state: "absent"}, 0),
-    "Edge: read 0 s ago, it publishes no incidents route");
-  // A clock that ran backwards between the read and the render is not a
-  // negative age.
-  assert.equal(PSL.incidentsCopy({name: "Edge", incidents_read_ms: 5_000}, 1_000), "Edge: read 0 s ago");
+    const read = {name: "Production", incidents_read_ms: 1_000_000, incidents_state: "ok"};
+    // A successful read says nothing beyond its age: the age is the answer.
+    assert.equal(PSL.incidentsCopy(read, 1_042_000), "Production: read 42 s ago");
+    // No row at all is not the epoch, and not a quiet fleet either.
+    assert.equal(PSL.incidentsCopy({name: "Production"}, 1_042_000), "Production: never read");
+    assert.equal(
+        PSL.incidentsCopy({name: "Production", incidents_read_ms: null}, 1_042_000),
+        "Production: never read");
+    // Anything else is named beside the age, or a refused key reads as silence.
+    assert.equal(
+        PSL.incidentsCopy({name: "Edge", incidents_read_ms: 0, incidents_state: "unauthorized"}, 60_000),
+        "Edge: read 1 m ago, it refused the Hub's key");
+    assert.equal(
+        PSL.incidentsCopy({name: "Edge", incidents_read_ms: 0, incidents_state: "absent"}, 0),
+        "Edge: read 0 s ago, it publishes no incidents route");
+    // A clock that ran backwards between the read and the render is not a
+    // negative age.
+    assert.equal(PSL.incidentsCopy({name: "Edge", incidents_read_ms: 5_000}, 1_000), "Edge: read 0 s ago");
 });
 
 test("every incidents read state the Hub files has words, bar the one the age already tells", () => {
-  assert.deepEqual(Object.keys(PSL.INCIDENT_READ_STATE).sort(), ["absent", "error", "unauthorized"]);
+    assert.deepEqual(Object.keys(PSL.INCIDENT_READ_STATE).sort(), ["absent", "error", "unauthorized"]);
 });
 
 test("an incident's window travels to New analysis as a hash and back", () => {
-  const incident = {id: "d650edad80ac5c2d99b8d1dde07100c2", service: "shop svc", window_from_ms: 1000, window_to_ms: 5000};
-  const hash = PSL.incidentHandoffHash(incident, 9000);
-  assert.equal(hash, "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2");
-  assert.deepEqual(PSL.readHandoff(hash, 9000),
-    {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2"});
+    const incident = {
+        id: "d650edad80ac5c2d99b8d1dde07100c2",
+        service: "shop svc",
+        window_from_ms: 1000,
+        window_to_ms: 5000
+    };
+    const hash = PSL.incidentHandoffHash(incident, 9000);
+    assert.equal(hash, "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2");
+    assert.deepEqual(PSL.readHandoff(hash, 9000),
+        {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2"});
 });
 
 test("the window's end is held at now, in the hash and again when it is read", () => {
-  // An incident younger than two TTLs has a window still running, and the Hub
-  // refuses a window that ends in the future.
-  const incident = {id: "a", service: "svc", window_from_ms: 1000, window_to_ms: 5000};
-  assert.match(PSL.incidentHandoffHash(incident, 3000), /&to=3000&/);
-  // A shared link ages: the end it carries is held at the reader's own now.
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 3000).toMs, 3000);
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).toMs, 5000);
+    // An incident younger than two TTLs has a window still running, and the Hub
+    // refuses a window that ends in the future.
+    const incident = {id: "a", service: "svc", window_from_ms: 1000, window_to_ms: 5000};
+    assert.match(PSL.incidentHandoffHash(incident, 3000), /&to=3000&/);
+    // A shared link ages: the end it carries is held at the reader's own now.
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 3000).toMs, 3000);
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).toMs, 5000);
 });
 
 test("a handoff the form cannot take reads as null", () => {
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=", 9000), null, "empty service");
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=%20", 9000), null, "blank service");
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000", 9000), null, "no service");
-  assert.equal(PSL.readHandoff("#/new?from=5000&to=5000&service=svc", 9000), null, "from equal to to");
-  assert.equal(PSL.readHandoff("#/new?from=6000&to=5000&service=svc", 9000), null, "from after to");
-  assert.equal(PSL.readHandoff("#/new?from=abc&to=5000&service=svc", 9000), null, "non-numeric from");
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=&service=svc", 9000), null, "empty to");
-  assert.equal(PSL.readHandoff("#/new?service=svc", 9000), null, "no bounds");
-  // Held at now, the end can land at or before the start: a window entirely
-  // in the future is not a window to run.
-  assert.equal(PSL.readHandoff("#/new?from=9000&to=9500&service=svc", 9000), null, "all in the future");
-  assert.equal(PSL.readHandoff("#/new", 9000), null, "no parameters");
-  assert.equal(PSL.readHandoff("#/incidents?from=1000&to=5000&service=svc", 9000), null, "another route");
-  assert.equal(PSL.readHandoff("", 9000), null);
-  assert.equal(PSL.readHandoff(null, 9000), null);
-  // The id is along for the banner, never a condition.
-  assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).incidentId, "");
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=", 9000), null, "empty service");
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=%20", 9000), null, "blank service");
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000", 9000), null, "no service");
+    assert.equal(PSL.readHandoff("#/new?from=5000&to=5000&service=svc", 9000), null, "from equal to to");
+    assert.equal(PSL.readHandoff("#/new?from=6000&to=5000&service=svc", 9000), null, "from after to");
+    assert.equal(PSL.readHandoff("#/new?from=abc&to=5000&service=svc", 9000), null, "non-numeric from");
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=&service=svc", 9000), null, "empty to");
+    assert.equal(PSL.readHandoff("#/new?service=svc", 9000), null, "no bounds");
+    // Held at now, the end can land at or before the start: a window entirely
+    // in the future is not a window to run.
+    assert.equal(PSL.readHandoff("#/new?from=9000&to=9500&service=svc", 9000), null, "all in the future");
+    assert.equal(PSL.readHandoff("#/new", 9000), null, "no parameters");
+    assert.equal(PSL.readHandoff("#/incidents?from=1000&to=5000&service=svc", 9000), null, "another route");
+    assert.equal(PSL.readHandoff("", 9000), null);
+    assert.equal(PSL.readHandoff(null, 9000), null);
+    // The id is along for the banner, never a condition.
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc", 9000).incidentId, "");
 });
 
 test("skew names the segment it compared on", () => {
-  // The direction comes from all three segments, so the noun has to follow the
-  // same one. Reading the minor alone called a patch gap "0 minor behind".
-  PSL.setVersions("0.1.6", "0.20.1");
-  assert.equal(PSL.skew("0.20.0").label, "1 patch behind");
-  assert.equal(PSL.skew("0.20.0").dir, "behind");
-  assert.equal(PSL.skew("0.19.0").label, "1 minor behind");
-  assert.equal(PSL.skew("0.20.2").label, "1 patch ahead");
-  assert.equal(PSL.skew("1.0.0").label, "1 major ahead");
-  // Equal versions carry no pill at all, whatever the extra segments.
-  assert.equal(PSL.skew("0.20.1"), null);
-  assert.equal(PSL.skew(null), null);
+    // The direction comes from all three segments, so the noun has to follow the
+    // same one. Reading the minor alone called a patch gap "0 minor behind".
+    PSL.setVersions("0.1.6", "0.20.1");
+    assert.equal(PSL.skew("0.20.0").label, "1 patch behind");
+    assert.equal(PSL.skew("0.20.0").dir, "behind");
+    assert.equal(PSL.skew("0.19.0").label, "1 minor behind");
+    assert.equal(PSL.skew("0.20.2").label, "1 patch ahead");
+    assert.equal(PSL.skew("1.0.0").label, "1 major ahead");
+    // Equal versions carry no pill at all, whatever the extra segments.
+    assert.equal(PSL.skew("0.20.1"), null);
+    assert.equal(PSL.skew(null), null);
 });
 
 test("finding types read as labels, and an unknown one reads as itself", () => {
-  // The engine's twelve, worded as its own dashboard words them.
-  assert.equal(PSL.FINDING_TYPE_LABEL.n_plus_one_sql, "N+1 SQL");
-  assert.equal(PSL.FINDING_TYPE_LABEL.excessive_fanout, "Excessive fanout");
-  assert.equal(PSL.FINDING_TYPE_LABEL.serialized_calls, "Serialized calls");
-  assert.equal(Object.keys(PSL.FINDING_TYPE_LABEL).length, 12);
-  // The Hub stores whatever string it is sent, so a type outside the twelve
-  // reaches the screen. It has to render as itself, never as undefined.
-  assert.equal(PSL.FINDING_TYPE_LABEL.blocking_wait, undefined);
-  assert.equal(PSL.FINDING_TYPE_LABEL.blocking_wait || "blocking_wait", "blocking_wait");
+    // The engine's twelve, worded as its own dashboard words them.
+    assert.equal(PSL.FINDING_TYPE_LABEL.n_plus_one_sql, "N+1 SQL");
+    assert.equal(PSL.FINDING_TYPE_LABEL.excessive_fanout, "Excessive fanout");
+    assert.equal(PSL.FINDING_TYPE_LABEL.serialized_calls, "Serialized calls");
+    assert.equal(Object.keys(PSL.FINDING_TYPE_LABEL).length, 12);
+    // The Hub stores whatever string it is sent, so a type outside the twelve
+    // reaches the screen. It has to render as itself, never as undefined.
+    assert.equal(PSL.FINDING_TYPE_LABEL.blocking_wait, undefined);
+    assert.equal(PSL.FINDING_TYPE_LABEL.blocking_wait || "blocking_wait", "blocking_wait");
+});
+
+// ------------------------------------------------------------ the ack page
+
+const SIGNATURE = "n_plus_one_sql:shop-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31";
+
+test("the query a Grafana link carries becomes the ack route", () => {
+    assert.equal(PSL.ackEntryHash("?ack=" + encodeURIComponent(SIGNATURE)),
+        "#/ack?signature=" + encodeURIComponent(SIGNATURE));
+    // Whatever else a dashboard appends is not the launcher's to keep.
+    assert.equal(PSL.ackEntryHash("?orgId=1&ack=abc"), "#/ack?signature=abc");
+    assert.equal(PSL.ackEntryHash("?from=1&to=2"), null, "no ack parameter");
+    assert.equal(PSL.ackEntryHash(""), null);
+    assert.equal(PSL.ackEntryHash(null), null);
+});
+
+test("a signature with slashes, colons and percent signs survives both hops", () => {
+    const odd = "slow_http:edge/gw:GET /a%2Fb?x=1&y=2#frag:100%";
+    const hash = PSL.ackEntryHash("?ack=" + encodeURIComponent(odd));
+    assert.deepEqual(PSL.readAckRoute(hash), {signature: odd, sourceId: null});
+});
+
+test("an ack link with an empty value still lands on the ack page, which says so", () => {
+    // Null here would drop the reader on New analysis with nothing explaining it.
+    assert.equal(PSL.ackEntryHash("?ack="), "#/ack?signature=");
+    assert.equal(PSL.readAckRoute("#/ack?signature="), null);
+});
+
+test("the ack route carries a signature and an optional source", () => {
+    assert.equal(PSL.ackRouteHash("a/b:c", "prod&x"), "#/ack?signature=a%2Fb%3Ac&source_id=prod%26x");
+    assert.deepEqual(PSL.readAckRoute("#/ack?signature=a%2Fb%3Ac&source_id=prod%26x"),
+        {signature: "a/b:c", sourceId: "prod&x"});
+    assert.deepEqual(PSL.readAckRoute(PSL.ackRouteHash(SIGNATURE, "production-a")),
+        {signature: SIGNATURE, sourceId: "production-a"});
+    assert.deepEqual(PSL.readAckRoute(PSL.ackRouteHash(SIGNATURE, null)), {signature: SIGNATURE, sourceId: null});
+});
+
+test("an ack route the page cannot act on reads as null", () => {
+    assert.equal(PSL.readAckRoute("#/new?signature=abc"), null, "another route");
+    assert.equal(PSL.readAckRoute("#/ack"), null, "no parameters");
+    assert.equal(PSL.readAckRoute("#/ack?source_id=production-a"), null, "missing signature");
+    // The Hub reads a blank signature as no filter at all, and would answer with
+    // whichever finding comes first.
+    assert.equal(PSL.readAckRoute("#/ack?signature=%20"), null, "blank signature");
+    assert.notEqual(PSL.readAckRoute("#/ack?signature=" + "a".repeat(1024)), null);
+    assert.equal(PSL.readAckRoute("#/ack?signature=" + "a".repeat(1025)), null, "too long");
+    assert.equal(PSL.readAckRoute("#/ack?signature=a%0Ab"), null, "control character");
+    assert.equal(PSL.readAckRoute("#/ack?signature=a%C2%85b"), null, "C1 control character");
+    assert.equal(PSL.readAckRoute(""), null);
+    assert.equal(PSL.readAckRoute(null), null);
+});
+
+const ackSources = [
+    {id: "production-a", name: "Production A", environment: "production", ack_relay: true, acks_state: "ok"},
+    {id: "staging-a", name: "Staging A", environment: "staging", ack_relay: true, acks_state: "ok"},
+    {id: "ci", name: "CI", environment: "ci", ack_relay: true, acks_state: "truncated"},
+    {id: "edge", name: "Edge", environment: "production", ack_relay: false, acks_state: "ok"},
+    {id: "old", name: "Old", environment: "staging", ack_relay: true, acks_state: "absent"},
+    {id: "fresh", name: "Fresh", environment: "staging", ack_relay: true, acks_state: null}
+];
+const daemonAck = {source_id: "staging-a", source: "daemon", by: "robin", reason: "known", at: "2026-09-20T10:00:00Z"};
+const tomlAck = {source_id: "ci", source: "toml", by: "ci", at: "2026-09-01T00:00:00Z"};
+
+function carriedBy(ids, acks) {
+    return {
+        sources: ids.map((id) => ({id, name: "carried " + id, environment: "carried"})),
+        acks
+    };
+}
+
+test("a relaying source with no known ack offers the ack", () => {
+    assert.deepEqual(PSL.ackRows(carriedBy(["production-a"]), ackSources, null), [{
+        id: "production-a", name: "Production A", environment: "production",
+        relay: true, ack: null, action: "ack", checked: true, note: null
+    }]);
+    // A truncated listing is still a listing: the Hub mirrors acks from it.
+    assert.equal(PSL.ackRows(carriedBy(["ci"]), ackSources, null)[0].action, "ack");
+    assert.deepEqual(PSL.ackRows({}, ackSources, null), []);
+});
+
+test("a runtime ack can be revoked, a CI baseline ack cannot", () => {
+    const rows = PSL.ackRows(carriedBy(["staging-a", "ci"], [daemonAck, tomlAck]), ackSources, null);
+    assert.equal(rows[0].action, "revoke");
+    assert.equal(rows[0].ack, daemonAck);
+    assert.equal(rows[0].checked, true);
+    assert.equal(rows[0].note, null);
+    assert.equal(rows[1].action, "none");
+    assert.equal(rows[1].ack, tomlAck);
+    assert.equal(rows[1].checked, false);
+    assert.match(rows[1].note, /CI baseline/);
+    assert.match(rows[1].note, /pull request/);
+});
+
+test("a source that cannot be acted on says why", () => {
+    const rows = PSL.ackRows(carriedBy(["edge", "old", "fresh"]), ackSources, null);
+    assert.deepEqual(rows.map((row) => row.action), ["none", "none", "none"]);
+    assert.deepEqual(rows.map((row) => row.checked), [false, false, false]);
+    assert.equal(rows[0].relay, false);
+    assert.match(rows[0].note, /ack credential/);
+    // No listing proves no ack: the finding may be acked there already, by
+    // the baseline too, so neither action is offered.
+    assert.match(rows[1].note, /unknown/);
+    assert.match(rows[1].note, /absent/);
+    assert.match(rows[2].note, /never read/);
+});
+
+test("a source the link names is the only one checked", () => {
+    const finding = carriedBy(["production-a", "staging-a", "ci"], [tomlAck]);
+    assert.deepEqual(PSL.ackRows(finding, ackSources, "staging-a").map((row) => row.checked), [false, true, false]);
+    assert.deepEqual(PSL.ackRows(finding, ackSources, null).map((row) => row.checked), [true, true, false]);
+    // Naming a row nothing can be done on checks nothing.
+    assert.deepEqual(PSL.ackRows(finding, ackSources, "ci").map((row) => row.checked), [false, false, false]);
+});
+
+test("a source the finding lists and the Hub no longer configures keeps its name", () => {
+    const rows = PSL.ackRows(carriedBy(["gone"]), ackSources, null);
+    assert.deepEqual(rows, [{
+        id: "gone", name: "carried gone", environment: "carried",
+        relay: false, ack: null, action: "none", checked: false, note: rows[0].note
+    }]);
+    // Not the credential note: adding one would mend nothing, the source is gone.
+    assert.match(rows[0].note, /no longer configures/);
+    assert.doesNotMatch(rows[0].note, /credential/);
+    assert.equal(PSL.ackRows(carriedBy(["gone"]), null, null)[0].action, "none");
+});
+
+const ACK_NOW = Date.parse("2026-09-20T15:00:00Z");
+
+function ackOn(id) {
+    return {...daemonAck, source_id: id};
+}
+
+test("a tick only speaks for the action it was made on", () => {
+    const row = PSL.ackRows(carriedBy(["staging-a"], [daemonAck]), ackSources, null)[0];
+    assert.equal(PSL.ackChecked(row, {"staging-a": {action: "revoke", checked: false}}), false);
+    assert.equal(PSL.ackChecked(row, {"staging-a": {action: "ack", checked: false}}), true, "made before the ack");
+    assert.equal(PSL.ackChecked(row, {}), true);
+    assert.equal(PSL.ackChecked(row, null), true);
+    // A tick cannot check a row nothing can be done on.
+    const dead = PSL.ackRows(carriedBy(["edge"]), ackSources, null)[0];
+    assert.equal(PSL.ackChecked(dead, {edge: {action: "none", checked: true}}), false);
+});
+
+test("a source the reader unticked is not written to after the rows are read again", () => {
+    const ids = ["production-a", "staging-a", "ci"];
+    const ticks = {"staging-a": {action: "ack", checked: false}};
+    const before = PSL.ackPlan(PSL.ackRows(carriedBy(ids), ackSources, null), ticks, "known", "", ACK_NOW);
+    assert.deepEqual(before.ack.map((row) => row.id), ["production-a", "ci"]);
+    // That submit acked two sources, which now read Revoke. A second Acknowledge
+    // must not reach the one the reader left out.
+    const acked = carriedBy(ids, [ackOn("production-a"), ackOn("ci")]);
+    const after = PSL.ackPlan(PSL.ackRows(acked, ackSources, null), ticks, "known", "", ACK_NOW);
+    assert.deepEqual(after.ack, []);
+    assert.deepEqual(after.revoke.map((row) => row.id), ["production-a", "ci"]);
+    assert.equal(after.blocker, "No checked source can take an ack.");
+    assert.equal(after.blocked, false, "Revoke is ready");
+});
+
+test("Acknowledge waits for a checked source, a reason and an expiry the Hub would take", () => {
+    const rows = PSL.ackRows(carriedBy(["production-a", "staging-a"]), ackSources, null);
+    assert.deepEqual(PSL.ackPlan(rows, {}, "  ", "", ACK_NOW), {
+        ack: rows, revoke: [], expiresAt: null,
+        blocker: "An ack needs a reason.", blocked: true, sentence: "An ack needs a reason."
+    });
+    const past = PSL.ackPlan(rows, {}, "known", "2026-09-19", ACK_NOW);
+    assert.equal(past.blocker, "The expiry is in the past.");
+    assert.equal(past.sentence, past.blocker);
+    assert.equal(past.blocked, true);
+    assert.deepEqual(PSL.ackPlan(rows, {}, "known", "2026-09-30", ACK_NOW), {
+        ack: rows, revoke: [], expiresAt: "2026-09-30T23:59:59Z", blocker: null, blocked: false,
+        sentence: "Acknowledge writes to 2 sources, until 2026-09-30T23:59:59Z."
+    });
+    const one = PSL.ackPlan(rows, {"staging-a": {action: "ack", checked: false}}, "known", "", ACK_NOW);
+    assert.equal(one.sentence, "Acknowledge writes to 1 source, with no expiry.");
+    const none = PSL.ackPlan(PSL.ackRows(carriedBy(["edge"]), ackSources, null), {}, "known", "", ACK_NOW);
+    assert.equal(none.blocker, "No checked source can take an ack.");
+    assert.equal(none.sentence, "No checked source can take an ack or a revoke.");
+    assert.equal(none.blocked, true);
+});
+
+test("the sentence speaks for Revoke too, and reads as a refusal only when both buttons are dead", () => {
+    const mixed = PSL.ackRows(carriedBy(["production-a", "staging-a"], [daemonAck]), ackSources, null);
+    const waiting = PSL.ackPlan(mixed, {}, "", "", ACK_NOW);
+    assert.equal(waiting.sentence, "An ack needs a reason. Revoke removes the ack on 1 source.");
+    assert.equal(waiting.blocked, false);
+    assert.equal(PSL.ackPlan(mixed, {}, "known", "", ACK_NOW).sentence,
+        "Acknowledge writes to 1 source, with no expiry. Revoke removes the ack on 1 source.");
+    // A revoke needs no reason.
+    const revocable = PSL.ackRows(carriedBy(["staging-a"], [daemonAck]), ackSources, null);
+    const revoke = PSL.ackPlan(revocable, {}, "", "", ACK_NOW);
+    assert.equal(revoke.sentence, "Revoke removes the ack on 1 source.");
+    assert.equal(revoke.blocked, false);
+    assert.deepEqual(revoke.revoke, revocable);
+});
+
+test("an ack body carries a trimmed reason, and an expiry only when one is set", () => {
+    assert.deepEqual(PSL.ackBody("ack", SIGNATURE, "  known flake ", null),
+        {signature: SIGNATURE, reason: "known flake"});
+    assert.deepEqual(PSL.ackBody("ack", SIGNATURE, "known", "2026-09-30T23:59:59Z"),
+        {signature: SIGNATURE, reason: "known", expires_at: "2026-09-30T23:59:59Z"});
+    // A revoke names the finding and nothing else.
+    assert.deepEqual(PSL.ackBody("revoke", SIGNATURE, "known", "2026-09-30T23:59:59Z"), {signature: SIGNATURE});
+});
+
+test("an expiry date becomes the end of that day in UTC", () => {
+    const now = Date.parse("2026-09-20T15:00:00Z");
+    assert.equal(PSL.ackExpiry("2026-09-30", now), "2026-09-30T23:59:59Z");
+    // Today still has hours left in it.
+    assert.equal(PSL.ackExpiry("2026-09-20", now), "2026-09-20T23:59:59Z");
+    assert.equal(PSL.ackExpiry("", now), null, "no date is a permanent ack");
+    assert.equal(PSL.ackExpiry(null, now), null);
+});
+
+test("an expiry the Hub would refuse is rejected before it is sent", () => {
+    const now = Date.parse("2026-09-20T15:00:00Z");
+    assert.throws(() => PSL.ackExpiry("2026-09-19", now), /past/);
+    // West of Greenwich the local day can already be over in UTC.
+    assert.throws(() => PSL.ackExpiry("2026-09-20", Date.parse("2026-09-21T02:00:00Z")), /past/);
+    // A date input never sends these, a hand-written caller could.
+    assert.throws(() => PSL.ackExpiry("2026-02-31", now), RangeError);
+    assert.throws(() => PSL.ackExpiry("tomorrow", now), RangeError);
+});
+
+test("each relay outcome reads as one line, and never as a bare status", () => {
+    assert.deepEqual(PSL.ackSummary([
+        {name: "Production A", action: "ack", status: 204},
+        {name: "Staging A", action: "revoke", status: 204},
+        {name: "Edge", action: "ack", status: 409, detail: "Already acked at the daemon or by its CI baseline."},
+        {name: "Old", action: "ack", status: 503},
+        {name: "Fresh", action: "ack", status: 413},
+        {name: "Lost", action: "revoke", status: 0},
+        {name: "Odd", action: "ack", status: 418}
+    ]), [
+        {ok: true, text: "Production A: acknowledged."},
+        {ok: true, text: "Staging A: ack revoked."},
+        {ok: false, text: "Edge: Already acked at the daemon or by its CI baseline."},
+        {ok: false, text: "Old: The Hub is already relaying two acks. Try again in a moment."},
+        {ok: false, text: "Fresh: The request is larger than the Hub accepts."},
+        {ok: false, text: "Lost: The Hub did not answer."},
+        {ok: false, text: "Odd: The Hub refused the request with status 418."}
+    ]);
+    assert.deepEqual(PSL.ackSummary([]), []);
 });

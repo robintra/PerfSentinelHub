@@ -5,7 +5,8 @@ Plain HTML, CSS and JavaScript. No framework, no build step, no network fetch: t
 typefaces are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
 
 Five screens: start an analysis, follow one run, list recent runs, read fleet health, read
-the incidents the daemons recorded.
+the incidents the daemons recorded. A sixth has no tab and is reached by link only, see
+[The ack page](#the-ack-page).
 
 ## The form follows the source
 
@@ -171,12 +172,67 @@ window, which opens New analysis on the incident's service and window, described
 form follows the source. The source stays the operator's choice, because a daemon takes no
 window and the incident's own daemon would run its in-memory snapshot rather than the
 window. The link keeps its parameters, so it can be shared or reloaded, and the New tab
-itself carries none.
+itself carries none. Each finding of the unfolded row ends with an Ack link, which opens
+[The ack page](#the-ack-page) on that finding with the incident's daemon checked.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
   <img alt="New analysis opened on an incident's window, under the banner naming it" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
 </picture>
+
+## The ack page
+
+One screen acknowledges or revokes a single finding, and no tab leads to it. Acks are made
+from the Grafana findings dashboard, the HTML report, the TUI or the CLI, and this page is
+where a Grafana link lands.
+
+Three ways in:
+
+- `/?ack=<signature>`, the signature percent-encoded. A query and not a hash, because a
+  hash is lost when the identity provider asks for a password on the way in. On load the
+  launcher turns it into the route below, and the query leaves the address bar.
+- `#/ack?signature=<signature>&source_id=<id>`, the route itself. `source_id` is optional
+  and only decides which rows start checked.
+- The Ack link on each finding of an unfolded incident, which names the incident's daemon.
+
+The page reads the finding from `/api/findings` by its exact signature and shows its type,
+severity, service, endpoint, operation template, first and last seen, and status. A link
+with no signature, or with one past the Hub's bounds, says that it is incomplete, and a
+signature the Hub holds no finding for says so. Neither falls back to another screen.
+
+Below it sits one form: a required reason, an optional expiry, and one row per source that
+carries the finding. The expiry is a day, sent as the last second of that day in UTC, and
+an empty one is a permanent ack. A row starts checked when something can be done on it, and
+when the link names a source, that row alone does.
+
+| The source                                        | Its row offers                           |
+|---------------------------------------------------|------------------------------------------|
+| relays, and the Hub mirrors no ack from it        | Acknowledge                              |
+| relays, and holds an ack taken at runtime         | Revoke, beside who took it, when and why |
+| relays, and holds an ack of the CI baseline       | nothing                                  |
+| relays, and its last ack read was not conclusive  | nothing, and the row names `acks_state`  |
+| has no ack credential, or is no longer configured | nothing, and the row says which          |
+
+A source relays when `ack_relay` is true on `/api/sources`. An ack read is conclusive at
+`ok` and `truncated`, the two states the Hub mirrors acks from. Anywhere else the Hub
+cannot tell an unacknowledged finding from one its baseline already covers, which is the
+case of every daemon below 0.24.0, so the row offers neither action.
+
+A baseline ack cannot be revoked here because it cannot be revoked anywhere at runtime: the
+daemon's own API answers `404` to it, and the baseline changes by editing its file under
+review, through a pull request. See [LIMITATIONS.md](LIMITATIONS.md).
+
+One submit acknowledges on every checked source, because acks live in each daemon's own
+store and nothing fans one out. The launcher sends one relay request per source, one after
+the other, then prints one line per source, with the Hub's own reason on a refusal, and
+reads the finding again so the rows show the new state. One source refusing costs the
+others nothing. A row the reader unticked stays unticked through that read, so a second
+submit never reaches a source they left out.
+
+Who may use it is the relay's rule, not the page's: a `Hub:Auth` session, or the identity
+a proxy sets once `Hub:AckRelay:TrustIdentityHeader` is on. Anybody else gets the relay's
+`403` on submit, and the ack is taken in the name the Hub knows the caller by. See
+[API.md](API.md#ack-relay) and [AUTHENTICATION.md](AUTHENTICATION.md#how-it-works).
 
 ## Safety
 

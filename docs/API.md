@@ -43,7 +43,9 @@ not confuse with the epoch. `producer_version` is null for a trace backend, beca
 backend stores traces and detects nothing.
 
 On `/api/findings`, `include_acked` defaults to `true`. Setting it to `false` hides
-envelopes carrying a non-null `acknowledged_by`.
+envelopes carrying a non-null `acknowledged_by`. A `service`, `finding_type`, `severity`
+or `status` given empty or as whitespace only reads as absent, which is what a dashboard
+sends for its "All" choice.
 
 ### The daemon view
 
@@ -131,9 +133,11 @@ pages with `offset` and `limit`. `service` and `namespace` are free strings matc
 exactly, and an unknown one is an empty page. `kind`, `environment` and `source_id` are
 closed sets, the daemon's five kinds and the Hub's configured sources, and a value outside
 them is a `400` rather than an empty page, because a typo must not read as "no incidents".
-`environment` resolves to every source configured with it. Given together with
-`source_id` the two intersect, so a source outside the named environment lists nothing,
-the answer a pair of filters that exclude each other has.
+Any of these five filters given empty or as whitespace only reads as absent, closed sets
+included, so it is neither a `400` nor an empty page. `environment` resolves to every
+source configured with it. Given together with `source_id` the two intersect, so a source
+outside the named environment lists nothing, the answer a pair of filters that exclude
+each other has.
 
 `GET /api/incidents/{id}` returns one incident whole, findings included, the richest copy
 when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms` fired

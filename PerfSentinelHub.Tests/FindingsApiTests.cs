@@ -63,6 +63,23 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // Grafana sends a single space for its All choice, and a query string spells it %20 or +.
+    [Theory]
+    [InlineData("service")]
+    [InlineData("finding_type")]
+    [InlineData("severity")]
+    [InlineData("status")]
+    public async Task A_blank_filter_reads_as_absent(string name)
+    {
+        await SeedAsync();
+        var unfiltered = await BodyAsync("/api/findings");
+
+        Assert.NotEqual("[]", unfiltered);
+        Assert.Equal(unfiltered, await BodyAsync($"/api/findings?{name}="));
+        Assert.Equal(unfiltered, await BodyAsync($"/api/findings?{name}=%20"));
+        Assert.Equal(unfiltered, await BodyAsync($"/api/findings?{name}=+"));
+    }
+
     [Fact]
     public async Task No_matching_findings_returns_an_empty_array()
     {
@@ -119,12 +136,16 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             envelope.GetProperty("finding").GetProperty("trace_id").GetString());
     }
 
-    private async Task<int> CountAsync(string path)
+    private async Task<string> BodyAsync(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
-            TestContext.Current.CancellationToken));
+        return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task<int> CountAsync(string path)
+    {
+        using var document = JsonDocument.Parse(await BodyAsync(path));
         return document.RootElement.GetArrayLength();
     }
 

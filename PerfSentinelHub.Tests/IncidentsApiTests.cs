@@ -116,6 +116,24 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.Empty(rows);
     }
 
+    // Grafana sends a single space for its All choice, and a query string spells it %20 or +.
+    [Theory]
+    [InlineData("kind")]
+    [InlineData("environment")]
+    [InlineData("source_id")]
+    [InlineData("service")]
+    [InlineData("namespace")]
+    public async Task A_blank_filter_reads_as_absent(string name)
+    {
+        await SeedAsync();
+        var unfiltered = (await ListAsync("/api/incidents")).GetRawText();
+
+        Assert.NotEqual("[]", unfiltered);
+        Assert.Equal(unfiltered, (await ListAsync($"/api/incidents?{name}=")).GetRawText());
+        Assert.Equal(unfiltered, (await ListAsync($"/api/incidents?{name}=%20")).GetRawText());
+        Assert.Equal(unfiltered, (await ListAsync($"/api/incidents?{name}=+")).GetRawText());
+    }
+
     [Theory]
     [InlineData("/api/incidents?limit=0")]
     [InlineData("/api/incidents?limit=10001")]

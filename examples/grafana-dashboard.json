@@ -491,18 +491,20 @@
           "unit": "none",
           "custom": {
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": false
-          }
+          },
+          "decimals": 0,
+          "min": 0
         },
         "overrides": []
       }
     },
     {
-      "title": "Active findings by severity",
-      "description": "The active part of the panel beside it, split by severity. Active means a daemon of that environment saw the finding within Hub:ResolutionGrace, 7 days by default. A severity outside the engine's three counts under other instead of opening a series of its own. An environment with no active finding draws no line at all, which is the good case rather than a gap.",
+      "title": "Active findings by severity, $environment",
+      "description": "The active findings of the environment chosen above, split by severity, in the colors the engine's findings dashboard gives them. Active means a daemon of that environment saw the finding within Hub:ResolutionGrace, 7 days by default. A severity outside the engine's three counts under other instead of opening a series of its own. A severity with no active finding draws no line at all, which is the good case rather than a gap.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -516,9 +518,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (environment, severity) (perf_sentinel_hub_findings{job=~\"$job\", status=\"active\"})",
+          "expr": "sum by (severity) (perf_sentinel_hub_findings{job=~\"$job\", environment=\"$environment\", status=\"active\"})",
           "refId": "A",
-          "legendFormat": "{{environment}} {{severity}}"
+          "legendFormat": "{{severity}}"
         }
       ],
       "fieldConfig": {
@@ -526,13 +528,76 @@
           "unit": "none",
           "custom": {
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": false
-          }
+          },
+          "decimals": 0,
+          "min": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "critical"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "warning"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "other"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
       }
     }
   ],
@@ -571,6 +636,26 @@
         "includeAll": false,
         "multi": false,
         "current": {}
+      },
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(perf_sentinel_hub_findings{job=~\"$job\"}, environment)",
+        "query": {
+          "query": "label_values(perf_sentinel_hub_findings{job=~\"$job\"}, environment)",
+          "refId": "environment"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {},
+        "description": "Environment charted by Active findings by severity, one of the environments the Hub's sources declare. One at a time, because a finding seen in two environments counts in each and a sum across them would not be a count of findings."
       }
     ]
   },

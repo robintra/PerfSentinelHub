@@ -326,7 +326,8 @@ The Hub judges a request in this order, and a request it refuses never reaches t
 2. **The source.** An unknown id, a trace backend and a daemon with no ack credential all
    answer the same `404`. `ack_relay` on `/api/sources` says which sources relay.
 3. **Where the request comes from.** A `Sec-Fetch-Site` header that is present and is not
-   `same-origin` is a `403`, and a content type other than `application/json` is a `415`.
+   `same-origin` is a `403`, and a content type the framework does not read as JSON
+   (`application/json` and the `+json` suffixed types) is a `415`.
    The Hub has no antiforgery token and no CORS policy, so these two are its defence
    against a page on another origin: a browser sets the first by itself, and the second
    cannot be sent across origins without a preflight nothing here answers.

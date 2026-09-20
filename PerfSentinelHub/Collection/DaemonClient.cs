@@ -170,9 +170,10 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
 
     /// <summary>
     ///     The daemon's active acknowledgments, its CI baseline included, in one
-    ///     unpaged listing. Null when the route is absent or the ack store is
-    ///     disabled (503), as for the incidents. A 401 is its own exception for
-    ///     the same reason too. A daemon before 0.24.0 ignores the parameter and
+    ///     unpaged listing. Null when the route is absent (404) or unavailable
+    ///     (503), as for the incidents, though a disabled ack store answers an
+    ///     empty listing rather than either. A 401 is its own exception for the
+    ///     same reason too. A daemon before 0.24.0 ignores the parameter and
     ///     lists its runtime acks alone, which the caller must not ask for.
     /// </summary>
     public async Task<byte[]?> FetchAcksAsync(

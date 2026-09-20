@@ -352,7 +352,8 @@ daemon :
    d'acquittement répondent tous le même `404`. `ack_relay` sur `/api/sources` dit quelles
    sources relaient.
 3. **D'où vient la requête.** Un en-tête `Sec-Fetch-Site` présent et différent de
-   `same-origin` est un `403`, et un type de contenu autre que `application/json` est un
+   `same-origin` est un `403`, et un type de contenu que le cadriciel ne lit pas comme du
+   JSON (`application/json` et les types suffixés `+json`) est un
    `415`. Le Hub n'a ni jeton antiforgery ni politique CORS, ces deux contrôles sont donc sa
    défense contre une page d'une autre origine : un navigateur pose le premier de lui-même,
    et le second ne traverse pas les origines sans un preflight auquel rien ici ne répond.

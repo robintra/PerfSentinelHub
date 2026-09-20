@@ -42,7 +42,15 @@ public sealed record FindingSourceObservation(
     string Environment,
     string ProducerVersion,
     long LastSeenMs,
-    long? UnreachableSinceMs);
+    long? UnreachableSinceMs,
+    // The active ack this source's daemon holds on the finding, as last mirrored.
+    MirroredAck? Ack = null);
+
+/// <summary>
+///     One row of source_acks as a read serves it. `Origin` is `daemon` or
+///     `toml`, and the two dates are the daemon's text, relayed as they came.
+/// </summary>
+public sealed record MirroredAck(string Origin, string By, string? Reason, string At, string? ExpiresAt);
 
 /// <summary>
 ///     Last known collection state for one configured source. Every field is

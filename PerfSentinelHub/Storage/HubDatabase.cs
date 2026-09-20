@@ -32,7 +32,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // ponytail: every row of the scope is read and sorted before any filter or
     // LIMIT, so a read costs the scope and not the page. service and
     // finding_type are fleet-wide and could move into `scope` if it ever hurts.
-    // severity and the ack filter cannot, they judge the scoped envelope.
+    // severity cannot, it judges the scoped envelope, nor can the ack filter,
+    // which judges every source of the scope.
     private const string ScopedFindings = $"""
                                            scope AS (
                                              SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
@@ -60,6 +61,20 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                              JOIN findings ON findings.signature = scope.signature
                                            )
                                            """;
+
+    // An ack with no expiry is permanent, and one expiring now has expired.
+    // The read's now is the one its status is judged at.
+    private const string ActiveAck = "(sa.expires_at_ms IS NULL OR sa.expires_at_ms > $status_now)";
+
+    // The active ack each listed source holds, from a mirror whose last read
+    // listed it. A failed read leaves its rows behind and nothing says they
+    // still hold. One row per source at most, so the join fans nothing out.
+    private const string MirroredAcks = $"""
+                                         LEFT JOIN ack_reads AS ar ON ar.source_id = fs.source_id
+                                           AND ar.state IN ('{AckReadStates.Ok}', '{AckReadStates.Truncated}')
+                                         LEFT JOIN source_acks AS sa ON sa.source_id = ar.source_id
+                                           AND sa.signature = f.signature AND {ActiveAck}
+                                         """;
 
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
 
@@ -551,13 +566,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
-        if (!query.IncludeAcked)
-            where.Append(" AND json_extract(finding_json, '$.acknowledged_by') IS NULL");
+        AddFilter(where, parameters, "signature", "$signature", query.Signature);
         var windowed = AddWindow(parameters, query);
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = FindingsSql(where, query.SourceIds is not null, windowed);
+        command.CommandText = FindingsSql(where, query, windowed);
         foreach (var (name, value) in parameters)
             command.Parameters.AddWithValue(name, value);
         command.Parameters.AddWithValue(
@@ -599,29 +613,45 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                     reader.GetString(7),
                     reader.GetString(8),
                     reader.GetInt64(9),
-                    reader.IsDBNull(10) ? null : reader.GetInt64(10)));
+                    reader.IsDBNull(10) ? null : reader.GetInt64(10),
+                    ReadAck(reader)));
         }
 
         return rows;
     }
 
+    // The last five columns of the findings read, null on a source holding no active ack.
+    private static MirroredAck? ReadAck(SqliteDataReader reader)
+    {
+        return reader.IsDBNull(14)
+            ? null
+            : new MirroredAck(
+                reader.GetString(14),
+                reader.GetString(15),
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                reader.GetString(17),
+                reader.IsDBNull(18) ? null : reader.GetString(18));
+    }
+
     // The status is computed before LIMIT so a status filter fills its page
     // instead of returning whatever survived a post-filter, and a scope is
-    // resolved before it for the same reason. A read of the whole fleet keeps
-    // the statement it always had. Every interpolated fragment is assembled
-    // from private constants. External values remain bound parameters.
-    private static string FindingsSql(StringBuilder where, bool scoped, bool windowed)
+    // resolved before it for the same reason, as are the window and the ack
+    // filter. A read of the whole fleet keeps its CTE free of any scope. Every
+    // interpolated fragment is assembled from private constants. External
+    // values remain bound parameters.
+    private static string FindingsSql(StringBuilder where, FindingQuery query, bool windowed)
     {
-        var (with, row, heartbeatScope, sourceScope) = scoped
+        var (with, row, heartbeatScope, sourceScope) = query.SourceIds is not null
             ? ($"WITH {ScopedFindings},", "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}")
             : ("WITH", "findings", "", "");
         var window = windowed ? InWindow(row) : "";
+        var unacked = query.IncludeAcked ? "" : Unacked(row);
 #pragma warning disable S2077
         return $"""
                 {with} statused AS (
                   SELECT {row}.*, {StatusCase(row, heartbeatScope)} AS status
                   FROM {row}
-                  {where}{window}
+                  {where}{window}{unacked}
                 ),
                 selected AS (
                   SELECT * FROM statused
@@ -633,11 +663,13 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                   f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
                   fs.source_id, fs.source_name, fs.environment, fs.producer_version,
                   fs.last_seen_ms, ss.unreachable_since_ms, f.status,
-                  fl.origin_first_seen_ms, fl.depth
+                  fl.origin_first_seen_ms, fl.depth,
+                  sa.origin, sa.acked_by, sa.reason, sa.acked_at, sa.expires_at
                 FROM selected AS f
                 LEFT JOIN finding_sources AS fs ON fs.signature = f.signature{sourceScope}
                 LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
                 LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
+                {MirroredAcks}
                 ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
                 """;
 #pragma warning restore S2077
@@ -715,6 +747,36 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                AND o.day BETWEEN $from_day AND $to_day)
                            OR (p.first_seen_ms <= $to_ms
                                AND COALESCE(p.first_observed_day * 86400000, p.last_seen_ms) >= $from_ms)))
+                """;
+    }
+
+    // include_acked=false, judged per source by whichever view was read last.
+    // The mirror decides for a source whose last ack read was whole and is no
+    // older than its copy of the finding, which is how a relay or a revoke
+    // shows at once. Its envelope decides otherwise, so a source never read, a
+    // failed read and a truncated listing keep what the envelope alone said.
+    // A source row with no copy of its own reads the shared one, in a scope
+    // too, so a source is judged the same whatever scope it is read through.
+    // A finding stays listed while one source of the scope holds it un-acked.
+    private static string Unacked(string row)
+    {
+        return $"""
+                 AND EXISTS (
+                    SELECT 1 FROM finding_sources AS u
+                    LEFT JOIN ack_reads AS ur ON ur.source_id = u.source_id
+                      AND ur.state = '{AckReadStates.Ok}' AND ur.last_read_ms >= u.last_seen_ms
+                    WHERE u.signature = {row}.signature
+                      AND ($source_ids IS NULL OR u.source_id {InScope})
+                      AND CASE
+                            WHEN ur.source_id IS NULL THEN json_extract(
+                              COALESCE(u.finding_json, (
+                                SELECT shared.finding_json FROM findings AS shared
+                                WHERE shared.signature = u.signature)), '$.acknowledged_by') IS NULL
+                            ELSE NOT EXISTS (
+                              SELECT 1 FROM source_acks AS sa
+                              WHERE sa.source_id = u.source_id AND sa.signature = u.signature
+                                AND {ActiveAck})
+                          END)
                 """;
     }
 

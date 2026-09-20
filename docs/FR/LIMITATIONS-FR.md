@@ -50,6 +50,20 @@ lui-même peut rester, et le premier jour relevé ne bouge pas. Une fenêtre qui
 tombe tout entière sur des jours retirés, après ce premier jour, ne liste donc
 rien, même pour un finding présent tout du long.
 
+Le Hub reflète les acquittements actifs de chaque daemon et n'en est jamais le
+propriétaire. Le miroir a la fraîcheur du dernier poll de ce daemon, sauf si un
+acquittement relayé par le Hub l'a rafraîchi depuis, donc un acquittement pris
+ou révoqué directement sur le daemon apparaît au poll suivant. Un daemon
+antérieur à 0.24.0 n'est jamais interrogé, parce qu'il ne sait pas lister sa
+baseline de CI, et ses findings sont jugés sur leur seule enveloppe, comme
+avant.
+
+Un daemon qui liste 1 000 acquittements ou plus a atteint son propre plafond, et
+le Hub consigne cette lecture `truncated`. Les acquittements qu'il a listés
+apparaissent dans `acks`, mais une liste dont la fin manque ne peut pas dire
+qu'un finding n'est pas acquitté, donc elle ne décide pas de
+`include_acked=false` et cette source retombe sur l'enveloppe.
+
 La joignabilité est à sens unique. Un daemon qui pousse avec succès prouve
 qu'il peut joindre le Hub, pas que le Hub peut le joindre, et seul un poll
 réussi efface `unreachable_since_ms`. Une source dont le push arrive alors que
@@ -101,6 +115,11 @@ Un seul endpoint réclame une preuve, `POST /api/import/findings`, dont la
 la liste que pour la requête qui lance un run, `/reports/`, `/metrics`, et le
 lanceur lui-même. Qui joint le port lit tous les findings de tous les tenants,
 modèles de requêtes SQL et noms d'endpoints compris.
+
+Le `by` et le `reason` d'un acquittement reflété sont lisibles sur la route de
+lecture ouverte, `/api/findings`, qui reste ouverte aux machines quand
+`Hub:Auth` est activé. C'est qui a acquitté un finding et pourquoi, dans les
+mots saisis sur le daemon, comme l'était déjà `acknowledged_by`.
 
 L'en-tête d'identité attribue, il n'authentifie pas.
 `Hub:Analysis:IdentityHeader` est enregistré sur un run comme une déclaration

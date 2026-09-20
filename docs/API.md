@@ -28,7 +28,7 @@ the Hub's route to the daemon, which a push does not exercise.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
-| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                        |
+| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                           |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
@@ -42,11 +42,21 @@ On `/api/sources`, timestamps are null for a source never observed, which a read
 not confuse with the epoch. `producer_version` is null for a trace backend, because a
 backend stores traces and detects nothing.
 
-On `/api/findings`, `include_acked` defaults to `true`. Setting it to `false` hides
-envelopes carrying a non-null `acknowledged_by`. A `service`, `finding_type`, `severity`
-or `status` given empty or as whitespace only reads as absent, which is what a dashboard
-sends for its "All" choice. The rows come in a total order, `last_seen` descending then
-`signature`, and `offset` skips that many of them before `limit` applies. `offset` runs
+`acks_state` and `acks_read_ms` say what the last read of a daemon's acknowledgments came to
+and when it was taken, both null when none has run. The states are those of
+`incidents_state`, where `absent` also covers a daemon below 0.24.0, which is never asked,
+plus `truncated`: the listing reached the daemon's cap of a thousand acks, so its tail may
+be missing.
+
+On `/api/findings`, `include_acked` defaults to `true`. Set to `false`, it lists a finding
+only while at least one source in scope holds it un-acknowledged, every source counting when
+the read has no scope, see
+[How `include_acked` judges a finding](#how-include_acked-judges-a-finding). `signature` is
+an exact match. The Hub bounds it and leaves its shape to the daemon: past 1,024 characters,
+or with a control character, it is a `400`. A `service`, `finding_type`, `severity`,
+`status` or `signature` given empty or as whitespace only reads as absent, which is what a
+dashboard sends for its "All" choice. The rows come in a total order, `last_seen` descending
+then `signature`, and `offset` skips that many of them before `limit` applies. `offset` runs
 from 0 to 1,000,000, and a value outside that range is a `400` rather than a clamped page.
 
 `environment` and `source_id` scope the read, to the sources of one environment or to one
@@ -198,11 +208,23 @@ copy read the same.
 ### What the Hub adds to a finding
 
 Each daemon finding is preserved as an opaque, additive JSON document. The Hub adds
-`first_seen`, `last_seen`, `max_confidence`, `status`, an optional `lineage`, and
-`sources`, one entry per source that reported the finding. An entry carries the source's
-`id`, the one `/api/sources` lists and `source_id` filters on, its `name`, `environment`
-and `producer_version`, and how fresh its observation is. IDE clients should ignore unknown
-fields, as they do with the daemon API.
+`first_seen`, `last_seen`, `max_confidence`, `status`, an optional `lineage`, `sources`, one
+entry per source that reported the finding, and an optional `acks`. An entry of `sources`
+carries the source's `id`, the one `/api/sources` lists and `source_id` filters on, its
+`name`, `environment` and `producer_version`, and how fresh its observation is. IDE clients
+should ignore unknown fields, as they do with the daemon API.
+
+`acks` lists the active acknowledgments the Hub mirrored from the daemons, one entry per
+source of `sources` whose daemon holds one on this signature, in the same order. It is
+absent when no source holds any, so a finding nobody acknowledged reads as it always has. An
+entry carries the `source_id`, the `source` of the ack, `daemon` for one taken at runtime
+and `toml` for one of the CI baseline, then `by`, `reason` when the daemon gave one, `at`,
+and `expires_at` when the ack expires. `at` and `expires_at` are the daemon's text, relayed
+as it came. An ack is active while it has no expiry or its expiry is still ahead on the
+Hub's clock, and only a source whose last ack read came to `ok` or `truncated` is listed,
+since the rows a failed read leaves behind prove nothing. The name is reserved like the
+Hub's other fields: an `acks` property a daemon sends is dropped, and the daemon's own
+`acknowledged_by` is relayed verbatim beside the Hub's list.
 
 `first_seen` comes from the daemon envelope (`first_seen_ms`), clamped to the Hub's
 observation time and to a Unix-ms sanity floor. Neither a daemon clock running ahead nor a
@@ -214,13 +236,26 @@ freshness comparisons rely on it, so it never comes from a remote clock.
 
 Read with `environment` or `source_id`, an envelope describes that scope and not the fleet.
 The daemon's document is the copy of the source in scope that saw the finding last, so
-`severity` and `include_acked=false` judge that copy, and a finding acknowledged in
-production stays listed for staging. `first_seen` is the earliest and `last_seen` the
-latest over the sources in scope, `status` is derived from that `last_seen` and from the
-heartbeats of those sources alone, and `sources` lists only them. `max_confidence` stays
+`severity` judges that copy. `first_seen` is the earliest and `last_seen` the latest over
+the sources in scope, `status` is derived from that `last_seen` and from the heartbeats of
+those sources alone, and `sources` and `acks` list only them. `max_confidence` stays
 fleet-wide on purpose, the highest confidence any source ever reported. A source's own copy
 starts at its first observation after the upgrade that records it. Until then its row
 serves the copy the fleet shares, the freshest one from any source.
+
+### How `include_acked` judges a finding
+
+`include_acked=false` judges each source in scope that carries the finding, by whichever of
+its two views the Hub read last. When the last read of that source's acks came to `ok` and
+is no older than the source's last observation of the finding, the mirror decides: the
+finding is acknowledged there when the mirror holds an active ack on its signature.
+Otherwise the source's own copy of the envelope decides, by a non-null `acknowledged_by`,
+which is all the Hub judged before it mirrored acks. A source whose acks were never read, a
+failed read and a `truncated` listing all fall to the envelope, and a source with no copy of
+its own yet is judged on the copy the fleet shares, in a scoped read too. The finding is
+listed while at least one such source holds it un-acknowledged, so a finding acknowledged in
+production stays listed for staging, and for the fleet that includes staging. The filter
+applies before the page limit.
 
 ### How `status` is derived
 

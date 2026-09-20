@@ -40,6 +40,7 @@ public static partial class FindingEnvelopeWriter
             WriteOriginalProperties(writer, document.RootElement);
             WriteHubFields(writer, row);
             WriteSources(writer, row, now);
+            WriteAcks(writer, row);
             writer.WriteEndObject();
 
             // Flush as we go: a full 10 000-envelope page would otherwise sit in memory at once.
@@ -104,6 +105,37 @@ public static partial class FindingEnvelopeWriter
         writer.WriteEndArray();
     }
 
+    /// <summary>
+    ///     The active ack each listed source holds on the finding, as the Hub last
+    ///     mirrored it, ordered as `sources` is. Absent when no source holds one,
+    ///     so a finding nobody acked reads as it always has.
+    /// </summary>
+    private static void WriteAcks(Utf8JsonWriter writer, StoredFinding row)
+    {
+        if (!row.Sources.Exists(source => source.Ack is not null))
+            return;
+
+        writer.WriteStartArray("acks");
+        foreach (var source in row.Sources.OrderBy(item => item.SourceId, StringComparer.Ordinal))
+        {
+            if (source.Ack is not { } ack)
+                continue;
+
+            writer.WriteStartObject();
+            writer.WriteString("source_id", source.SourceId);
+            writer.WriteString("source", ack.Origin);
+            writer.WriteString("by", ack.By);
+            if (ack.Reason is not null)
+                writer.WriteString("reason", ack.Reason);
+            writer.WriteString("at", ack.At);
+            if (ack.ExpiresAt is not null)
+                writer.WriteString("expires_at", ack.ExpiresAt);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+    }
+
     private static void WriteOriginalProperties(Utf8JsonWriter writer, JsonElement envelope)
     {
         // LINQ would box JsonElement.ObjectEnumerator and allocate on every envelope.
@@ -111,7 +143,7 @@ public static partial class FindingEnvelopeWriter
 #pragma warning disable S3267
         foreach (var property in envelope.EnumerateObject())
             if (property.Name is not ("first_seen" or "last_seen" or "max_confidence" or "sources"
-                or "status" or "lineage"))
+                or "status" or "lineage" or "acks"))
                 property.WriteTo(writer);
 #pragma warning restore S3267
     }

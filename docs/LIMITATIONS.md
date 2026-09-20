@@ -45,6 +45,18 @@ stay, and the first recorded day does not move. A window that falls wholly on
 removed days after that first one therefore lists nothing, even for a finding
 present all along.
 
+The Hub mirrors each daemon's active acknowledgments and never owns them. The
+mirror is as fresh as the last poll of that daemon, unless an ack relayed
+through the Hub refreshed it since, so an ack taken or revoked at the daemon
+itself shows at the next poll. A daemon below 0.24.0 is never asked, because it
+cannot list its CI baseline, and its findings are judged on their envelope
+alone, as before.
+
+A daemon listing 1,000 acks or more has reached its own cap, and the Hub files
+that read `truncated`. The acks it did list appear in `acks`, but a listing with
+a missing tail cannot say a finding is not acknowledged, so it does not decide
+`include_acked=false` and that source falls back to the envelope.
+
 Reachability is one-directional. A daemon pushing successfully proves it can
 reach the Hub, not that the Hub can reach it, and only a successful poll clears
 `unreachable_since_ms`. A source whose push arrives while its poll fails still
@@ -93,6 +105,11 @@ One endpoint asks for a credential, `POST /api/import/findings`, whose
 listing and the request that starts a run, `/reports/`, `/metrics`, and the
 launcher itself. Whoever reaches the port reads every finding of every tenant,
 SQL query shapes and endpoint names included.
+
+The `by` and `reason` of a mirrored ack are readable on the open read route,
+`/api/findings`, which stays open to machines with `Hub:Auth` on. That is who
+acknowledged a finding and why, in the words typed at the daemon, as
+`acknowledged_by` already was.
 
 The identity header attributes, it does not authenticate.
 `Hub:Analysis:IdentityHeader` is recorded on a run as a claim some proxy made,

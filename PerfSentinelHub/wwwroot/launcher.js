@@ -948,45 +948,63 @@
     }
 
     /**
-     * The route of the ack page. The source only narrows which rows start
-     * checked, so a link without one is whole.
+     * The route of the ack page. The environment and the source only decide
+     * which rows start checked, so a link without them is whole. A blank one is
+     * left out: Grafana sends a single space for the All choice of a variable.
+     * Both travel trimmed, since a padded one would match no row.
      * @param {string} signature
      * @param {string | null | undefined} sourceId
+     * @param {string | null | undefined} [environment]
      * @returns {string}
      */
-    function ackRouteHash(signature, sourceId) {
+    function ackRouteHash(signature, sourceId, environment) {
+        const part = function (key, value) {
+            const clean = String(value || '').trim();
+            return clean === '' ? '' : '&' + key + '=' + encodeURIComponent(clean);
+        };
         return '#/ack?signature=' + encodeURIComponent(signature)
-            + (sourceId ? '&source_id=' + encodeURIComponent(sourceId) : '');
+            + part('environment', environment) + part('source_id', sourceId);
     }
 
     /**
-     * The ack route for a `/?ack=<signature>` address, or null without an `ack`
-     * parameter. The link arrives as a query because a hash is lost when the
-     * identity provider asks for a password on the way in. An empty value still
-     * routes, so the page can say the link is incomplete.
+     * The ack route for a `/?ack=<signature>&environment=…&source_id=…` address,
+     * the last two optional, or null without an `ack` parameter. The link
+     * arrives as a query because a hash is lost when the identity provider asks
+     * for a password on the way in. An empty value still routes, so the page can
+     * say the link is incomplete.
      * @param {string | null | undefined} search
      * @returns {string | null}
      */
     function ackEntryHash(search) {
         const params = new URLSearchParams(String(search || ''));
-        return params.has('ack') ? ackRouteHash(params.get('ack') || '', null) : null;
+        return params.has('ack')
+            ? ackRouteHash(params.get('ack') || '', params.get('source_id'), params.get('environment'))
+            : null;
     }
 
     /**
      * What a `#/ack?signature=…` hash names, or null when the page cannot act
-     * on it. The bounds are the Hub's own, 1,024 characters and no control
-     * character. A blank signature is refused here because `/api/findings` reads
-     * one as no filter and would answer with a finding the link never named.
+     * on it. The signature's bounds are the Hub's own, 1,024 characters and no
+     * control character. A blank signature is refused here because
+     * `/api/findings` reads one as no filter and would answer with a finding the
+     * link never named. A blank source or environment is no context, read as
+     * null, while an environment past 256 characters or carrying a control
+     * character is a link nobody meant to write.
      * @param {string | null | undefined} hash
-     * @returns {{signature: string, sourceId: string | null} | null}
+     * @returns {{signature: string, sourceId: string | null, environment: string | null} | null}
      */
     function readAckRoute(hash) {
         const text = String(hash || '');
         if (text.indexOf('#/ack?') !== 0) return null;
         const params = new URLSearchParams(text.slice('#/ack?'.length));
+        const named = function (key) {
+            return (params.get(key) || '').trim() || null;
+        };
         const signature = params.get('signature') || '';
         if (signature.trim() === '' || signature.length > 1024 || /\p{Cc}/u.test(signature)) return null;
-        return {signature: signature, sourceId: params.get('source_id') || null};
+        const environment = named('environment');
+        if (environment !== null && (environment.length > 256 || /\p{Cc}/u.test(environment))) return null;
+        return {signature: signature, sourceId: named('source_id'), environment: environment};
     }
 
     /**
@@ -998,18 +1016,27 @@
     /**
      * One row per source that carries the finding, with what the page can do
      * there. An ack lives in one daemon's own store, so each source is acked and
-     * revoked by itself. A row starts checked when something can be done on it,
-     * and on the one source a link names when it names one.
+     * revoked by itself, and an ack hides a finding, so the link's context sets
+     * the default ticks: the source it names, else the sources of the environment
+     * it names, else a source that is alone in taking an action. Every other row
+     * stays the reader's to tick.
+     *
+     * A relaying source whose ack state is unknown takes `either` action. A
+     * daemon below 0.24.0 never has a listing and one failed read proves
+     * nothing, while the relay would still answer, so the daemon is left to
+     * refuse the button that does not apply.
      * @param {{sources?: Array<{id: string, name: string, environment: string}>,
      *   acks?: Array<{source_id: string, source: string}>}} finding
      * @param {Array<import('../types').Source> | null | undefined} sources
-     * @param {string | null | undefined} sourceId
+     * @param {{sourceId?: string | null, environment?: string | null} | null | undefined} scope
      * @returns {Array<{id: string, name: string, environment: string, relay: boolean,
-     *   ack: {source_id: string, source: string} | null, action: 'ack' | 'revoke' | 'none',
+     *   ack: {source_id: string, source: string} | null, action: 'ack' | 'revoke' | 'either' | 'none',
      *   checked: boolean, note: string | null}>}
      */
-    function ackRows(finding, sources, sourceId) {
-        return (finding.sources || []).map(function (carrier) {
+    function ackRows(finding, sources, scope) {
+        const sourceId = (scope && scope.sourceId) || null;
+        const environment = (scope && scope.environment) || null;
+        const rows = (finding.sources || []).map(function (carrier) {
             const source = (sources || []).find(function (candidate) {
                 return candidate.id === carrier.id;
             });
@@ -1024,8 +1051,10 @@
             else if (ack && ack.source === 'daemon') action = 'revoke';
             else if (ack) note = 'Acknowledged by the CI baseline, which is edited through a pull request.';
             else if (ACK_STATES_KNOWN.indexOf(source.acks_state) < 0) {
+                action = 'either';
                 note = 'The ack state of this daemon is unknown, acks_state is '
-                    + (source.acks_state || 'never read') + '.';
+                    + (source.acks_state || 'never read') + '. Acknowledge and Revoke both apply, the daemon '
+                    + 'refuses the one that does not, and its answer shows in the result line.';
             } else action = 'ack';
             return {
                 id: carrier.id,
@@ -1033,11 +1062,20 @@
                 environment: (source || carrier).environment,
                 relay: relay,
                 ack: ack,
-                action: /** @type {'ack' | 'revoke' | 'none'} */ (action),
-                checked: action !== 'none' && (!sourceId || sourceId === carrier.id),
+                action: /** @type {'ack' | 'revoke' | 'either' | 'none'} */ (action),
+                checked: false,
                 note: note
             };
         });
+        const actionable = rows.filter(function (row) {
+            return row.action !== 'none';
+        });
+        actionable.forEach(function (row) {
+            if (sourceId) row.checked = row.id === sourceId;
+            else if (environment) row.checked = row.environment === environment;
+            else row.checked = actionable.length === 1;
+        });
+        return rows;
     }
 
     /**
@@ -1065,7 +1103,10 @@
      * Whether a row is checked: the reader's own tick when they made one for the
      * action the row offers now, what ackRows says otherwise. A tick made on an
      * ack says nothing once the row reads Revoke, while a source the reader left
-     * out stays out however often the rows are read again.
+     * out stays out however often the rows are read again. `either` overlaps
+     * both actions, so a tick made on it or read against it still speaks: an ack
+     * state that turns known or unknown between two reads must not tick a row
+     * the reader left out.
      * @param {{id: string, action: string, checked: boolean}} row
      * @param {Record<string, {action: string, checked: boolean}> | null | undefined} ticks
      * @returns {boolean}
@@ -1073,7 +1114,8 @@
     function ackChecked(row, ticks) {
         if (row.action === 'none') return false;
         const own = (ticks || {})[row.id];
-        return own && own.action === row.action ? own.checked : row.checked;
+        const speaks = own && (own.action === row.action || own.action === 'either' || row.action === 'either');
+        return speaks ? own.checked : row.checked;
     }
 
     /**
@@ -1088,7 +1130,8 @@
      * What the two buttons would do with the form as it stands. `blocker` is
      * what keeps Acknowledge dead, while a revoke needs a checked row and nothing
      * else. `blocked` is true only when neither button can be pressed, so the
-     * sentence never reads as a refusal beside a button that is ready.
+     * sentence never reads as a refusal beside a button that is ready. A checked
+     * row that takes `either` action counts for both buttons.
      * @param {Array<{id: string, action: string, checked: boolean}>} rows
      * @param {Record<string, {action: string, checked: boolean}> | null | undefined} ticks
      * @param {string | null | undefined} reason
@@ -1101,7 +1144,7 @@
     function ackPlan(rows, ticks, reason, expiryValue, nowMs) {
         const checked = function (action) {
             return rows.filter(function (row) {
-                return row.action === action && ackChecked(row, ticks);
+                return (row.action === action || row.action === 'either') && ackChecked(row, ticks);
             });
         };
         const ack = checked('ack');
@@ -1122,7 +1165,15 @@
             sentences.push(blocker || 'Acknowledge writes to ' + sourceCount(ack.length)
                 + (expiresAt ? ', until ' + expiresAt + '.' : ', with no expiry.'));
         }
-        if (revoke.length > 0) sentences.push('Revoke removes the ack on ' + sourceCount(revoke.length) + '.');
+        // The Hub mirrors no ack from a row of unknown state, so it claims none there.
+        const unsure = revoke.some(function (row) {
+            return row.action === 'either';
+        });
+        if (revoke.length > 0) {
+            sentences.push(unsure
+                ? 'Revoke asks ' + sourceCount(revoke.length) + ' to remove the ack, if there is one.'
+                : 'Revoke removes the ack on ' + sourceCount(revoke.length) + '.');
+        }
         return {
             ack: ack,
             revoke: revoke,
@@ -1162,7 +1213,9 @@
     };
 
     /**
-     * One line per source a submit wrote to, in the order it wrote.
+     * One line per source a submit wrote to, in the order it wrote. `action` is
+     * the button pressed, never `either`: on a row of unknown ack state the
+     * relay's `detail` carries the daemon's refusal of the button that did not apply.
      * @param {Array<{name: string, action: 'ack' | 'revoke', status: number, detail?: string | null}>} results
      * @returns {Array<{ok: boolean, text: string}>}
      */

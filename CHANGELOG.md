@@ -96,20 +96,27 @@ All notable changes to PerfSentinelHub are recorded here.
   the daemon answered and `1311` when it did not, without the reason or the credential.
 - The launcher gets an ack page, a sixth screen with no tab, reached by link only. Acks are
   made from the Grafana findings dashboard, the HTML report, the TUI or the CLI, and this
-  page is where a Grafana link lands: `/?ack=<signature>`, a query rather than a hash
-  because a hash is lost when the identity provider asks for a password on the way in,
-  which the launcher turns into `#/ack?signature=<signature>` on load. Each finding of an
-  unfolded incident also ends with an Ack link, which adds `&source_id=<id>` for the
-  incident's daemon, and that only narrows which rows start checked. The page reads the
-  finding by its exact signature, then offers one form, a required reason, an optional
-  expiry day sent as the last second of that day in UTC, and one row per source that
-  carries the finding. A row offers Acknowledge, or Revoke beside who took the ack, when
-  and why, or nothing, with a note saying why: for an ack of the CI baseline, which no
-  runtime route can revoke, for a source whose last ack read was not conclusive, which
-  includes every daemon below 0.24.0, for a source with no ack credential, and for a
-  source the Hub no longer configures. One submit sends one relay request per checked
-  source, one after the other, prints one line per source with the Hub's own reason on a
-  refusal, and reads the finding again. One source refusing costs the others nothing.
+  page is where a Grafana link lands:
+  `/?ack=<signature>&environment=<environment>&source_id=<id>`, the last two optional, a
+  query rather than a hash because a hash is lost when the identity provider asks for a
+  password on the way in, which the launcher turns into `#/ack?signature=<signature>` with
+  the same two parameters on load. Each finding of an unfolded incident also ends with an
+  Ack link, which names the incident's daemon as `source_id`. An ack hides a finding, so
+  the link's context decides the default ticks: the source it names, else the sources of
+  the environment it names, else a source that is alone in taking an action, and every
+  other row stays tickable by hand. The page reads the finding by its exact signature,
+  then offers one form, a required reason, an optional expiry day sent as the last second
+  of that day in UTC, and one row per source that carries the finding. A row offers
+  Acknowledge, or Revoke beside who took the ack, when and why, or both when the source's
+  ack state is unknown, its last ack read not being conclusive, which includes every
+  daemon below 0.24.0: such a source stays actionable because the relay would still
+  answer, and the daemon refuses the button that does not apply. A row offers nothing,
+  with a note saying why, for an ack of the CI baseline, which no runtime route can
+  revoke, for a source with no ack credential, which is how a source is kept out of the
+  page, and for a source the Hub no longer configures. One submit sends one relay request
+  per checked source, one after the other, prints one line per source with the Hub's own
+  reason on a refusal, and reads the finding again. One source refusing costs the others
+  nothing.
 
 ### Changed
 

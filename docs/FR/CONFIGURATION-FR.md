@@ -93,9 +93,12 @@ lecture. Le Hub ne l'envoie que sur un seul type de requête, l'acquittement ou 
 qu'il relaie vers ce daemon, et garde la paire de lecture pour tout le reste. C'est le
 `[daemon.ack] api_key` du daemon, envoyé en `X-API-Key`, ou en `Authorization` avec une
 valeur `Bearer`. Sans lui le Hub n'écrit jamais sur ce daemon, et `/api/sources` rapporte
-`ack_relay: false` pour la source. Comme `AuthHeaderValue`, la valeur va dans un Secret :
-sous Helm ce sont `ackSecretName` et `ackSecretKey`, et seul le nom de l'en-tête atteint la
-ConfigMap.
+`ack_relay: false` pour la source. Ne renseigner ni l'un ni l'autre est la façon de tenir
+une source à l'écart de la page d'acquittement, où sa ligne ne propose alors rien, un
+daemon de CI dont les acquittements ne changent que par pull request par exemple, voir
+[LAUNCHER-FR.md](LAUNCHER-FR.md#pull-requests-uniquement-dans-un-environnement). Comme
+`AuthHeaderValue`, la valeur va dans un Secret : sous Helm ce sont `ackSecretName` et
+`ackSecretKey`, et seul le nom de l'en-tête atteint la ConfigMap.
 
 Le Hub refuse de démarrer quand la paire est posée sur un backend de traces, qui n'a pas de
 route d'acquittement, ou quand elle porte la même clé que l'`AuthHeaderValue` de la source,

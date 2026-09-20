@@ -188,11 +188,15 @@ where a Grafana link lands.
 
 Three ways in:
 
-- `/?ack=<signature>`, the signature percent-encoded. A query and not a hash, because a
-  hash is lost when the identity provider asks for a password on the way in. On load the
-  launcher turns it into the route below, and the query leaves the address bar.
-- `#/ack?signature=<signature>&source_id=<id>`, the route itself. `source_id` is optional
-  and only decides which rows start checked.
+- `/?ack=<signature>&environment=<environment>&source_id=<id>`, each value percent-encoded
+  and the last two optional. A query and not a hash, because a hash is lost when the
+  identity provider asks for a password on the way in. On load the launcher turns it into
+  the route below, and the query leaves the address bar.
+- `#/ack?signature=<signature>&environment=<environment>&source_id=<id>`, the route itself.
+  `environment` and `source_id` are optional and only decide which rows start checked. A
+  blank one reads as absent, which is what Grafana sends for the All choice of a variable.
+  An environment past 256 characters or carrying a control character makes the link
+  incomplete.
 - The Ack link on each finding of an unfolded incident, which names the incident's daemon.
 
 The page reads the finding from `/api/findings` by its exact signature and shows its type,
@@ -202,21 +206,32 @@ signature the Hub holds no finding for says so. Neither falls back to another sc
 
 Below it sits one form: a required reason, an optional expiry, and one row per source that
 carries the finding. The expiry is a day, sent as the last second of that day in UTC, and
-an empty one is a permanent ack. A row starts checked when something can be done on it, and
-when the link names a source, that row alone does.
+an empty one is a permanent ack.
 
-| The source                                        | Its row offers                           |
-|---------------------------------------------------|------------------------------------------|
-| relays, and the Hub mirrors no ack from it        | Acknowledge                              |
-| relays, and holds an ack taken at runtime         | Revoke, beside who took it, when and why |
-| relays, and holds an ack of the CI baseline       | nothing                                  |
-| relays, and its last ack read was not conclusive  | nothing, and the row names `acks_state`  |
-| has no ack credential, or is no longer configured | nothing, and the row says which          |
+An ack hides a finding, so the link's context decides which rows start checked, among the
+rows something can be done on. When the link names a source, that row alone is checked.
+Otherwise, when it names an environment, the rows of that environment are. With no context
+at all, a row starts checked only when it is the one row something can be done on. Every
+other row stays visible and can be ticked by hand, so a link opened from production never
+writes to staging or to a CI daemon unless the reader asks for it.
+
+| The source                                        | Its row offers                               |
+|---------------------------------------------------|----------------------------------------------|
+| relays, and the Hub mirrors no ack from it        | Acknowledge                                  |
+| relays, and holds an ack taken at runtime         | Revoke, beside who took it, when and why     |
+| relays, and holds an ack of the CI baseline       | nothing                                      |
+| relays, and its ack state is unknown              | both buttons, and the row names `acks_state` |
+| has no ack credential, or is no longer configured | nothing, and the row says which              |
 
 A source relays when `ack_relay` is true on `/api/sources`. An ack read is conclusive at
-`ok` and `truncated`, the two states the Hub mirrors acks from. Anywhere else the Hub
-cannot tell an unacknowledged finding from one its baseline already covers, which is the
-case of every daemon below 0.24.0, so the row offers neither action.
+`ok` and `truncated`, the two states the Hub mirrors acks from. Anywhere else the ack state
+is unknown: the Hub cannot tell an unacknowledged finding from one already acked, which is
+the case of every daemon below 0.24.0 and of any daemon whose last ack read failed. The
+relay would still answer, so such a row stays actionable and both buttons apply to it when
+it is checked. The daemon refuses the one that does not apply, an ack of a finding already
+acked or a revoke of one that is not, and its answer shows in that source's result line. A
+row whose ack the Hub already mirrors keeps Revoke, or nothing for a baseline ack, whatever
+the state reads.
 
 A baseline ack cannot be revoked here because it cannot be revoked anywhere at runtime: the
 daemon's own API answers `404` to it, and the baseline changes by editing its file under
@@ -233,6 +248,19 @@ Who may use it is the relay's rule, not the page's: a `Hub:Auth` session, or the
 a proxy sets once `Hub:AckRelay:TrustIdentityHeader` is on. Anybody else gets the relay's
 `403` on submit, and the ack is taken in the name the Hub knows the caller by. See
 [API.md](API.md#ack-relay) and [AUTHENTICATION.md](AUTHENTICATION.md#how-it-works).
+
+### Pull requests only in an environment
+
+A team that acknowledges through pull requests only in one environment, a CI daemon for
+instance, gives that source no ack credential: `AckHeaderName` and `AckHeaderValue` stay
+unset on it, see [CONFIGURATION.md](CONFIGURATION.md#the-ack-credential). Its row then
+offers nothing, and the Hub has no write path to that daemon. The acks of its baseline are
+still mirrored and shown on the row, with `source` reading `toml` in `acks` on
+`/api/findings`, and they can only be changed in the file.
+
+Do not set `[daemon.ack] enabled = false` on that daemon to close runtime acks, because the
+daemon then stops loading the TOML baseline too, see the engine's
+[ACK-WORKFLOW.md](https://github.com/robintra/perf-sentinel/blob/main/docs/ACK-WORKFLOW.md).
 
 ## Safety
 

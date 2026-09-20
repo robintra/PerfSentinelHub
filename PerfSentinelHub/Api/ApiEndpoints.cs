@@ -67,12 +67,14 @@ public static partial class ApiEndpoints
     {
         var states = await database.QuerySourceStatesAsync(cancellationToken);
         var reads = await database.QueryIncidentReadsAsync(cancellationToken);
+        var ackReads = await database.QueryAckReadsAsync(cancellationToken);
         return
         [
             .. options.Value.Sources.Select(source =>
             {
                 states.TryGetValue(source.Id, out var state);
                 reads.TryGetValue(source.Id, out var read);
+                ackReads.TryGetValue(source.Id, out var ackRead);
                 return new SourceResponse(
                     source.Id,
                     source.Name,
@@ -92,7 +94,9 @@ public static partial class ApiEndpoints
                     source.EngineSubcommand,
                     source.PublishedAuthHeaderName,
                     read?.State,
-                    read?.LastReadMs);
+                    read?.LastReadMs,
+                    ackRead?.State,
+                    ackRead?.LastReadMs);
             })
         ];
     }
@@ -225,7 +229,8 @@ public static partial class ApiEndpoints
             !TryReadSourceScope(request, options, out var sourceIds) ||
             !TryReadEpochMs(request, "from", out var fromMs) ||
             !TryReadEpochMs(request, "to", out var toMs) ||
-            fromMs > toMs)
+            fromMs > toMs ||
+            !TryReadSignature(request, out var signature))
             return false;
 
         var includeAcked = true;
@@ -247,7 +252,8 @@ public static partial class ApiEndpoints
             offset,
             sourceIds,
             fromMs,
-            toMs);
+            toMs,
+            Signature: signature);
         return true;
     }
 
@@ -286,6 +292,15 @@ public static partial class ApiEndpoints
         if (sourceId is not null)
             sourceIds = sourceIds is null || sourceIds.Contains(sourceId) ? [sourceId] : [];
         return true;
+    }
+
+    // Null when absent or blank. The shape of a signature is the daemon's rule,
+    // the Hub bounds what it binds as it bounds what it mirrors.
+    private static bool TryReadSignature(HttpRequest request, out string? signature)
+    {
+        signature = ReadOptional(request, "signature");
+        return signature is null ||
+               (signature.Length <= AckParser.MaxSignatureLength && !signature.Any(char.IsControl));
     }
 
     // Null when absent or blank. No sign and no padding: a dashboard passes its

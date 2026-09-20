@@ -30,7 +30,7 @@ push n'exerce pas.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport    |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
-| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                                            |
+| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                               |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                       |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
@@ -44,13 +44,23 @@ Sur `/api/sources`, les horodatages sont null pour une source jamais observée, 
 lecteur ne doit pas confondre avec l'epoch. `producer_version` est null pour un backend de
 traces, parce qu'un backend stocke des traces et ne détecte rien.
 
-Sur `/api/findings`, `include_acked` vaut `true` par défaut. À `false`, il masque les
-enveloppes portant un `acknowledged_by` non null. Un `service`, `finding_type`, `severity`
-ou `status` donné vide ou composé seulement de blancs se lit comme absent, ce qu'un
-tableau de bord envoie pour son choix "All". Les lignes suivent un ordre total, `last_seen`
-décroissant puis `signature`, et `offset` en saute autant avant que `limit` ne s'applique.
-`offset` va de 0 à 1 000 000, et une valeur hors de cette plage est un `400` plutôt qu'une
-page ramenée dans les bornes.
+`acks_state` et `acks_read_ms` disent ce qu'a donné la dernière lecture des acquittements
+d'un daemon et quand elle a été prise, null tous les deux quand aucune n'a eu lieu. Les
+états sont ceux d'`incidents_state`, où `absent` couvre aussi un daemon antérieur à 0.24.0,
+qui n'est jamais interrogé, plus `truncated` : la liste a atteint le plafond du daemon,
+mille acquittements, donc sa fin peut manquer.
+
+Sur `/api/findings`, `include_acked` vaut `true` par défaut. À `false`, il ne liste un
+finding que tant qu'au moins une source du périmètre le porte non acquitté, toutes les
+sources comptant quand la lecture n'a pas de périmètre, voir
+[Comment `include_acked` juge un finding](#comment-include_acked-juge-un-finding).
+`signature` est une correspondance exacte. Le Hub la borne et laisse sa forme au daemon :
+au-delà de 1 024 caractères, ou avec un caractère de contrôle, elle répond `400`. Un
+`service`, `finding_type`, `severity`, `status` ou `signature` donné vide ou composé
+seulement de blancs se lit comme absent, ce qu'un tableau de bord envoie pour son choix
+"All". Les lignes suivent un ordre total, `last_seen` décroissant puis `signature`, et
+`offset` en saute autant avant que `limit` ne s'applique. `offset` va de 0 à 1 000 000, et
+une valeur hors de cette plage est un `400` plutôt qu'une page ramenée dans les bornes.
 
 `environment` et `source_id` donnent un périmètre à la lecture, les sources d'un
 environnement ou une seule source. Ce sont des ensembles fermés, les sources configurées du
@@ -213,11 +223,26 @@ calme et une copie périmée se lisent pareil.
 ### Ce que le Hub ajoute à un finding
 
 Chaque finding du daemon est conservé comme un document JSON opaque et additif. Le Hub y
-ajoute `first_seen`, `last_seen`, `max_confidence`, `status`, un `lineage` optionnel, et
-`sources`, une entrée par source ayant rapporté le finding. Une entrée porte l'`id` de la
-source, celui que liste `/api/sources` et sur lequel filtre `source_id`, son `name`, son
-`environment` et sa `producer_version`, et la fraîcheur de son observation. Les clients
-d'IDE doivent ignorer les champs inconnus, comme ils le font avec l'API du daemon.
+ajoute `first_seen`, `last_seen`, `max_confidence`, `status`, un `lineage` optionnel,
+`sources`, une entrée par source ayant rapporté le finding, et un `acks` optionnel. Une
+entrée de `sources` porte l'`id` de la source, celui que liste `/api/sources` et sur lequel
+filtre `source_id`, son `name`, son `environment` et sa `producer_version`, et la fraîcheur
+de son observation. Les clients d'IDE doivent ignorer les champs inconnus, comme ils le font
+avec l'API du daemon.
+
+`acks` liste les acquittements actifs que le Hub a reflétés depuis les daemons, une entrée
+par source de `sources` dont le daemon en tient un sur cette signature, dans le même ordre.
+Il est absent quand aucune source n'en tient, donc un finding que personne n'a acquitté se
+lit comme il s'est toujours lu. Une entrée porte le `source_id`, la `source` de
+l'acquittement, `daemon` pour un acquittement pris à l'exécution et `toml` pour un
+acquittement de la baseline de CI, puis `by`, `reason` quand le daemon en a donné une, `at`,
+et `expires_at` quand l'acquittement expire. `at` et `expires_at` sont le texte du daemon,
+relayé tel qu'il est venu. Un acquittement est actif tant qu'il n'a pas d'expiration ou que
+son expiration est encore à venir sur l'horloge du Hub, et seule une source dont la dernière
+lecture des acquittements a donné `ok` ou `truncated` est listée, puisque les lignes que
+laisse une lecture échouée ne prouvent rien. Le nom est réservé comme les autres champs du
+Hub : une propriété `acks` envoyée par un daemon est écartée, et l'`acknowledged_by` du
+daemon est relayé tel quel à côté de la liste du Hub.
 
 `first_seen` vient de l'enveloppe du daemon (`first_seen_ms`), borné à l'heure
 d'observation du Hub et à un plancher de bon sens en millisecondes Unix. Ni une horloge de
@@ -229,15 +254,29 @@ et les comparaisons de fraîcheur s'appuient dessus, donc il ne vient jamais d'u
 distante.
 
 Lue avec `environment` ou `source_id`, une enveloppe décrit ce périmètre et non la flotte.
-Le document du daemon est la copie de la source du périmètre qui a vu le finding en
-dernier, donc `severity` et `include_acked=false` jugent cette copie, et un finding
-acquitté en production reste listé pour la recette. `first_seen` est le plus ancien et
-`last_seen` le plus récent sur les sources du périmètre, `status` est dérivé de ce
-`last_seen` et des battements de ces seules sources, et `sources` ne liste qu'elles.
-`max_confidence` reste à l'échelle de la flotte, délibérément, la plus haute confiance
-qu'une source ait jamais rapportée. La copie propre à une source commence à sa première
-observation après la mise à niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que
-la flotte partage, la plus fraîche toutes sources confondues.
+Le document du daemon est la copie de la source du périmètre qui a vu le finding en dernier,
+donc `severity` juge cette copie. `first_seen` est le plus ancien et `last_seen` le plus
+récent sur les sources du périmètre, `status` est dérivé de ce `last_seen` et des battements
+de ces seules sources, et `sources` et `acks` ne listent qu'elles. `max_confidence` reste à
+l'échelle de la flotte, délibérément, la plus haute confiance qu'une source ait jamais
+rapportée. La copie propre à une source commence à sa première observation après la mise à
+niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que la flotte partage, la plus
+fraîche toutes sources confondues.
+
+### Comment `include_acked` juge un finding
+
+`include_acked=false` juge chaque source du périmètre qui porte le finding, d'après celle de
+ses deux vues que le Hub a lue en dernier. Quand la dernière lecture des acquittements de
+cette source a donné `ok` et n'est pas plus ancienne que la dernière observation du finding
+par la source, le miroir décide : le finding y est acquitté quand le miroir tient un
+acquittement actif sur sa signature. Sinon c'est la copie de l'enveloppe propre à la source
+qui décide, par un `acknowledged_by` non null, ce qui est tout ce que le Hub jugeait avant
+de refléter les acquittements. Une source dont les acquittements n'ont jamais été lus, une
+lecture échouée et une liste `truncated` retombent toutes sur l'enveloppe, et une source qui
+n'a pas encore de copie propre est jugée sur la copie que la flotte partage, dans une
+lecture à périmètre aussi. Le finding est listé tant qu'au moins une de ces sources le porte
+non acquitté, donc un finding acquitté en production reste listé pour la recette, et pour la
+flotte qui comprend la recette. Le filtre s'applique avant la limite de page.
 
 ### Comment `status` est dérivé
 

@@ -17,6 +17,16 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     private static readonly SourceSnapshot Production = new("production-a", "Production A", "production", "0.11.2");
     private static readonly SourceSnapshot Staging = new("staging-a", "Staging A", "staging", "0.11.2");
 
+    // A second daemon of the environment, so a scope can hold more than one source.
+    private static readonly SourceSnapshot StagingB = new("staging-b", "Staging B", "staging", "0.11.2");
+
+    // A pair no other test mirrors acks for: the ack ledger is per source and outlives a test.
+    private static readonly SourceSnapshot AckedProduction =
+        new("acked-production-a", "Acked Production A", "acked-production", "0.24.0");
+
+    private static readonly SourceSnapshot OpenStaging =
+        new("open-staging-a", "Open Staging A", "open-staging", "0.24.0");
+
     private readonly HttpClient _client = factory.CreateClient();
 
     private static string FixturePath => Path.Combine(
@@ -74,6 +84,8 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     [InlineData("/api/findings?from=-1")]
     [InlineData("/api/findings?to=x")]
     [InlineData("/api/findings?from=2&to=1")]
+    [InlineData("/api/findings?signature=a%01b")]
+    [InlineData("/api/findings?signature=a%0Ab")]
     public async Task Invalid_query_is_rejected(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
@@ -90,6 +102,7 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     [InlineData("source_id")]
     [InlineData("from")]
     [InlineData("to")]
+    [InlineData("signature")]
     public async Task A_blank_filter_reads_as_absent(string name)
     {
         await SeedAsync();
@@ -207,21 +220,16 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var open = await VariantAsync("ack-scope:x", "ack-scope");
-        var acked = open with
-        {
-            EnvelopeJson = open.EnvelopeJson.Replace(
-                "\"acknowledged_by\": null", "\"acknowledged_by\": \"robin\"", StringComparison.Ordinal)
-        };
         await factory.Database.UpsertBatchAsync(Staging, new ParsedBatch([open], 0), 4000, cancellationToken);
-        await factory.Database.UpsertBatchAsync(Production, new ParsedBatch([acked], 0), 5000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(Production, new ParsedBatch([Acked(open)], 0), 5000, cancellationToken);
         await using var scoped = Scoped();
         using var client = scoped.CreateClient();
 
         const string unacked = "/api/findings?service=ack-scope&include_acked=false";
         Assert.Equal(1, await CountAsync($"{unacked}&environment=staging", client));
         Assert.Equal(0, await CountAsync($"{unacked}&environment=production", client));
-        // The fleet judges the shared copy, which is production's fresher one.
-        Assert.Equal(0, await CountAsync(unacked, client));
+        // The fleet lists it through staging, whose own copy is not acked.
+        Assert.Equal(1, await CountAsync(unacked, client));
     }
 
     [Fact]
@@ -230,16 +238,7 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         var cancellationToken = TestContext.Current.CancellationToken;
         var batch = new ParsedBatch([await VariantAsync("legacy:x", "legacy")], 0);
         await factory.Database.UpsertBatchAsync(Staging, batch, 4000, cancellationToken);
-        await using (var connection = await factory.Database.OpenConnectionAsync(cancellationToken))
-        await using (var command = connection.CreateCommand())
-        {
-            // The row as a version without the per-source columns left it.
-            command.CommandText = """
-                                  UPDATE finding_sources SET finding_json = NULL, severity = NULL
-                                  WHERE signature = 'legacy:x';
-                                  """;
-            Assert.Equal(1, await command.ExecuteNonQueryAsync(cancellationToken));
-        }
+        await ForgetOwnCopyAsync(Staging, "legacy:x");
 
         await using var scoped = Scoped();
         using var client = scoped.CreateClient();
@@ -249,6 +248,26 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             .EnumerateArray());
         Assert.Equal("critical 4000 4000 staging-a", Describe(envelope));
         Assert.True(envelope.GetProperty("future_contract_field").GetProperty("preserve").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A_legacy_source_row_is_judged_on_the_shared_envelope_in_any_scope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var open = await VariantAsync("legacy-ack:x", "legacy-ack");
+        await factory.Database.UpsertBatchAsync(StagingB, new ParsedBatch([open], 0), 4000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(Staging, new ParsedBatch([Acked(open)], 0), 5000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(Production, new ParsedBatch([open], 0), 6000, cancellationToken);
+        await ForgetOwnCopyAsync(StagingB, "legacy-ack:x");
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        // The shared copy is production's, un-acked. Staging B reads it from inside
+        // its environment too, not the acked copy that is the freshest in that scope.
+        const string unacked = "/api/findings?service=legacy-ack&include_acked=false";
+        Assert.Equal(1, await CountAsync(unacked, client));
+        Assert.Equal(1, await CountAsync($"{unacked}&environment=staging", client));
+        Assert.Equal(0, await CountAsync($"{unacked}&source_id=staging-a", client));
     }
 
     [Fact]
@@ -338,6 +357,230 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     }
 
     [Fact]
+    public async Task A_signature_filter_returns_that_finding()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = new ParsedBatch(
+            [
+                await VariantAsync("by-signature:x", "by-signature"),
+                await VariantAsync("by-signature:y", "by-signature")
+            ],
+            0);
+        await factory.Database.UpsertBatchAsync(Production, batch, 4000, cancellationToken);
+
+        Assert.Equal(["by-signature:y"], await SignaturesAsync("/api/findings?signature=by-signature%3Ay"));
+        Assert.Empty(await SignaturesAsync("/api/findings?signature=by-signature%3Az"));
+    }
+
+    [Fact]
+    public async Task A_signature_is_bounded_in_length()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.Empty(await SignaturesAsync($"/api/findings?signature={new string('a', 1024)}"));
+
+        using var response = await _client.GetAsync(
+            $"/api/findings?signature={new string('a', 1025)}", cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_mirrored_ack_is_listed_per_source()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (first, second) = (Daemon("listed-a"), Daemon("listed-b"));
+        var batch = new ParsedBatch([await VariantAsync("listed:x", "listed")], 0);
+        await factory.Database.UpsertBatchAsync(second, batch, 4000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(first, batch, 4000, cancellationToken);
+        await MirrorAsync(second, 5000, AckReadStates.Ok, Ack("listed:x") with { Origin = "toml", Reason = null });
+        await MirrorAsync(
+            first,
+            5000,
+            AckReadStates.Ok,
+            Ack("listed:x") with { ExpiresAt = "2099-01-01T00:00:00Z", ExpiresAtMs = 4_070_908_800_000 });
+
+        var envelope = Assert.Single((await ListAsync("/api/findings?service=listed")).EnumerateArray());
+
+        // Ordered by source id, an absent reason or expiry left out.
+        Assert.Equal(
+            """[{"source_id":"listed-a","source":"daemon","by":"robin","reason":"known","at":"2026-09-20T10:00:00Z","expires_at":"2099-01-01T00:00:00Z"},""" +
+            """{"source_id":"listed-b","source":"toml","by":"robin","at":"2026-09-20T10:00:00Z"}]""",
+            envelope.GetProperty("acks").GetRawText());
+        // The daemon's own field is relayed as it came.
+        Assert.Equal(JsonValueKind.Null, envelope.GetProperty("acknowledged_by").ValueKind);
+    }
+
+    [Fact]
+    public async Task An_expired_mirrored_ack_is_not_listed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Daemon("expired-a");
+        var batch = new ParsedBatch([await VariantAsync("expired:x", "expired")], 0);
+        await factory.Database.UpsertBatchAsync(source, batch, 4000, cancellationToken);
+        // The host's clock reads 10 s, and an ack expiring now has expired.
+        await MirrorAsync(
+            source,
+            5000,
+            AckReadStates.Ok,
+            Ack("expired:x") with { ExpiresAt = "1970-01-01T00:00:10Z", ExpiresAtMs = 10_000 });
+
+        var envelope = Assert.Single(
+            (await ListAsync("/api/findings?service=expired&include_acked=false")).EnumerateArray());
+        Assert.False(envelope.TryGetProperty("acks", out _));
+    }
+
+    [Fact]
+    public async Task An_envelope_cannot_forge_acks()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Daemon("forged-a");
+        var open = await VariantAsync("forged:x", "forged");
+        var forged = open with
+        {
+            EnvelopeJson = open.EnvelopeJson.Replace(
+                "\"acknowledged_by\": null",
+                "\"acks\": [{\"source_id\": \"forged\"}], \"acknowledged_by\": null",
+                StringComparison.Ordinal)
+        };
+        Assert.NotEqual(open.EnvelopeJson, forged.EnvelopeJson);
+        await factory.Database.UpsertBatchAsync(source, new ParsedBatch([forged], 0), 4000, cancellationToken);
+
+        var unmirrored = Assert.Single((await ListAsync("/api/findings?service=forged")).EnumerateArray());
+        Assert.False(unmirrored.TryGetProperty("acks", out _));
+
+        await MirrorAsync(source, 5000, AckReadStates.Ok, Ack("forged:x"));
+        var mirrored = Assert.Single((await ListAsync("/api/findings?service=forged")).EnumerateArray());
+        var acks = Assert.Single(mirrored.EnumerateObject(), property => property.NameEquals("acks")).Value;
+        Assert.Equal("forged-a", Assert.Single(acks.EnumerateArray()).GetProperty("source_id").GetString());
+    }
+
+    [Fact]
+    public async Task The_fresher_mirror_decides_include_acked()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Daemon("mirror-a");
+        var open = await VariantAsync("mirror:x", "mirror");
+        await factory.Database.UpsertBatchAsync(source, new ParsedBatch([open], 0), 4000, cancellationToken);
+        const string unacked = "/api/findings?service=mirror&include_acked=false";
+        Assert.Equal(1, await CountAsync(unacked));
+
+        // A relay refreshes the mirror at once, ahead of the envelope the next poll brings.
+        await MirrorAsync(source, 5000, AckReadStates.Ok, Ack("mirror:x"));
+        Assert.Equal(0, await CountAsync(unacked));
+
+        // A revoke shows again, whatever the last envelope still says.
+        await factory.Database.UpsertBatchAsync(source, new ParsedBatch([Acked(open)], 0), 6000, cancellationToken);
+        await MirrorAsync(source, 6000, AckReadStates.Ok);
+        Assert.Equal(1, await CountAsync(unacked));
+    }
+
+    [Fact]
+    public async Task The_fresher_envelope_decides_include_acked()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Daemon("envelope-a");
+        await MirrorAsync(source, 4000, AckReadStates.Ok, Ack("envelope:x"));
+        // A push after the last ack read: the mirror no longer says what the daemon holds.
+        var batch = new ParsedBatch(
+            [await VariantAsync("envelope:x", "envelope"), Acked(await VariantAsync("envelope:y", "envelope"))], 0);
+        await factory.Database.UpsertBatchAsync(source, batch, 5000, cancellationToken);
+
+        Assert.Equal(
+            ["envelope:x"], await SignaturesAsync("/api/findings?service=envelope&include_acked=false"));
+    }
+
+    [Fact]
+    public async Task A_source_without_an_ack_read_falls_back_to_the_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = new ParsedBatch(
+            [await VariantAsync("unread:x", "unread"), Acked(await VariantAsync("unread:y", "unread"))], 0);
+        await factory.Database.UpsertBatchAsync(Daemon("unread-a"), batch, 4000, cancellationToken);
+
+        Assert.Equal(["unread:x"], await SignaturesAsync("/api/findings?service=unread&include_acked=false"));
+    }
+
+    [Fact]
+    public async Task A_truncated_mirror_is_listed_but_does_not_decide()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Daemon("truncated-a");
+        var batch = new ParsedBatch(
+            [await VariantAsync("truncated:x", "truncated"), Acked(await VariantAsync("truncated:y", "truncated"))],
+            0);
+        await factory.Database.UpsertBatchAsync(source, batch, 4000, cancellationToken);
+        // The listing lost its tail: what it holds is true, what it lacks proves nothing.
+        await MirrorAsync(source, 5000, AckReadStates.Truncated, Ack("truncated:x"));
+
+        var envelope = Assert.Single(
+            (await ListAsync("/api/findings?service=truncated&include_acked=false")).EnumerateArray());
+        Assert.Equal("truncated:x", envelope.GetProperty("finding").GetProperty("signature").GetString());
+        Assert.Equal(1, envelope.GetProperty("acks").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task A_failed_ack_read_neither_lists_nor_decides()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Daemon("failed-a");
+        var batch = new ParsedBatch([await VariantAsync("failed:x", "failed")], 0);
+        await factory.Database.UpsertBatchAsync(source, batch, 4000, cancellationToken);
+        await MirrorAsync(source, 5000, AckReadStates.Ok, Ack("failed:x"));
+        // The rows of the last good read stay, and nothing says they still hold.
+        await factory.Database.RecordAckReadAsync(
+            source.SourceId, 6000, AckReadStates.Error, "timeout", cancellationToken);
+
+        var envelope = Assert.Single(
+            (await ListAsync("/api/findings?service=failed&include_acked=false")).EnumerateArray());
+        Assert.False(envelope.TryGetProperty("acks", out _));
+    }
+
+    [Fact]
+    public async Task A_finding_acked_in_one_source_stays_listed_through_the_other()
+    {
+        await SeedSplitAckAsync("split-fleet");
+
+        var envelope = Assert.Single(
+            (await ListAsync("/api/findings?service=split-fleet&include_acked=false")).EnumerateArray());
+        var ack = Assert.Single(envelope.GetProperty("acks").EnumerateArray());
+        Assert.Equal(AckedProduction.SourceId, ack.GetProperty("source_id").GetString());
+    }
+
+    [Theory]
+    [InlineData("environment=open-staging", 1, 0)]
+    [InlineData("source_id=open-staging-a", 1, 0)]
+    [InlineData("environment=acked-production", 0, 1)]
+    [InlineData("source_id=acked-production-a", 0, 1)]
+    public async Task A_scope_judges_the_mirrored_acks_of_its_own_sources(string scope, int unacked, int acks)
+    {
+        await SeedSplitAckAsync("split-scope");
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        var path = $"/api/findings?service=split-scope&{scope}";
+        Assert.Equal(unacked, await CountAsync($"{path}&include_acked=false", client));
+        var envelope = Assert.Single((await ListAsync(path, client)).EnumerateArray());
+        Assert.Equal(acks, envelope.TryGetProperty("acks", out var listed) ? listed.GetArrayLength() : 0);
+    }
+
+    [Fact]
+    public async Task Each_source_carries_its_last_ack_read()
+    {
+        await MirrorAsync(OpenStaging, 7000, AckReadStates.Truncated);
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        var sources = await ListAsync("/api/sources", client);
+        var read = sources.EnumerateArray()
+            .Single(source => source.GetProperty("id").GetString() == OpenStaging.SourceId);
+        Assert.Equal(AckReadStates.Truncated, read.GetProperty("acks_state").GetString());
+        Assert.Equal(7000, read.GetProperty("acks_read_ms").GetInt64());
+        // A source whose acks nobody has read says so with a null rather than the epoch.
+        var never = sources.EnumerateArray().Single(source => source.GetProperty("id").GetString() == "test");
+        Assert.Equal(JsonValueKind.Null, never.GetProperty("acks_state").ValueKind);
+        Assert.Equal(JsonValueKind.Null, never.GetProperty("acks_read_ms").ValueKind);
+    }
+
+    [Fact]
     public async Task Trace_lookup_returns_only_the_matching_envelope()
     {
         await SeedAsync();
@@ -376,7 +619,10 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
                 [
                     .. options.Sources,
                     Configured(Production),
-                    Configured(Staging)
+                    Configured(Staging),
+                    Configured(StagingB),
+                    Configured(AckedProduction),
+                    Configured(OpenStaging)
                 ];
             })));
     }
@@ -390,6 +636,60 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             Environment = source.Environment,
             BaseUrl = new Uri("http://127.0.0.1:1")
         };
+    }
+
+    // A source of its own, so the ack ledger one test files never judges another's findings.
+    private static SourceSnapshot Daemon(string id)
+    {
+        return new SourceSnapshot(id, id, "acks", "0.24.0");
+    }
+
+    private static ParsedAck Ack(string signature)
+    {
+        return new ParsedAck(signature, "daemon", "robin", "known", "2026-09-20T10:00:00Z", null, null);
+    }
+
+    // The envelope a daemon serves once the finding is acked there.
+    private static ParsedFinding Acked(ParsedFinding finding)
+    {
+        return finding with
+        {
+            EnvelopeJson = finding.EnvelopeJson.Replace(
+                "\"acknowledged_by\": null", "\"acknowledged_by\": \"robin\"", StringComparison.Ordinal)
+        };
+    }
+
+    // The source's row as a version without the per-source columns left it.
+    private async Task ForgetOwnCopyAsync(SourceSnapshot source, string signature)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              UPDATE finding_sources SET finding_json = NULL, severity = NULL
+                              WHERE source_id = $source_id AND signature = $signature;
+                              """;
+        command.Parameters.AddWithValue("$source_id", source.SourceId);
+        command.Parameters.AddWithValue("$signature", signature);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync(cancellationToken));
+    }
+
+    // What an ack read of that source leaves: its whole mirror and the ledger row.
+    private Task MirrorAsync(SourceSnapshot source, long readAtMs, string state, params ParsedAck[] acks)
+    {
+        return factory.Database.ReplaceSourceAcksAsync(
+            source.SourceId, acks, state, readAtMs, TestContext.Current.CancellationToken);
+    }
+
+    // One finding both sources carry un-acked in their envelope, acked since at production alone.
+    private async Task SeedSplitAckAsync(string service)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = new ParsedBatch([await VariantAsync($"{service}:x", service)], 0);
+        await factory.Database.UpsertBatchAsync(AckedProduction, batch, 4000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(OpenStaging, batch, 4000, cancellationToken);
+        await MirrorAsync(AckedProduction, 5000, AckReadStates.Ok, Ack($"{service}:x"));
+        await MirrorAsync(OpenStaging, 5000, AckReadStates.Ok);
     }
 
     // One finding under a service of its own, so a test reads only what it seeded.

@@ -84,12 +84,17 @@ public sealed record SourceResponse(
     // When that read was taken, on the Hub's clock. Null alongside the state
     // when none has run, which the incidents screen says as "never read": the
     // age of the copy is what tells a quiet fleet from a stale one.
-    long? IncidentsReadMs);
+    long? IncidentsReadMs,
+    // The same two for the last read of this daemon's acks, which has one more
+    // state: truncated, a listing at the daemon's cap whose tail is missing.
+    string? AcksState,
+    long? AcksReadMs);
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 
 // SourceIds is the resolved scope, as on IncidentQuery below. FromMs and ToMs
 // bound the observation window in epoch milliseconds, each side open when null.
+// Signature is an exact match.
 public sealed record FindingQuery(
     string? Service,
     string? FindingType,
@@ -100,7 +105,8 @@ public sealed record FindingQuery(
     int Offset = 0,
     IReadOnlyList<string>? SourceIds = null,
     long? FromMs = null,
-    long? ToMs = null);
+    long? ToMs = null,
+    string? Signature = null);
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.

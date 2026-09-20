@@ -25,7 +25,7 @@ public static class AckParser
 {
     // The shape of a signature is the daemon's rule. The Hub bounds what it
     // stores and refuses what would break a log line or a terminal.
-    private const int MaxSignatureLength = 1024;
+    public const int MaxSignatureLength = 1024;
     private const int MaxByLength = 256;
     private const int MaxReasonLength = 1024;
 
@@ -96,7 +96,8 @@ public static class AckParser
             return true;
         if (value.ValueKind != JsonValueKind.String ||
             value.GetString() is not { Length: <= MaxAtLength } text ||
-            !DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            !DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal,
+                out var parsed))
             return false;
 
         expiresAt = text;

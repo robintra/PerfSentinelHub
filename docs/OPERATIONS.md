@@ -185,7 +185,11 @@ from the same configuration as the server, refuses to overwrite an existing dest
 and removes its partial file when the copy fails.
 
 The snapshot is a full copy written onto the same volume, so keep at least the database's
-own size free on the PVC before starting one. The chart default is 1Gi total.
+own size free on the PVC before starting one. The chart default is 1Gi total. That size
+grows with the observation days the Hub keeps, one row of about 300 bytes per finding,
+daemon and observed day for the length of `Hub:Retention`: 2,000 signatures seen daily on
+three daemons at the 180-day default come to roughly 300 MB, so size the volume for the
+fleet rather than for the default.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

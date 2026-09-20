@@ -200,7 +200,11 @@ destination existante, et retire son fichier partiel quand la copie échoue.
 
 L'instantané est une copie complète écrite sur le même volume, donc gardez au moins la
 taille de la base elle-même de libre sur le PVC avant d'en démarrer un. Le défaut du chart
-est de 1 Gio au total.
+est de 1 Gio au total. Cette taille croît avec les jours d'observation que le Hub conserve,
+une ligne d'environ 300 octets par finding, par daemon et par jour observé pendant la durée
+de `Hub:Retention` : 2 000 signatures vues chaque jour sur trois daemons, au défaut de
+180 jours, font environ 300 Mo, donc dimensionnez le volume pour la flotte plutôt que pour
+le défaut.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

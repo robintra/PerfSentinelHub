@@ -68,6 +68,10 @@ sources: []
 # ServiceMonitor at the Service instead.
 service:
   annotations: {}
+# 1Gi assumes a small fleet. The database keeps one row per finding, daemon and
+# observed day for hub.retention, about 300 bytes each: 2,000 signatures seen
+# daily on three daemons at the 180-day default come to roughly 300 MB, and the
+# backup command needs the database's size free again on this same volume.
 persistence:
   size: 1Gi
   storageClassName: ""

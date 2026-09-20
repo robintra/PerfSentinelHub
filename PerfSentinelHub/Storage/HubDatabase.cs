@@ -12,6 +12,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private const int PurgeChunkSize = 5_000;
     private const string SourceIdParameter = "$source_id";
     private const string ServiceParameter = "$service";
+    private const string SignatureParameter = "$signature";
     private const string ObservedAtParameter = "$observed_at";
     private const string FirstSeenParameter = "$first_seen";
 
@@ -566,7 +567,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
-        AddFilter(where, parameters, "signature", "$signature", query.Signature);
+        AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
         var windowed = AddWindow(parameters, query);
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -623,14 +624,15 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // The last five columns of the findings read, null on a source holding no active ack.
     private static MirroredAck? ReadAck(SqliteDataReader reader)
     {
-        return reader.IsDBNull(14)
-            ? null
-            : new MirroredAck(
-                reader.GetString(14),
-                reader.GetString(15),
-                reader.IsDBNull(16) ? null : reader.GetString(16),
-                reader.GetString(17),
-                reader.IsDBNull(18) ? null : reader.GetString(18));
+        if (reader.IsDBNull(14))
+            return null;
+
+        return new MirroredAck(
+            reader.GetString(14),
+            reader.GetString(15),
+            reader.IsDBNull(16) ? null : reader.GetString(16),
+            reader.GetString(17),
+            reader.IsDBNull(18) ? null : reader.GetString(18));
     }
 
     // The status is computed before LIMIT so a status filter fills its page
@@ -837,7 +839,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         {
             known.Transaction = transaction;
             known.CommandText = "SELECT 1 FROM findings WHERE signature = $signature;";
-            known.Parameters.AddWithValue("$signature", finding.Signature);
+            known.Parameters.AddWithValue(SignatureParameter, finding.Signature);
             if (await known.ExecuteScalarAsync(cancellationToken) is not null)
                 return null;
         }
@@ -957,7 +959,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                   THEN excluded.max_confidence ELSE findings.max_confidence END,
                                 max_confidence_rank = MAX(findings.max_confidence_rank, excluded.max_confidence_rank);
                               """;
-        command.Parameters.AddWithValue("$signature", finding.Signature);
+        command.Parameters.AddWithValue(SignatureParameter, finding.Signature);
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
         command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
@@ -1014,7 +1016,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                 severity_rank = excluded.severity_rank
                               WHERE excluded.severity_rank > finding_observations.severity_rank;
                               """;
-        command.Parameters.AddWithValue("$signature", finding.Signature);
+        command.Parameters.AddWithValue(SignatureParameter, finding.Signature);
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
         command.Parameters.AddWithValue("$source_name", source.SourceName);
         command.Parameters.AddWithValue("$environment", source.Environment);

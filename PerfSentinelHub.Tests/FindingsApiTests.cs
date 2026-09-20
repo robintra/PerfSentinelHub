@@ -57,6 +57,9 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     [InlineData("/api/findings?service=a&service=b")]
     [InlineData("/api/findings?service=%FF")]
     [InlineData("/api/findings?status=resolved")]
+    [InlineData("/api/findings?offset=-1")]
+    [InlineData("/api/findings?offset=x")]
+    [InlineData("/api/findings?offset=1000001")]
     public async Task Invalid_query_is_rejected(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
@@ -78,6 +81,43 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal(unfiltered, await BodyAsync($"/api/findings?{name}="));
         Assert.Equal(unfiltered, await BodyAsync($"/api/findings?{name}=%20"));
         Assert.Equal(unfiltered, await BodyAsync($"/api/findings?{name}=+"));
+    }
+
+    [Fact]
+    public async Task Offset_pages_without_overlap()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var original = batch.Findings[0];
+        ParsedFinding Paged(string signature) => original with
+        {
+            Signature = signature,
+            Service = "paged",
+            TraceId = null,
+            EnvelopeJson = original.EnvelopeJson.Replace(
+                "blocking_wait:rider-smoke:checkout:slow-path",
+                signature,
+                StringComparison.Ordinal)
+        };
+
+        // "b" and "c" share a last_seen, so only the signature orders them.
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        await factory.Database.UpsertBatchAsync(
+            source, new ParsedBatch([Paged("paged:d")], 0), 5000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(
+            source, new ParsedBatch([Paged("paged:c"), Paged("paged:b")], 0), 6000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(
+            source, new ParsedBatch([Paged("paged:a")], 0), 7000, cancellationToken);
+
+        var whole = await SignaturesAsync("/api/findings?service=paged");
+        var first = await SignaturesAsync("/api/findings?service=paged&limit=2&offset=0");
+        var second = await SignaturesAsync("/api/findings?service=paged&limit=2&offset=2");
+
+        string[] expected = ["paged:a", "paged:b", "paged:c", "paged:d"];
+        Assert.Equal(expected, whole);
+        Assert.Equal(2, first.Length);
+        Assert.Equal(expected, first.Concat(second));
+        Assert.Empty(await SignaturesAsync("/api/findings?service=paged&offset=4"));
     }
 
     [Fact]
@@ -141,6 +181,16 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task<string[]> SignaturesAsync(string path)
+    {
+        using var document = JsonDocument.Parse(await BodyAsync(path));
+        return
+        [
+            .. document.RootElement.EnumerateArray()
+                .Select(envelope => envelope.GetProperty("finding").GetProperty("signature").GetString()!)
+        ];
     }
 
     private async Task<int> CountAsync(string path)

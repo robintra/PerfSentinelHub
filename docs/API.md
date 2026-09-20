@@ -28,7 +28,7 @@ the Hub's route to the daemon, which a push does not exercise.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
-| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                            |
+| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `offset`, `limit`, `include_acked`                                                                                  |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
@@ -45,7 +45,9 @@ backend stores traces and detects nothing.
 On `/api/findings`, `include_acked` defaults to `true`. Setting it to `false` hides
 envelopes carrying a non-null `acknowledged_by`. A `service`, `finding_type`, `severity`
 or `status` given empty or as whitespace only reads as absent, which is what a dashboard
-sends for its "All" choice.
+sends for its "All" choice. The rows come in a total order, `last_seen` descending then
+`signature`, and `offset` skips that many of them before `limit` applies. `offset` runs
+from 0 to 1,000,000, and a value outside that range is a `400` rather than a clamped page.
 
 ### The daemon view
 

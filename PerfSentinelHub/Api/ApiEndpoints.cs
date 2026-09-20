@@ -11,6 +11,9 @@ namespace PerfSentinelHub.Api;
 
 public static partial class ApiEndpoints
 {
+    // A deep OFFSET is a scan: SQLite steps over every skipped row.
+    private const int MaxFindingOffset = 1_000_000;
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;
@@ -217,10 +220,8 @@ public static partial class ApiEndpoints
         if (!HasValidUtf8(request.QueryString.Value) || request.Query.Any(item => item.Value.Count != 1))
             return false;
 
-        var limit = options.DefaultReadLimit;
-        if (request.Query.TryGetValue("limit", out var rawLimit) &&
-            (!int.TryParse(rawLimit[0], NumberStyles.None, CultureInfo.InvariantCulture, out limit) ||
-             limit < 1 || limit > options.MaxReadLimit))
+        if (!TryReadBounded(request, "limit", options.DefaultReadLimit, 1, options.MaxReadLimit, out var limit) ||
+            !TryReadBounded(request, "offset", 0, 0, MaxFindingOffset, out var offset))
             return false;
 
         var includeAcked = true;
@@ -238,7 +239,8 @@ public static partial class ApiEndpoints
             ReadOptional(request, "severity"),
             limit,
             includeAcked,
-            status);
+            status,
+            Offset: offset);
         return true;
     }
 

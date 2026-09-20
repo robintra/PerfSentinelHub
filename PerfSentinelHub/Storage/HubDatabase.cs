@@ -490,7 +490,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                  SELECT * FROM statused
                                  WHERE $status IS NULL OR status = $status
                                  ORDER BY last_seen_ms DESC, signature ASC
-                                 LIMIT $limit
+                                 LIMIT $limit OFFSET $offset
                                )
                                SELECT
                                  f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
@@ -507,6 +507,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         foreach (var (name, value) in parameters)
             command.Parameters.AddWithValue(name, value);
         command.Parameters.AddWithValue("$limit", query.Limit);
+        command.Parameters.AddWithValue("$offset", query.Offset);
         command.Parameters.AddWithValue("$status", (object?)query.Status ?? DBNull.Value);
         command.Parameters.AddWithValue("$status_now", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
         command.Parameters.AddWithValue("$status_grace", _resolutionGraceMs);

@@ -30,7 +30,7 @@ push n'exerce pas.
 |--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                    |
-| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `limit`, `include_acked`                                                                                                             |
+| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `offset`, `limit`, `include_acked`                                                                                                   |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                              |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                    |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
@@ -47,7 +47,10 @@ traces, parce qu'un backend stocke des traces et ne détecte rien.
 Sur `/api/findings`, `include_acked` vaut `true` par défaut. À `false`, il masque les
 enveloppes portant un `acknowledged_by` non null. Un `service`, `finding_type`, `severity`
 ou `status` donné vide ou composé seulement de blancs se lit comme absent, ce qu'un
-tableau de bord envoie pour son choix "All".
+tableau de bord envoie pour son choix "All". Les lignes suivent un ordre total, `last_seen`
+décroissant puis `signature`, et `offset` en saute autant avant que `limit` ne s'applique.
+`offset` va de 0 à 1 000 000, et une valeur hors de cette plage est un `400` plutôt qu'une
+page ramenée dans les bornes.
 
 ### La vue daemon
 

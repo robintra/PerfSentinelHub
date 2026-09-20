@@ -311,6 +311,10 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
         if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
             errors.Add($"Source '{source.Id}' requires a name and environment.");
+        // An environment becomes a Prometheus label value and a member of the
+        // closed set the read API matches a query parameter against.
+        if (!string.IsNullOrWhiteSpace(source.Environment) && source.Environment.Any(char.IsControl))
+            errors.Add($"Source '{source.Id}' environment must not contain control characters.");
         if (!SourceKinds.IsKnown(source.Kind))
             errors.Add($"Source '{source.Id}' kind must be 'daemon', 'tempo' or 'jaeger_query'.");
         if (source.Kind != SourceKinds.Daemon && source.ImportApiKey is not null)

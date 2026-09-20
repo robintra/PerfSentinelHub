@@ -37,21 +37,22 @@ fleet with nothing to report from a copy nobody has refreshed.
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather
-than through a library: eight metric families over data the Hub already holds do
+than through a library: nine metric families over data the Hub already holds do
 not justify a dependency in a service whose only two packages are SQLite.
 
-| Metric                                          | Type  | What it answers                                     |
-|-------------------------------------------------|-------|-----------------------------------------------------|
-| `perf_sentinel_hub_build_info{version}`         | gauge | Which version is running                            |
-| `perf_sentinel_hub_source_reachable{source}`    | gauge | Whether the last poll of a daemon succeeded         |
-| `perf_sentinel_hub_source_unreachable_seconds`  | gauge | How long it has been unreachable, 0 when it answers |
-| `perf_sentinel_hub_source_last_success_seconds` | gauge | Age of the last successful poll                     |
-| `perf_sentinel_hub_source_last_import_seconds`  | gauge | When a daemon last pushed. Not a heartbeat, see below |
-| `perf_sentinel_hub_import_rejected_total{reason}` | counter | Imports refused, by reason                       |
-| `perf_sentinel_hub_analysis_queue_depth`        | gauge | Runs accepted and not yet claimed by a worker       |
-| `perf_sentinel_hub_analysis_runs{status}`       | gauge | Runs currently stored, per status                   |
+| Metric                                                                 | Type    | What it answers                                       |
+|------------------------------------------------------------------------|---------|-------------------------------------------------------|
+| `perf_sentinel_hub_build_info{version}`                                | gauge   | Which version is running                              |
+| `perf_sentinel_hub_source_reachable{source}`                           | gauge   | Whether the last poll of a daemon succeeded           |
+| `perf_sentinel_hub_source_unreachable_seconds`                         | gauge   | How long it has been unreachable, 0 when it answers   |
+| `perf_sentinel_hub_source_last_success_seconds`                        | gauge   | Age of the last successful poll                       |
+| `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | When a daemon last pushed. Not a heartbeat, see below |
+| `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refused, by reason                            |
+| `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Runs accepted and not yet claimed by a worker         |
+| `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Runs currently stored, per status                     |
+| `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |
 
-Three things the shape is deliberate about.
+Four things the shape is deliberate about.
 
 Only a daemon gets a source series, and only one the Hub has actually observed.
 A trace backend is never polled, and a daemon with no `source_state` row has
@@ -70,10 +71,29 @@ its row looks, since a worker is about to write to it or already is. Every statu
 is emitted even at zero, a gauge that vanishes reading as a scrape failure rather
 than as "nothing is in that state".
 
+`findings` counts distinct signatures per environment, and the `status` it
+carries is the environment's own, computed the way
+`GET /api/findings?environment=` computes it: a finding still seen in staging
+does not keep production's copy `active`. The series of one environment and
+status therefore add up to the findings that read holds for them, across its
+pages. `finding_type` and `severity` are free text a daemon sends, so a value
+outside the engine's twelve types or its three severities counts under `other`
+instead of opening a series of its own. Unlike `analysis_runs`, an empty
+combination publishes no series. The zeros would be every environment times
+every type, severity and status, nearly all of them empty for good, and the
+family is read through `sum()`, where an absent series already is a zero. The
+counts are kept for 15 seconds, because the endpoint is anonymous and a count
+reads every finding of its environment. A scrape inside that interval is served
+the previous counts, and every other family is still computed at scrape time.
+
 Cardinality is bounded by configuration. `source` takes the ids in
 `Hub:Sources`, fixed at startup and restricted to 1 to 64 ASCII letters, digits,
-`.`, `_` or `-`. `status` takes six constants. Nothing a caller sends reaches a
-label.
+`.`, `_` or `-`. `environment` takes the environments of those same sources,
+which are refused a control character at startup and escaped on the way out.
+The run `status` takes six constants. `findings` holds at most
+environments × 13 × 4 × 3 series: twelve types, three severities, an `other`
+bucket on each, and three statuses. Nothing a caller sends reaches a label, and
+nothing a daemon sends reaches one unfolded.
 
 The endpoint carries no authentication, exactly like `/api/status`, and stays
 open under `Hub:Auth` so the scrape needs no session. Keep it behind whatever

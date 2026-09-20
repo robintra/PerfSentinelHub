@@ -21,6 +21,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // The scope of a read, one bound parameter in the shape json_each reads.
     private const string InScope = "IN (SELECT value FROM json_each($source_ids))";
 
+    // A scoped status only trusts the heartbeats of its own scope.
+    private const string HeartbeatInScope = $" AND eh.source_id {InScope}";
+
     // A scoped read describes its scope: each finding as the freshest source in
     // scope reported it, first and last seen over those sources alone. The
     // partition and the pick share one sort. A source row written before the
@@ -454,6 +457,30 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     }
 
     /// <summary>
+    ///     The distinct signatures of one scope by type, severity and status, each
+    ///     judged as a scoped read judges it, so a count equals the number of rows
+    ///     that read lists over all its pages for the same scope and status.
+    /// </summary>
+    public async Task<IReadOnlyList<FindingCount>> CountFindingsAsync(
+        IReadOnlyList<string> sourceIds,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = FindingCountsSql();
+        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue("$status_now", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+        command.Parameters.AddWithValue("$status_grace", _resolutionGraceMs);
+
+        var counts = new List<FindingCount>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            counts.Add(new FindingCount(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3)));
+        return counts;
+    }
+
+    /// <summary>
     ///     Collection state for every source that has one, keyed by source id.
     ///     A configured source missing from the result has never been observed.
     /// </summary>
@@ -582,7 +609,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private static string FindingsSql(StringBuilder where, bool scoped, bool windowed)
     {
         var (with, row, heartbeatScope, sourceScope) = scoped
-            ? ($"WITH {ScopedFindings},", "scoped", $" AND eh.source_id {InScope}", $" AND fs.source_id {InScope}")
+            ? ($"WITH {ScopedFindings},", "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}")
             : ("WITH", "findings", "", "");
         var window = windowed ? InWindow(row) : "";
 #pragma warning disable S2077
@@ -608,6 +635,25 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 LEFT JOIN source_state AS ss ON ss.source_id = fs.source_id
                 LEFT JOIN finding_lineage AS fl ON fl.successor_signature = f.signature
                 ORDER BY f.last_seen_ms DESC, f.signature ASC, fs.source_id ASC;
+                """;
+#pragma warning restore S2077
+    }
+
+    // The scope and the status of the scoped read above, grouped instead of
+    // paged. It costs the whole scope, as that read does.
+    private static string FindingCountsSql()
+    {
+#pragma warning disable S2077
+        return $"""
+                WITH {ScopedFindings}
+                SELECT finding_type, severity, status, COUNT(*)
+                FROM (
+                  SELECT scoped.finding_type, scoped.severity,
+                         {StatusCase("scoped", HeartbeatInScope)} AS status
+                  FROM scoped
+                )
+                GROUP BY finding_type, severity, status
+                ORDER BY finding_type, severity, status;
                 """;
 #pragma warning restore S2077
     }

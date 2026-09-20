@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PerfSentinelHub.Api;
+using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Collection;
 
@@ -153,15 +154,12 @@ public static class FindingParser
         };
     }
 
-    internal static int SeverityRank(string severity)
+    // Ranked by place in the list the /metrics labels fold through, most severe
+    // first, so the two vocabularies cannot drift apart.
+    public static int SeverityRank(string severity)
     {
-        return severity switch
-        {
-            "critical" => 3,
-            "warning" => 2,
-            "info" => 1,
-            _ => 0
-        };
+        var index = Array.IndexOf(FindingLabels.Severities, severity);
+        return index < 0 ? 0 : FindingLabels.Severities.Length - index;
     }
 }
 // ReSharper restore ConvertIfStatementToReturnStatement

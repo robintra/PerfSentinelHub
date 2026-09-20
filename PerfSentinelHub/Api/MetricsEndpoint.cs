@@ -8,12 +8,16 @@ namespace PerfSentinelHub.Api;
 
 /// <summary>
 ///     The Prometheus exposition format, written by hand. The whole surface is
-///     eight metric families over data the Hub already holds, which is not worth a
+///     nine metric families over data the Hub already holds, which is not worth a
 ///     dependency in a NativeAOT service whose only two packages are SQLite.
 ///     Cardinality is bounded by configuration, not by requests: `source` takes the
-///     ids in `Hub:Sources`, fixed at startup and validated there, and `status`
-///     takes the six constants in <see cref="AnalysisStatuses" />. Nothing a caller
-///     sends reaches a label.
+///     ids and `environment` the environments in `Hub:Sources`, fixed at startup
+///     and validated there, and the run `status` takes the six constants in
+///     <see cref="AnalysisStatuses" />. On the findings family `finding_type` and
+///     `severity` are free text a daemon sends, so both fold through the closed
+///     lists of <see cref="FindingLabels" /> with an `other` bucket, and `status`
+///     is one of the three values the read-time CASE yields. Nothing a caller
+///     sends reaches a label, and nothing a daemon sends reaches one unfolded.
 /// </summary>
 public static class MetricsEndpoint
 {
@@ -26,11 +30,12 @@ public static class MetricsEndpoint
             HubDatabase database,
             IOptions<HubOptions> options,
             ImportMetrics imports,
+            FindingMetrics findings,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
             var body = await RenderAsync(
-                database, options.Value, imports, timeProvider, version, cancellationToken);
+                database, options.Value, imports, findings, timeProvider, version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
@@ -39,12 +44,14 @@ public static class MetricsEndpoint
         HubDatabase database,
         HubOptions options,
         ImportMetrics imports,
+        FindingMetrics findings,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
     {
         var (states, pushes) = await database.QuerySourceObservationsAsync(cancellationToken);
         var runs = await database.CountRunsByStatusAsync(cancellationToken);
+        var findingSeries = await findings.SeriesAsync(cancellationToken);
         var now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // Read from the same snapshot as the per-status series rather than from
         // a second query: two counts of the same rows taken a moment apart can
@@ -131,7 +138,26 @@ public static class MetricsEndpoint
             Line(text, "perf_sentinel_hub_analysis_runs", $"status=\"{status}\"",
                 Runs(runs, status));
 
+        AppendFindings(text, findingSeries);
         return text.ToString();
+    }
+
+    // No zero cross-product, unlike analysis_runs. Six run statuses are six
+    // series, while the zeros here would be every environment times thirteen
+    // types, four severities and three statuses, nearly all of them empty for
+    // good. The family is read through sum(), where an absent series is a zero.
+    private static void AppendFindings(StringBuilder text, IReadOnlyList<FindingSeries> series)
+    {
+        Family(text, "perf_sentinel_hub_findings",
+            "Distinct finding signatures stored, per environment. The status is the environment's "
+            + "own: a finding still seen in staging does not keep production's copy active. A type or a "
+            + "severity outside the engine's vocabulary counts under other. An empty combination has "
+            + "no series.");
+        foreach (var (environment, findings) in series)
+            Line(text, "perf_sentinel_hub_findings",
+                $"environment=\"{Escape(environment)}\",finding_type=\"{findings.FindingType}\","
+                + $"severity=\"{findings.Severity}\",status=\"{findings.Status}\"",
+                findings.Count);
     }
 
     /// <summary>
@@ -187,13 +213,15 @@ public static class MetricsEndpoint
 
     /// <summary>
     ///     Backslash, quote and newline, the three the exposition format reserves in
-    ///     a label value. None can reach here today: `HubOptions.IsValidSourceId`
-    ///     allows only ASCII alphanumerics, '.', '_' and '-'. Kept so that loosening
-    ///     that rule cannot silently produce a malformed scrape.
+    ///     a label value. A source id carries none: `HubOptions.IsValidSourceId`
+    ///     allows only ASCII alphanumerics, '.', '_' and '-', and the escape stays so
+    ///     that loosening that rule cannot silently produce a malformed scrape. An
+    ///     environment is only refused its control characters, so a quote or a
+    ///     backslash does reach here.
     /// </summary>
     private static string Escape(string value)
     {
-        return value.Replace("\\", "\\\\", StringComparison.Ordinal)
+        return value.Replace(@"\", @"\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal)
             .Replace("\n", "\\n", StringComparison.Ordinal);
     }

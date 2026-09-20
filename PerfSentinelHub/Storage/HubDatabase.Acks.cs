@@ -7,6 +7,10 @@ public sealed partial class HubDatabase
 {
     private const string AckReadUpsert = $"INSERT INTO ack_reads{ReadLedgerUpsert}";
     private const string AckReadSelect = $"{ReadLedgerSelect}ack_reads;";
+    private const string ThatPair = " WHERE source_id = $source_id AND signature = $signature)";
+    private const string CarriedFinding = $"EXISTS(SELECT 1 FROM finding_sources{ThatPair}";
+    private const string CarriedFindingExists = $"SELECT {CarriedFinding};";
+    private const string RevocableAckExists = $"SELECT {CarriedFinding} OR EXISTS(SELECT 1 FROM source_acks{ThatPair};";
 
     /// <summary>
     ///     Replaces one source's mirror with what its daemon just listed and
@@ -96,6 +100,28 @@ public sealed partial class HubDatabase
         CancellationToken cancellationToken)
     {
         return RecordReadAsync(AckReadUpsert, sourceId, new SourceRead(readAtMs, state, errorCode), cancellationToken);
+    }
+
+    /// <summary>
+    ///     Whether the Hub holds that signature at that source, as a finding the
+    ///     source carried. A revoke also passes on an ack its daemon listed,
+    ///     which may outlive the finding, and never needs one: a daemon below
+    ///     0.24.0 takes an ack the mirror will not list. What the relay asks
+    ///     before it spends a daemon's write key, so its ack store only ever
+    ///     grows by findings the Hub knows.
+    /// </summary>
+    public async Task<bool> KnowsAckTargetAsync(
+        string sourceId,
+        string signature,
+        bool revoke,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = revoke ? RevocableAckExists : CarriedFindingExists;
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        command.Parameters.AddWithValue("$signature", signature);
+        return await command.ExecuteScalarAsync(cancellationToken) is 1L;
     }
 
     /// <summary>

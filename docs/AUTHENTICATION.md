@@ -14,6 +14,7 @@ calls:
 | `/` and the launcher's files                                     | session, otherwise a redirect to the provider                           |
 | `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, otherwise `401`                                                |
 | `/reports/`                                                      | session, `401` in the launcher's frame, a redirect when opened directly |
+| `POST /api/sources/{sourceId}/acks` and `/acks/revoke`           | session, otherwise `401`, and the ack is taken in the session's name    |
 | `/api/findings`                                                  | open, for IDE plugins and CI jobs                                       |
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
 | `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape                                         |
@@ -45,6 +46,17 @@ valid 8 hours and renewed while in use. There is no sign-out button.
 The signed-in user is what the topbar shows and what a run records as
 `requested_by`. `Hub:Analysis:IdentityHeader` is ignored for a signed-in user,
 since any client can send that header.
+
+The [ack relay](API.md#ack-relay) holds the caller to a stricter rule than a run
+does. A run records that header as a claim nobody verified. The relay spends a
+daemon's write key in the caller's name, so it takes the signed-in user, and it
+takes the header only when `Hub:AckRelay:TrustIdentityHeader` is `true`, the
+setting for a Hub behind a proxy that writes the header itself and strips the
+one a client sent. With a session the header is ignored there too. With neither
+a session nor that setting the relay answers `403` to everyone, see
+[CONFIGURATION.md](CONFIGURATION.md#the-ack-credential). Whoever is named may
+ack on every source that relays: the Hub has no roles, see
+[LIMITATIONS.md](LIMITATIONS.md#what-the-hub-does-not-authenticate).
 
 The keys that encrypt the cookie live in a `keys` directory next to
 `Hub:DatabasePath`, on the data volume, so a restart does not sign everyone out.

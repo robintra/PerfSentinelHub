@@ -15,6 +15,7 @@ une machine :
 | `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur                             |
 | `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, sinon `401`                                                       |
 | `/reports/`                                                      | session, `401` dans le cadre du lanceur, redirection si ouvert directement |
+| `POST /api/sources/{sourceId}/acks` et `/acks/revoke`            | session, sinon `401`, et l'acquittement est pris au nom de la session      |
 | `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI                                |
 | `POST /api/import/findings`                                      | sa propre `X-API-Key`, comme avant                                         |
 | `/health/live`, `/health/ready`, `/metrics`                      | ouvert, pour les sondes et le scrape                                       |
@@ -49,6 +50,19 @@ a pas de bouton de déconnexion.
 L'utilisateur connecté est ce qu'affiche la barre du haut et ce qu'un run
 enregistre comme `requested_by`. `Hub:Analysis:IdentityHeader` est ignoré pour
 un utilisateur connecté, puisque n'importe quel client peut envoyer cet en-tête.
+
+Le [relais d'acquittement](API-FR.md#relais-dacquittement) tient l'appelant à
+une règle plus stricte qu'un run. Un run enregistre cet en-tête comme une
+affirmation que personne n'a vérifiée. Le relais dépense la clé d'écriture d'un
+daemon au nom de l'appelant, il prend donc l'utilisateur connecté, et ne prend
+l'en-tête que lorsque `Hub:AckRelay:TrustIdentityHeader` vaut `true`, le réglage
+d'un Hub placé derrière un proxy qui écrit lui-même l'en-tête et retire celui
+qu'un client aurait envoyé. Avec une session, l'en-tête y est ignoré aussi. Sans
+session ni ce réglage, le relais répond `403` à tout le monde, voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#lidentifiant-dacquittement). Quiconque
+est nommé peut acquitter sur toutes les sources qui relaient : le Hub n'a pas de
+rôles, voir
+[LIMITATIONS-FR.md](LIMITATIONS-FR.md#ce-que-le-hub-nauthentifie-pas).
 
 Les clés qui chiffrent le cookie vivent dans un répertoire `keys` à côté de
 `Hub:DatabasePath`, sur le volume de données, si bien qu'un redémarrage ne

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
@@ -190,6 +191,48 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
         {
             throw new AcksUnauthorizedException(exception);
+        }
+    }
+
+    /// <summary>
+    ///     Writes one ack at the daemon, or revokes it when there is no body. The
+    ///     only request that carries the ack credential, and it carries no other:
+    ///     the daemon refuses its read key on a write. The answer is the status
+    ///     alone, whatever it is, since each one means something to the relay.
+    /// </summary>
+    public async Task<HttpStatusCode> SendAckAsync(
+        SourceOptions source,
+        string signature,
+        byte[]? body,
+        string? userId,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_timeout);
+        // Escaped whole, so a signature holding a slash stays one path segment.
+        using var request = new HttpRequestMessage(
+            body is null ? HttpMethod.Delete : HttpMethod.Post,
+            RequestUri(source, $"api/findings/{Uri.EscapeDataString(signature)}/ack"));
+        request.Headers.TryAddWithoutValidation(source.AckHeaderName!, source.AckHeaderValue);
+        if (userId is not null)
+            request.Headers.TryAddWithoutValidation("X-User-Id", userId);
+        if (body is not null)
+            request.Content = new ByteArrayContent(body)
+            {
+                Headers = { ContentType = new MediaTypeHeaderValue("application/json") }
+            };
+
+        try
+        {
+            using var response = await httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                timeout.Token);
+            return response.StatusCode;
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new DaemonTimeoutException(exception);
         }
     }
 

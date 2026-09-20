@@ -1,8 +1,9 @@
 # API HTTP
 
-Trois surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
-greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse,
-lit `/api/incidents` pour son écran d'incidents, et n'appelle jamais `/api/findings`.
+Quatre surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
+greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse et
+le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et n'appelle
+jamais `/api/findings`.
 
 ## API d'import
 
@@ -324,6 +325,85 @@ le maillon le plus récent, de sorte que la filiation complète survit à la pur
 rétention de chaque étape antérieure. L'heuristique est conservatrice et non destructive :
 les deux lignes restent des findings distincts, et le prédécesseur vieillit par la
 rétention ordinaire.
+
+## Relais d'acquittement
+
+Deux routes écrivent sur le daemon derrière une source, avec la clé d'acquittement de ce
+daemon. Toutes deux sont un `POST` à corps JSON, et aucune n'est jamais ouverte : sous
+`Hub:Auth` elles demandent une session.
+
+| Endpoint                                   | Corps                                             | Effet                                      |
+|--------------------------------------------|---------------------------------------------------|--------------------------------------------|
+| `POST /api/sources/{sourceId}/acks`        | `{"signature":"…","reason":"…","expires_at":"…"}` | Acquitte le finding sur ce daemon          |
+| `POST /api/sources/{sourceId}/acks/revoke` | `{"signature":"…"}`                               | Révoque l'acquittement que tient ce daemon |
+
+`expires_at` est optionnel, et un acquittement qui n'en porte pas est permanent. Un `by`
+dans le corps est ignoré : le Hub nomme lui-même l'appelant.
+
+Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'atteint jamais le
+daemon :
+
+1. **L'appelant.** L'utilisateur connecté sous `Hub:Auth`. Sinon la valeur de
+   `Hub:Analysis:IdentityHeader`, et seulement quand `Hub:AckRelay:TrustIdentityHeader` est
+   posé, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comment-ça-marche). Sans personne
+   à nommer, un `403`. Il vient en premier pour qu'un appelant sans nom n'apprenne rien des
+   sources.
+2. **La source.** Un id inconnu, un backend de traces et un daemon sans identifiant
+   d'acquittement répondent tous le même `404`. `ack_relay` sur `/api/sources` dit quelles
+   sources relaient.
+3. **D'où vient la requête.** Un en-tête `Sec-Fetch-Site` présent et différent de
+   `same-origin` est un `403`, et un type de contenu autre que `application/json` est un
+   `415`. Le Hub n'a ni jeton antiforgery ni politique CORS, ces deux contrôles sont donc sa
+   défense contre une page d'une autre origine : un navigateur pose le premier de lui-même,
+   et le second ne traverse pas les origines sans un preflight auquel rien ici ne répond.
+4. **La place.** Deux relais tournent à la fois, et un de plus reçoit `503` avec
+   `Retry-After: 1`. Un corps de plus de 8 Kio est un `413`.
+5. **Le corps.** `signature` est obligatoire, de 1 024 caractères au plus, sans caractère
+   de contrôle, et ni `.` ni `..`, qui sortiraient du chemin d'acquittement du daemon. Sa
+   forme reste la règle du daemon. `reason` est obligatoire sur un acquittement, non blanc,
+   et tenu aux mêmes bornes. `expires_at` est un instant RFC 3339 dans le futur. Tout le
+   reste est un `400`.
+6. **La paire.** Le Hub doit détenir ce finding sur cette source. Une révocation passe
+   elle aussi à ce titre, et également sur un acquittement de ce finding que le Hub reflète
+   depuis cette source, qui peut survivre au finding. Sinon un `404`. Un daemon acquitte
+   n'importe quelle signature canonique, c'est donc ce qui borne le relais aux findings que
+   le Hub connaît.
+
+Le Hub écrit alors lui-même la requête du daemon, et rien de ce que l'appelant a envoyé ne
+voyage en octets. C'est un `POST`, ou un `DELETE` pour une révocation, sur
+`api/findings/{signature}/ack`, la signature encodée en pourcent pour qu'une signature qui
+contient une barre oblique reste un seul segment de chemin. Elle porte l'identifiant
+d'acquittement de la source et jamais celui de lecture. Le corps d'un acquittement est
+`{"by":"…","reason":"…","expires_at":"…"}`, `expires_at` réécrit en UTC à la seconde.
+L'appelant voyage en `by` sur un acquittement et en `X-User-Id` sur une révocation, inchangé
+quand il est en ASCII imprimable sans espace à ses extrémités, encodé en pourcent sinon, et
+sous la même forme des deux côtés pour que les deux se comparent égaux sur le daemon.
+L'échange entier dispose de trois fois `Hub:HttpTimeout`.
+
+| Le daemon répond      | Le Hub répond                                                                                |
+|-----------------------|----------------------------------------------------------------------------------------------|
+| un `2xx`              | `204`                                                                                        |
+| `400`                 | `400`, le daemon a refusé la signature comme non canonique                                   |
+| `401`                 | `502`, le daemon a refusé l'identifiant d'acquittement du Hub                                |
+| `404` à la révocation | `404`, pas acquitté sur ce daemon, ou seulement par sa baseline de CI                        |
+| `409`                 | `409`, déjà acquitté sur le daemon ou par sa baseline de CI                                  |
+| `503`                 | `503`, les acquittements sont désactivés sur ce daemon                                       |
+| `507`                 | `507`, le store d'acquittements du daemon est plein                                          |
+| rien à temps          | `504`                                                                                        |
+| autre chose           | `502`, un `404` sur un acquittement compris, qui veut dire que le daemon n'a pas cette route |
+
+Un `401` du daemon n'est jamais relayé tel quel. Il dit que la clé détenue par le Hub est
+fausse, ce qu'aucune connexion ne répare, et le lanceur répond à un `401` en se rechargeant
+vers la connexion. Chaque refus que le Hub formule lui-même porte `{"detail":"…"}`. Le
+`413`, le `415` et le `503` d'une porte pleine n'ont pas de corps.
+
+Après un `2xx` le Hub relit la liste d'acquittements de ce daemon, de sorte que `acks[]` et
+`include_acked=false` suivent aussitôt au lieu d'attendre le poll suivant. Il le fait pour
+une source que le poll a déjà jointe, puisque cette lecture se décide sur la version du
+daemon, et un échec de cette lecture ne change jamais le `204` en erreur : le daemon a pris
+l'écriture. Chaque relais journalise une ligne, l'événement `1310` quand le daemon a
+répondu et `1311` sinon, avec la source, l'action, l'appelant et le statut. La raison et
+l'identifiant ne sont jamais journalisés.
 
 ## API d'analyse
 

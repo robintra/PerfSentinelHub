@@ -183,15 +183,28 @@ public static partial class ApiEndpoints
     private static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
     {
         // A session outranks the header, which any client can send.
-        string identity;
-        if (request.HttpContext.User.Identity is { IsAuthenticated: true, Name: { Length: > 0 } name })
-            identity = name;
-        else if (request.Headers.TryGetValue(analysis.IdentityHeader, out var values) &&
-                 values is [{ Length: > 0 } header])
-            identity = header;
-        else
-            return null;
+        return Sanitized(SessionName(request) ?? ProxyIdentity(request, analysis));
+    }
 
+    private static string? SessionName(HttpRequest request)
+    {
+        return request.HttpContext.User.Identity is { IsAuthenticated: true, Name: { Length: > 0 } name }
+            ? name
+            : null;
+    }
+
+    private static string? ProxyIdentity(HttpRequest request, AnalysisOptions analysis)
+    {
+        return request.Headers.TryGetValue(analysis.IdentityHeader, out var values) &&
+               values is [{ Length: > 0 } header]
+            ? header
+            : null;
+    }
+
+    private static string? Sanitized(string? identity)
+    {
+        if (identity is null)
+            return null;
         var trimmed = identity.Length > MaxIdentityChars ? identity[..MaxIdentityChars] : identity;
         return trimmed.Any(char.IsControl) ? null : trimmed;
     }

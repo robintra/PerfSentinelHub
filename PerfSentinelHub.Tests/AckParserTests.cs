@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PerfSentinelHub.Collection;
 
 namespace PerfSentinelHub.Tests;
@@ -114,10 +115,11 @@ public sealed class AckParserTests
         Assert.Throws<InvalidDataException>(() => AckParser.Parse(Encoding.UTF8.GetBytes(body)));
     }
 
+    // Rewritten compact, so a replacement holds however the fixture file is laid out.
     private static async Task<string> TemplateAsync()
     {
         using var fixture = JsonDocument.Parse(
             await File.ReadAllBytesAsync(FixturePath, TestContext.Current.CancellationToken));
-        return fixture.RootElement[0].GetRawText();
+        return JsonNode.Parse(fixture.RootElement[0].GetRawText())!.ToJsonString();
     }
 }

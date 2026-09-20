@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -246,10 +247,11 @@ public sealed class AckPollingTests : IDisposable
         Assert.Contains(logger.Messages, message => message.Contains("rejected 1", StringComparison.Ordinal));
     }
 
+    // Rewritten compact, so a replacement holds however the fixture file is laid out.
     private static async Task<string> TemplateAsync(int index, CancellationToken cancellationToken)
     {
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
-        return fixture.RootElement[index].GetRawText();
+        return JsonNode.Parse(fixture.RootElement[index].GetRawText())!.ToJsonString();
     }
 
     // A daemon whose ack listing is the test's and whose other routes are the

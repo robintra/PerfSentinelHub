@@ -242,9 +242,14 @@ public static partial class ApiEndpoints
         return true;
     }
 
+    // A blank value reads as absent: Grafana sends a single space for its All
+    // choice, which would otherwise empty the page of a free filter and answer
+    // 400 on a closed set.
     private static string? ReadOptional(HttpRequest request, string name)
     {
-        return request.Query.TryGetValue(name, out var value) ? value[0] : null;
+        return request.Query.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value[0])
+            ? value[0]
+            : null;
     }
 
     private static bool HasValidUtf8(string? rawQuery)

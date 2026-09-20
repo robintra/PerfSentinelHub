@@ -45,7 +45,9 @@ lecteur ne doit pas confondre avec l'epoch. `producer_version` est null pour un 
 traces, parce qu'un backend stocke des traces et ne détecte rien.
 
 Sur `/api/findings`, `include_acked` vaut `true` par défaut. À `false`, il masque les
-enveloppes portant un `acknowledged_by` non null.
+enveloppes portant un `acknowledged_by` non null. Un `service`, `finding_type`, `severity`
+ou `status` donné vide ou composé seulement de blancs se lit comme absent, ce qu'un
+tableau de bord envoie pour son choix "All".
 
 ### La vue daemon
 
@@ -138,10 +140,11 @@ pagine avec `offset` et `limit`. `service` et `namespace` sont des chaînes libr
 à l'identique, et une valeur inconnue donne une page vide. `kind`, `environment` et
 `source_id` sont des ensembles fermés, les cinq genres du daemon et les sources configurées
 du Hub, et une valeur hors de ces ensembles répond `400` plutôt qu'une page vide, parce
-qu'une faute de frappe ne doit pas se lire "aucun incident". `environment` se résout en
-chaque source configurée avec lui. Donné avec `source_id`, les deux s'intersectent, donc
-une source hors de l'environnement nommé ne liste rien, la réponse d'une paire de filtres
-qui s'excluent.
+qu'une faute de frappe ne doit pas se lire "aucun incident". Chacun de ces cinq filtres,
+donné vide ou composé seulement de blancs, se lit comme absent, ensembles fermés compris,
+donc il ne répond ni `400` ni une page vide. `environment` se résout en chaque source
+configurée avec lui. Donné avec `source_id`, les deux s'intersectent, donc une source hors
+de l'environnement nommé ne liste rien, la réponse d'une paire de filtres qui s'excluent.
 
 `GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
 copie la plus riche quand plusieurs sources tiennent l'id. Un finding dont `first_seen_ms`

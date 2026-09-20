@@ -566,22 +566,16 @@ public sealed class FindingIngestionTests : IDisposable
         await database.InitializeAsync(cancellationToken);
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
 
-        ParsedBatch Copy(string name, string severity)
-        {
-            return new ParsedBatch(
-                [batch.Findings[0] with { Severity = severity, EnvelopeJson = $$"""{"copy":"{{name}}"}""" }], 0);
-        }
-
-        await database.UpsertBatchAsync(ProductionA, Copy("a", "info"), 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, Copy(batch, "a", "info"), 1000, cancellationToken);
         await database.UpsertBatchAsync(
             new SourceSnapshot("production-b", "Production B", "production", "0.11.2"),
-            Copy("b", "warning"),
+            Copy(batch, "b", "warning"),
             3000,
             cancellationToken);
         // Fresher than both, and outside the scope.
         await database.UpsertBatchAsync(
             new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
-            Copy("staging", "critical"),
+            Copy(batch, "staging", "critical"),
             5000,
             cancellationToken);
 
@@ -877,6 +871,13 @@ public sealed class FindingIngestionTests : IDisposable
         // Applied after the limit, the window would cut the page down to the fresher row, then empty it.
         var page = await database.QueryFindingsAsync(Days(10, 10) with { Limit = 1 }, cancellationToken);
         Assert.Equal(older.Signature, Assert.Single(page).Signature);
+    }
+
+    // The fixture finding under another severity, its envelope reduced to a name a test can read back.
+    private static ParsedBatch Copy(ParsedBatch batch, string name, string severity)
+    {
+        return new ParsedBatch(
+            [batch.Findings[0] with { Severity = severity, EnvelopeJson = $$"""{"copy":"{{name}}"}""" }], 0);
     }
 
     // A window of whole days on the Hub clock, both ends included.

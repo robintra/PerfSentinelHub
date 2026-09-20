@@ -105,27 +105,18 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     public async Task Offset_pages_without_overlap()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
-        var original = batch.Findings[0];
-        ParsedFinding Paged(string signature) => original with
-        {
-            Signature = signature,
-            Service = "paged",
-            TraceId = null,
-            EnvelopeJson = original.EnvelopeJson.Replace(
-                "blocking_wait:rider-smoke:checkout:slow-path",
-                signature,
-                StringComparison.Ordinal)
-        };
 
         // "b" and "c" share a last_seen, so only the signature orders them.
         var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
         await factory.Database.UpsertBatchAsync(
-            source, new ParsedBatch([Paged("paged:d")], 0), 5000, cancellationToken);
+            source, new ParsedBatch([await VariantAsync("paged:d", "paged")], 0), 5000, cancellationToken);
         await factory.Database.UpsertBatchAsync(
-            source, new ParsedBatch([Paged("paged:c"), Paged("paged:b")], 0), 6000, cancellationToken);
+            source,
+            new ParsedBatch([await VariantAsync("paged:c", "paged"), await VariantAsync("paged:b", "paged")], 0),
+            6000,
+            cancellationToken);
         await factory.Database.UpsertBatchAsync(
-            source, new ParsedBatch([Paged("paged:a")], 0), 7000, cancellationToken);
+            source, new ParsedBatch([await VariantAsync("paged:a", "paged")], 0), 7000, cancellationToken);
 
         var whole = await SignaturesAsync("/api/findings?service=paged");
         var first = await SignaturesAsync("/api/findings?service=paged&limit=2&offset=0");

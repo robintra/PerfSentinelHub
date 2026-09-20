@@ -244,10 +244,10 @@ public static partial class ApiEndpoints
             limit,
             includeAcked,
             status,
-            Offset: offset,
-            SourceIds: sourceIds,
-            FromMs: fromMs,
-            ToMs: toMs);
+            offset,
+            sourceIds,
+            fromMs,
+            toMs);
         return true;
     }
 
@@ -273,10 +273,12 @@ public static partial class ApiEndpoints
         var environment = ReadOptional(request, "environment");
         if (environment is not null)
         {
-            sourceIds = options.Sources
-                .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
-                .Select(source => source.Id)
-                .ToArray();
+            sourceIds =
+            [
+                .. options.Sources
+                    .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
+                    .Select(source => source.Id)
+            ];
             if (sourceIds.Count == 0)
                 return false;
         }

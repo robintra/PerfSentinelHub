@@ -717,6 +717,174 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal($"0 {severity} {expectedRank}", await ObservationsAsync(connection, cancellationToken));
     }
 
+    [Fact]
+    public async Task A_window_matches_an_observation_day_and_not_a_day_outside_it()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var fleet = new FindingQuery(null, null, null, 100);
+
+        await database.UpsertBatchAsync(ProductionA, batch, 10 * DayMs + 1000, cancellationToken);
+
+        Assert.Single(await database.QueryFindingsAsync(Days(10, 10), cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(Days(8, 12), cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(Days(8, 9), cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(Days(11, 12), cancellationToken));
+        // A day is matched whole, so a window that ends before the observation itself still holds it.
+        Assert.Single(await database.QueryFindingsAsync(
+            fleet with { FromMs = 10 * DayMs, ToMs = 10 * DayMs + 500 }, cancellationToken));
+        // Either side stays open when its bound is absent.
+        Assert.Single(await database.QueryFindingsAsync(fleet with { FromMs = 10 * DayMs }, cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(fleet with { FromMs = 11 * DayMs }, cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(fleet with { ToMs = 10 * DayMs }, cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(fleet with { ToMs = 10 * DayMs - 1 }, cancellationToken));
+    }
+
+    /// <summary>
+    ///     The daemon saw the finding on day 5 and the Hub recorded it first on
+    ///     day 10. Nothing says it went away in between, so it reads as present.
+    /// </summary>
+    [Fact]
+    public async Task The_time_before_the_first_recorded_day_reads_as_presence()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var early = new ParsedBatch([batch.Findings[0] with { FirstSeenMs = 5 * DayMs + 1000 }], 0);
+
+        await database.UpsertBatchAsync(ProductionA, early, 10 * DayMs + 1000, cancellationToken);
+
+        Assert.Single(await database.QueryFindingsAsync(Days(6, 7), cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(Days(3, 5), cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(Days(3, 4), cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_gap_between_two_observation_days_stays_a_gap_after_the_purge()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        await database.UpsertBatchAsync(ProductionA, batch, 10 * DayMs + 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, batch, 14 * DayMs + 1000, cancellationToken);
+
+        Assert.Empty(await database.QueryFindingsAsync(Days(11, 13), cancellationToken));
+
+        // Drops day 10 and keeps the pair, last seen on day 14.
+        await database.PurgeAsync(12 * DayMs, 0, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal("14 critical 3", await ObservationsAsync(connection, cancellationToken));
+        // A first day read back as MIN(day) would now be 14 and fill the gap.
+        Assert.Empty(await database.QueryFindingsAsync(Days(11, 13), cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(Days(14, 14), cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_window_over_a_purged_day_lists_nothing_for_a_finding_still_present()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        foreach (var day in new long[] { 10, 11, 14 })
+            await database.UpsertBatchAsync(ProductionA, batch, day * DayMs + 1000, cancellationToken);
+        Assert.Single(await database.QueryFindingsAsync(Days(11, 11), cancellationToken));
+
+        // Drops days 10 and 11. The first recorded day stays 10, so day 11 is not assumed either.
+        await database.PurgeAsync(12 * DayMs, 0, cancellationToken);
+
+        Assert.Empty(await database.QueryFindingsAsync(Days(11, 11), cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(Days(14, 14), cancellationToken));
+    }
+
+    /// <summary>
+    ///     A pair written before the observation days existed has none, and reads
+    ///     as present from its first to its last sighting rather than never.
+    /// </summary>
+    [Fact]
+    public async Task A_pair_with_no_recorded_day_matches_from_its_first_seen_to_its_last_seen()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        await database.UpsertBatchAsync(ProductionA, batch, 10 * DayMs + 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, batch, 14 * DayMs + 1000, cancellationToken);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                                  UPDATE finding_sources SET first_observed_day = NULL;
+                                  DELETE FROM finding_observations;
+                                  """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        Assert.Single(await database.QueryFindingsAsync(Days(12, 13), cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(Days(14, 20), cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(Days(8, 9), cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(Days(15, 16), cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_window_honours_the_scope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var staging = new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2");
+
+        await database.UpsertBatchAsync(staging, batch, 10 * DayMs + 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, batch, 14 * DayMs + 1000, cancellationToken);
+
+        Assert.Single(await database.QueryFindingsAsync(Days(14, 14), cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(
+            Days(14, 14) with { SourceIds = ["production-a"] }, cancellationToken));
+        // Production observed it that day, from outside the scope.
+        Assert.Empty(await database.QueryFindingsAsync(
+            Days(14, 14) with { SourceIds = ["staging-a"] }, cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(
+            Days(10, 10) with { SourceIds = ["staging-a"] }, cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_window_applies_before_the_page_limit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var older = batch.Findings[0];
+        var fresher = older with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:fresher",
+            TemplateHash = "fresher-hash"
+        };
+
+        await database.UpsertBatchAsync(ProductionA, new ParsedBatch([older], 0), 10 * DayMs + 1000, cancellationToken);
+        await database.UpsertBatchAsync(
+            ProductionA, new ParsedBatch([fresher], 0), 14 * DayMs + 1000, cancellationToken);
+
+        // Applied after the limit, the window would cut the page down to the fresher row, then empty it.
+        var page = await database.QueryFindingsAsync(Days(10, 10) with { Limit = 1 }, cancellationToken);
+        Assert.Equal(older.Signature, Assert.Single(page).Signature);
+    }
+
+    // A window of whole days on the Hub clock, both ends included.
+    private static FindingQuery Days(long from, long to)
+    {
+        return new FindingQuery(null, null, null, 100, FromMs: from * DayMs, ToMs: (to + 1) * DayMs - 1);
+    }
+
     private static async Task<string> SourceCopyAsync(
         SqliteConnection connection,
         string sourceId,

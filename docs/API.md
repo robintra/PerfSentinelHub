@@ -28,7 +28,7 @@ the Hub's route to the daemon, which a push does not exercise.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
-| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `offset`, `limit`, `include_acked`                                                      |
+| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                        |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
@@ -58,6 +58,21 @@ together with `source_id` the two intersect, so a source outside the named envir
 lists nothing, the answer a pair of filters that exclude each other has. Without either, the
 read covers the whole fleet as it always has. A scoped answer describes its scope rather
 than the fleet, see [What the Hub adds to a finding](#what-the-hub-adds-to-a-finding).
+
+`from` and `to` bound the read to an observation window, in epoch milliseconds, each
+optional and both inclusive. A finding is listed when a source in scope observed it inside
+the window, so the window honours `environment` and `source_id`. It selects rows and does
+not rewrite them: `first_seen`, `last_seen` and `status` still describe the finding as it
+stands now. A value that is not a plain non-negative integer, a sign included, is a `400`,
+and so is a `from` greater than `to`. Given empty or as whitespace only, either reads as
+absent and leaves its side open.
+
+The window has the granularity of a day. The Hub records the days each source observed a
+finding, whole UTC days on its own clock, so a bound that falls inside a day takes that
+whole day. Before the first day the Hub recorded for a source, that source is assumed to
+have carried the finding from its `first_seen` to the start of that day, and up to its
+`last_seen` when no day was ever recorded, which is the case of a database written before
+the record existed. [LIMITATIONS.md](LIMITATIONS.md) says what that assumption costs.
 
 ### The daemon view
 

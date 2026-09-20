@@ -522,10 +522,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         if (!query.IncludeAcked)
             where.Append(" AND json_extract(finding_json, '$.acknowledged_by') IS NULL");
+        var windowed = AddWindow(parameters, query);
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = FindingsSql(where, query.SourceIds is not null);
+        command.CommandText = FindingsSql(where, query.SourceIds is not null, windowed);
         foreach (var (name, value) in parameters)
             command.Parameters.AddWithValue(name, value);
         command.Parameters.AddWithValue(
@@ -578,17 +579,18 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // resolved before it for the same reason. A read of the whole fleet keeps
     // the statement it always had. Every interpolated fragment is assembled
     // from private constants. External values remain bound parameters.
-    private static string FindingsSql(StringBuilder where, bool scoped)
+    private static string FindingsSql(StringBuilder where, bool scoped, bool windowed)
     {
         var (with, row, heartbeatScope, sourceScope) = scoped
             ? ($"WITH {ScopedFindings},", "scoped", $" AND eh.source_id {InScope}", $" AND fs.source_id {InScope}")
             : ("WITH", "findings", "", "");
+        var window = windowed ? InWindow(row) : "";
 #pragma warning disable S2077
         return $"""
                 {with} statused AS (
                   SELECT {row}.*, {StatusCase(row, heartbeatScope)} AS status
                   FROM {row}
-                  {where}
+                  {where}{window}
                 ),
                 selected AS (
                   SELECT * FROM statused
@@ -642,6 +644,43 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                   ELSE 'not_observed'
                 END
                 """;
+    }
+
+    // A (finding, source) pair is present on its observation days, whole days on
+    // the Hub clock. Before its first recorded day it is assumed present from its
+    // first_seen on, and up to its last_seen when it has no recorded day at all,
+    // so a database that predates the observation days does not read as empty.
+    // first_observed_day is stored: a MIN(day) would move with the purge and
+    // fill the gaps it leaves. The scope decides whose presence counts.
+    private static string InWindow(string row)
+    {
+        return $"""
+                 AND EXISTS (
+                    SELECT 1 FROM finding_sources AS p
+                    WHERE p.signature = {row}.signature
+                      AND ($source_ids IS NULL OR p.source_id {InScope})
+                      AND (EXISTS (
+                             SELECT 1 FROM finding_observations AS o
+                             WHERE o.signature = p.signature AND o.source_id = p.source_id
+                               AND o.day BETWEEN $from_day AND $to_day)
+                           OR (p.first_seen_ms <= $to_ms
+                               AND COALESCE(p.first_observed_day * 86400000, p.last_seen_ms) >= $from_ms)))
+                """;
+    }
+
+    // Binds the window when either bound is set, an absent one leaving its side open.
+    private static bool AddWindow(List<(string Name, object Value)> parameters, FindingQuery query)
+    {
+        if (query.FromMs is null && query.ToMs is null)
+            return false;
+
+        var fromMs = query.FromMs ?? 0;
+        var toMs = query.ToMs ?? long.MaxValue;
+        parameters.Add(("$from_ms", fromMs));
+        parameters.Add(("$to_ms", toMs));
+        parameters.Add(("$from_day", fromMs / DayMs));
+        parameters.Add(("$to_day", toMs / DayMs));
+        return true;
     }
 
     private static void AddFilter(

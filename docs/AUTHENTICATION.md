@@ -58,6 +58,17 @@ a session nor that setting the relay answers `403` to everyone, see
 ack on every source that relays: the Hub has no roles, see
 [LIMITATIONS.md](LIMITATIONS.md#what-the-hub-does-not-authenticate).
 
+Both relay routes also judge where the request comes from. A browser that sends
+`Sec-Fetch-Site: same-origin` passes, and every other value is a `403`,
+`cross-site` and `same-site` and the `none` a typed address carries alike. A
+caller that sends no such header at all passes, because curl, a CI job and an
+IDE plugin do not set it, and refusing them would close the relay to everything
+but a browser. What holds that last case is the content type: the Hub takes a
+JSON content type and nothing else, which a cross-origin form cannot produce and
+a cross-origin fetch cannot send without a preflight the Hub never answers. A
+Hub reachable from a browser session should still sit behind a proxy that does
+not forward arbitrary origins.
+
 The keys that encrypt the cookie live in a `keys` directory next to
 `Hub:DatabasePath`, on the data volume, so a restart does not sign everyone out.
 The Hub logs at startup that no XML encryptor is configured: the keys sit

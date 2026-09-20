@@ -151,6 +151,19 @@ personne ne doit acquitter depuis le Hub. Le nom envoyé alimente la piste
 d'audit du daemon et n'y autorise rien. Le daemon en garde 256 octets, donc un
 nom long qu'il a fallu encoder en pourcent peut être coupé.
 
+Le relais n'a ni jeton antiforgery ni politique CORS, il lit donc
+`Sec-Fetch-Site` et refuse toute valeur autre que `same-origin`, `cross-site`
+comme `same-site` comme le `none` que porte une adresse tapée à la main. Un
+appelant qui n'envoie pas du tout cet en-tête passe, puisque curl, un job de CI
+et un greffon d'IDE ne le posent pas. Ce qui défend ce cas, c'est le type de
+contenu seul : le Hub prend un type de contenu JSON et rien d'autre, ce qu'un
+formulaire d'une autre origine ne sait pas produire et qu'un fetch d'une autre
+origine ne peut pas envoyer sans un preflight auquel le Hub ne répond jamais.
+C'est un plancher et non une frontière, et ce plancher n'est que celui du
+relais : `POST /api/analyses` et `POST /api/incidents/refresh` ne jugent ni le
+site ni le type de contenu. Un Hub joignable depuis une session de navigateur a
+donc sa place derrière un proxy qui ne relaie pas des origines arbitraires.
+
 ## Ce qui se joue hors du Hub
 
 Un rapport vivant exige deux choses que le Hub ne contrôle pas : le

@@ -137,6 +137,18 @@ credential off a source nobody should ack from the Hub. The name sent along
 feeds the daemon's audit trail and authorizes nothing there. The daemon keeps
 256 bytes of it, so a long name that had to be percent-encoded may be cut.
 
+The relay has no antiforgery token and no CORS policy, so it reads
+`Sec-Fetch-Site` and refuses every value but `same-origin`, `cross-site` and
+`same-site` and the `none` a typed address carries alike. A caller that sends no
+such header at all passes, since curl, a CI job and an IDE plugin do not set it.
+What defends that case is the content type alone: the Hub takes a JSON content
+type and nothing else, which a cross-origin form cannot produce and a
+cross-origin fetch cannot send without a preflight the Hub never answers. That
+is a floor and not a boundary, and the floor is the relay's alone:
+`POST /api/analyses` and `POST /api/incidents/refresh` judge neither the site
+nor the content type. A Hub reachable from a browser session therefore belongs
+behind a proxy that does not forward arbitrary origins.
+
 ## What sits outside the Hub
 
 A live report needs two things the Hub does not control: the daemon's

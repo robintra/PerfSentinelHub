@@ -103,9 +103,17 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    ///     The Hub has no antiforgery token and no CORS policy. A browser names
-    ///     the site a request comes from, and a page on another origin cannot
-    ///     send JSON without a preflight nothing here answers.
+    ///     The Hub has no antiforgery token and no CORS policy, so a write is
+    ///     held by what the caller says about itself. Three cases. A browser
+    ///     that sends <c>same-origin</c> passes. Every other value is refused,
+    ///     <c>cross-site</c> and <c>same-site</c> and the <c>none</c> a typed
+    ///     address carries alike. A caller that sends no such header at all
+    ///     passes, because curl, a CI job and an IDE plugin do not set it, and
+    ///     it is then held by the JSON content type alone, which a cross-origin
+    ///     form cannot produce and a cross-origin fetch cannot send without a
+    ///     preflight nothing here answers. The comparison is on the whole
+    ///     header value, so a duplicated or oddly cased one falls on the
+    ///     refusing side rather than through.
     /// </summary>
     private static IResult? RefuseForeignRequest(HttpRequest request)
     {

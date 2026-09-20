@@ -156,10 +156,15 @@ public sealed class AckRelayApiTests(HubApplicationFactory factory) : IClassFixt
     [Theory]
     [InlineData("cross-site")]
     [InlineData("same-site")]
+    // A typed address or a bookmark, which is a value and not a missing header.
     [InlineData("none")]
-    public async Task A_request_a_browser_marks_as_foreign_is_refused(string site)
+    // The value is compared as it arrived, so a casing no browser sends is
+    // refused too, and so is the folding a proxy may hand over.
+    [InlineData("Same-Origin")]
+    [InlineData("same-origin, same-origin")]
+    public async Task A_site_header_that_is_not_same_origin_is_refused(string site)
     {
-        var sourceId = $"foreign-{site}";
+        var sourceId = $"foreign-{site.Length}";
         var request = Relay(sourceId, BodyOf(Signature).ToJsonString());
         request.Headers.Add("Sec-Fetch-Site", site);
 
@@ -170,24 +175,49 @@ public sealed class AckRelayApiTests(HubApplicationFactory factory) : IClassFixt
     }
 
     [Fact]
-    public async Task A_same_origin_request_is_relayed()
+    public async Task A_site_header_sent_twice_is_refused()
     {
+        var request = Relay("doubled", BodyOf(Signature).ToJsonString());
+        // Two values are not the one value that passes. The folded
+        // "same-origin, same-origin" is refused by the theory above instead,
+        // as the single value it arrives as.
+        request.Headers.Add("Sec-Fetch-Site", ["same-origin", "same-origin"]);
+
+        using var response = await RefusedAsync("doubled", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await AssertDetailAsync(response);
+    }
+
+    [Theory]
+    [InlineData("same-origin")]
+    // No header at all, which is not the "none" refused above: curl, a CI job
+    // and an IDE plugin do not set it, and refusing them would close the relay
+    // to everything but a browser.
+    [InlineData(null)]
+    public async Task A_request_with_no_site_header_or_same_origin_is_relayed(string? site)
+    {
+        var sourceId = $"origin-{site ?? "absent"}";
         var calls = new ConcurrentQueue<DaemonCall>();
         await using var daemon = await DaemonAsync(calls, StatusCodes.Status201Created);
-        await using var scoped = Scoped(factory, Relayed("same-origin", daemon));
-        await SeedAsync(factory.Database, "same-origin", Signature);
+        await using var scoped = Scoped(factory, Relayed(sourceId, daemon));
+        await SeedAsync(factory.Database, sourceId, Signature);
         using var client = scoped.CreateClient();
-        var request = Relay("same-origin", BodyOf(Signature).ToJsonString());
-        request.Headers.Add("Sec-Fetch-Site", "same-origin");
+        var request = Relay(sourceId, BodyOf(Signature).ToJsonString());
+        if (site is not null)
+            request.Headers.Add("Sec-Fetch-Site", site);
 
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
+    // No Sec-Fetch-Site here: the content type is what holds a caller that
+    // sends none of it, and a form can post no other type than these three.
     [Theory]
     [InlineData("text/plain")]
     [InlineData("application/x-www-form-urlencoded")]
+    [InlineData("multipart/form-data")]
     public async Task A_body_a_form_could_post_is_refused(string contentType)
     {
         var sourceId = $"media-{contentType.Length}";

@@ -77,13 +77,33 @@ public sealed record StoredIncident(
     // Null on the listing, which never reads the column.
     string? FindingsJson);
 
-/// <summary>The outcome of the last incidents read of one source.</summary>
-public sealed record IncidentRead(long LastReadMs, string State, string? LastErrorCode);
+/// <summary>
+///     The outcome of the last read of one source, as its ledger filed it:
+///     incident_reads or ack_reads, which share a shape.
+/// </summary>
+public sealed record SourceRead(long LastReadMs, string State, string? LastErrorCode);
 
 public static class IncidentReadStates
 {
     public const string Ok = "ok";
     public const string Absent = "absent";
+    public const string Unauthorized = "unauthorized";
+    public const string Error = "error";
+}
+
+public static class AckReadStates
+{
+    public const string Ok = "ok";
+
+    /// <summary>
+    ///     The daemon's listing was full, so its tail is missing. The rows
+    ///     read are mirrored, but the mirror cannot say a finding is not acked.
+    /// </summary>
+    public const string Truncated = "truncated";
+
+    /// <summary>A daemon with no ack store, or too old to list its baseline.</summary>
+    public const string Absent = "absent";
+
     public const string Unauthorized = "unauthorized";
     public const string Error = "error";
 }

@@ -25,6 +25,22 @@ public sealed partial class HubDatabase
                                                finding_count, incident_json, first_seen_ms, last_seen_ms
                                                """;
 
+    // The two read ledgers, incident_reads and ack_reads, share a shape and
+    // so these two statements. Each ledger names its table in a constant built
+    // from them, which is the only text the shared methods below ever run.
+    private const string ReadLedgerUpsert = """
+                                            (source_id, last_read_ms, state, last_error_code)
+                                            VALUES ($source_id, $read_at, $state, $error_code)
+                                            ON CONFLICT(source_id) DO UPDATE SET
+                                              last_read_ms = excluded.last_read_ms,
+                                              state = excluded.state,
+                                              last_error_code = excluded.last_error_code;
+                                            """;
+
+    private const string ReadLedgerSelect = "SELECT source_id, last_read_ms, state, last_error_code FROM ";
+    private const string IncidentReadUpsert = $"INSERT INTO incident_reads{ReadLedgerUpsert}";
+    private const string IncidentReadSelect = $"{ReadLedgerSelect}incident_reads;";
+
     /// <summary>
     ///     Stores one poll's incidents and files the read as ok, in one
     ///     transaction. A row is one daemon's capture, so two daemons fed the
@@ -47,8 +63,13 @@ public sealed partial class HubDatabase
             await using var transaction = connection.BeginTransaction(false);
             foreach (var incident in incidents)
                 await UpsertIncidentAsync(connection, transaction, sourceId, incident, observedAtMs, cancellationToken);
-            await RecordIncidentReadAsync(
-                connection, transaction, sourceId, observedAtMs, IncidentReadStates.Ok, null, cancellationToken);
+            await RecordReadAsync(
+                connection,
+                transaction,
+                IncidentReadUpsert,
+                sourceId,
+                new SourceRead(observedAtMs, IncidentReadStates.Ok, null),
+                cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         finally
@@ -105,18 +126,29 @@ public sealed partial class HubDatabase
     ///     source_state on purpose, whose unreachable_since_ms feeds the finding
     ///     status and must only ever say whether the daemon answered at all.
     /// </summary>
-    public async Task RecordIncidentReadAsync(
+    public Task RecordIncidentReadAsync(
         string sourceId,
         long readAtMs,
         string state,
         string? errorCode,
         CancellationToken cancellationToken)
     {
+        return RecordReadAsync(
+            IncidentReadUpsert, sourceId, new SourceRead(readAtMs, state, errorCode), cancellationToken);
+    }
+
+    // A read that stored nothing, filed on its own under the write gate.
+    private async Task RecordReadAsync(
+        string ledgerUpsert,
+        string sourceId,
+        SourceRead read,
+        CancellationToken cancellationToken)
+    {
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
-            await RecordIncidentReadAsync(connection, null, sourceId, readAtMs, state, errorCode, cancellationToken);
+            await RecordReadAsync(connection, null, ledgerUpsert, sourceId, read, cancellationToken);
         }
         finally
         {
@@ -124,29 +156,21 @@ public sealed partial class HubDatabase
         }
     }
 
-    private static async Task RecordIncidentReadAsync(
+    private static async Task RecordReadAsync(
         SqliteConnection connection,
         SqliteTransaction? transaction,
+        string ledgerUpsert,
         string sourceId,
-        long readAtMs,
-        string state,
-        string? errorCode,
+        SourceRead read,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
-                              INSERT INTO incident_reads(source_id, last_read_ms, state, last_error_code)
-                              VALUES ($source_id, $read_at, $state, $error_code)
-                              ON CONFLICT(source_id) DO UPDATE SET
-                                last_read_ms = excluded.last_read_ms,
-                                state = excluded.state,
-                                last_error_code = excluded.last_error_code;
-                              """;
+        command.CommandText = ledgerUpsert;
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
-        command.Parameters.AddWithValue("$read_at", readAtMs);
-        command.Parameters.AddWithValue("$state", state);
-        command.Parameters.AddWithValue("$error_code", (object?)errorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("$read_at", read.LastReadMs);
+        command.Parameters.AddWithValue("$state", read.State);
+        command.Parameters.AddWithValue("$error_code", (object?)read.LastErrorCode ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -212,16 +236,23 @@ public sealed partial class HubDatabase
     ///     The last incidents read per source, keyed by source id. A source with
     ///     no row has never had its incidents read.
     /// </summary>
-    public async Task<Dictionary<string, IncidentRead>> QueryIncidentReadsAsync(CancellationToken cancellationToken)
+    public Task<Dictionary<string, SourceRead>> QueryIncidentReadsAsync(CancellationToken cancellationToken)
+    {
+        return QueryReadsAsync(IncidentReadSelect, cancellationToken);
+    }
+
+    private async Task<Dictionary<string, SourceRead>> QueryReadsAsync(
+        string ledgerSelect,
+        CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT source_id, last_read_ms, state, last_error_code FROM incident_reads;";
+        command.CommandText = ledgerSelect;
 
-        var reads = new Dictionary<string, IncidentRead>(StringComparer.Ordinal);
+        var reads = new Dictionary<string, SourceRead>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            reads[reader.GetString(0)] = new IncidentRead(
+            reads[reader.GetString(0)] = new SourceRead(
                 reader.GetInt64(1),
                 reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3));

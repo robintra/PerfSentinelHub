@@ -181,4 +181,35 @@ internal static class Schema
                                CREATE INDEX IF NOT EXISTS ix_finding_sources_source
                                  ON finding_sources(source_id, signature);
                                """;
+
+    // Each daemon's active acknowledgments, copied by the poll. A read replaces
+    // its source's rows whole, so a row is never older than the last read that
+    // succeeded and a revoked ack leaves with the next one. One row per
+    // signature and source: the daemon lists a signature acked twice, at
+    // runtime and in its CI baseline, and the baseline row is the one kept, as
+    // the daemon's own lookup does. acked_at is text because the baseline
+    // never constrains its format. expires_at_ms is what a read compares, the
+    // text beside it is what it relays. Kept a rowid table because the purge
+    // deletes by rowid. ack_reads is kept apart from source_state for the
+    // reason incident_reads is.
+    internal const string V7 = """
+                               CREATE TABLE IF NOT EXISTS source_acks (
+                                 source_id TEXT NOT NULL,
+                                 signature TEXT NOT NULL,
+                                 origin TEXT NOT NULL,
+                                 acked_by TEXT NOT NULL,
+                                 reason TEXT,
+                                 acked_at TEXT NOT NULL,
+                                 expires_at TEXT,
+                                 expires_at_ms INTEGER,
+                                 read_at_ms INTEGER NOT NULL,
+                                 PRIMARY KEY(source_id, signature)
+                               );
+                               CREATE TABLE IF NOT EXISTS ack_reads (
+                                 source_id TEXT PRIMARY KEY,
+                                 last_read_ms INTEGER NOT NULL,
+                                 state TEXT NOT NULL,
+                                 last_error_code TEXT
+                               );
+                               """;
 }

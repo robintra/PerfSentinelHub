@@ -119,6 +119,37 @@ public sealed class WorkerAndRetentionTests : IDisposable
     }
 
     [Fact]
+    public async Task Purge_removes_a_mirrored_ack_that_no_read_refreshed_since_the_cutoff()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            // Every read rewrites its source's rows, so an old read_at_ms is a
+            // source the Hub stopped reading, not an ack that aged.
+            command.CommandText = """
+                                  INSERT INTO source_acks
+                                    (source_id, signature, origin, acked_by, acked_at, read_at_ms)
+                                  VALUES
+                                    ('retired','sig','daemon','alice','2026-01-01T00:00:00Z',500),
+                                    ('active','sig','toml','ci-bot','2026-01-01',1500);
+                                  """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await database.PurgeAsync(1000, 0, cancellationToken);
+
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = "SELECT group_concat(source_id, ',') FROM source_acks;";
+        Assert.Equal("active", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
     public async Task Poll_worker_keeps_running_when_a_storage_write_fails()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -144,6 +175,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             client,
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new AckReader(client, database, NullLogger<AckReader>.Instance),
             clock,
             NullLogger<SourcePoller>.Instance);
         using var worker = new PollWorker(poller, options, clock, logger);
@@ -182,6 +214,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             client,
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new AckReader(client, database, NullLogger<AckReader>.Instance),
             clock,
             NullLogger<SourcePoller>.Instance);
         using var worker = new PollWorker(poller, options, clock, NullLogger<PollWorker>.Instance);

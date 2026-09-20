@@ -46,6 +46,25 @@ verrou d'écriture parce qu'il est le travail programmé du Hub lui-même et qu'
 attendre. Un import abandonne au bout de cinq secondes avec `503 Retry-After: 1`, parce
 qu'un téléverseur lent ne doit pas pouvoir bloquer la collecte de toute la flotte.
 
+Un poll lit jusqu'à quatre choses d'un daemon, dans l'ordre : son statut, ses findings,
+ses incidents et ses acquittements actifs. Seuls les deux premiers décident de la
+joignabilité. Les deux autres sont consignés à part, dans `incident_reads` et
+`ack_reads`, parce qu'une clé refusée ou une route absente sur l'un ou l'autre ne dit
+rien de la capacité du daemon à répondre.
+
+La lecture des acquittements reflète et n'écrit jamais sur le daemon. Elle demande
+`GET /api/acks?include_toml=true` avec l'identifiant de lecture de la source et remplace
+les lignes de cette source dans `source_acks` par la réponse, en une transaction, de
+sorte qu'un acquittement révoqué sur le daemon part au poll suivant. Chaque ligne garde
+d'où vient l'acquittement, `daemon` pour un acquittement pris à l'exécution et `toml`
+pour un acquittement de la baseline de CI. Quand une signature porte les deux, c'est la
+ligne de la baseline qui est gardée, comme le fait la recherche du daemon lui-même. Un
+daemon antérieur à 0.24.0 n'est jamais interrogé : il ignore le paramètre et ne liste que
+ses acquittements d'exécution, une réponse qu'on ne peut pas distinguer de celle d'un
+daemon sans baseline, donc sa lecture est consignée `absent`. Une liste qui atteint le
+plafond du daemon, mille lignes, est reflétée et consignée `truncated`, puisque sa fin,
+là où se trouve la baseline, peut manquer.
+
 ## Ce que fait réellement une analyse lancée
 
 <picture>
@@ -88,6 +107,13 @@ le verrou d'écriture bien plus longtemps que la tranche elle-même, donc un fin
 peut laisser une ligne d'observation derrière lui. Cette orpheline est invisible, une
 lecture n'atteint une observation qu'à travers la ligne de sa source, et elle part avec
 son jour.
+
+Le miroir des acquittements suit aussi cette horloge, sur `read_at_ms`, l'heure de la
+lecture qui a écrit la ligne. Elle ne fait pas vieillir un acquittement : chaque lecture
+réussie réécrit les lignes de sa source, donc une ligne ne vieillit qu'une fois que le
+Hub a cessé de refléter cette source, parce qu'elle a été retirée ou parce que sa liste
+a échoué pendant toute la rétention. `ack_reads` et `incident_reads` tiennent une ligne
+par source et ne sont jamais purgés.
 
 La fenêtre de statut n'est pas un worker du tout, c'est un `CASE` évalué à la lecture,
 ce qui explique que le statut d'un finding puisse changer sans que rien n'ait été écrit.
@@ -159,6 +185,7 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers le daemon, l'export d'un run             | `Collection/DaemonClient.cs`, `FetchReportSnapshotAsync`                                                       |
 | Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                               |
 | Hub vers le daemon, les incidents                 | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paginé par `SourcePoller` vers `UpsertIncidentsAsync` |
+| Hub vers le daemon, les acquittements             | `Collection/DaemonClient.cs`, `FetchAcksAsync`, reflété par `AckReader` vers `ReplaceSourceAcksAsync`          |
 | La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                               |
 | Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                            |
 | Le Hub lance le moteur                            | `Analysis/AnalysisRunner.cs`, deux fois par run                                                                |

@@ -8,14 +8,14 @@ before any of it is deployed.
 
 ## Every flow, and which way it goes
 
-| Flow                          | Direction | What it carries                                                           |
-|-------------------------------|-----------|---------------------------------------------------------------------------|
-| daemon to Hub                 | inbound   | the primary findings path, `POST /api/import/findings` with `X-API-Key`   |
-| Hub to daemon                 | outbound  | the poll, reachability, and `api/export/report` when a run starts         |
-| Hub to trace backend          | outbound  | during a run, and never otherwise                                         |
-| browser to Hub                | inbound   | the launcher and the reports it opens                                     |
-| IDE plugin or CI job to Hub   | inbound   | `GET /api/findings`, nothing else                                         |
-| Hub to api.github.com         | outbound  | the version check, which `Hub:UpdateCheck:Enabled` turns off              |
+| Flow                          | Direction | What it carries                                                                                                |
+|-------------------------------|-----------|----------------------------------------------------------------------------------------------------------------|
+| daemon to Hub                 | inbound   | the primary findings path, `POST /api/import/findings` with `X-API-Key`                                        |
+| Hub to daemon                 | outbound  | the poll, its read of the `api/acks` listing included, reachability, and `api/export/report` when a run starts |
+| Hub to trace backend          | outbound  | during a run, and never otherwise                                                                              |
+| browser to Hub                | inbound   | the launcher and the reports it opens                                                                          |
+| IDE plugin or CI job to Hub   | inbound   | `GET /api/findings`, nothing else                                                                              |
+| Hub to api.github.com         | outbound  | the version check, which `Hub:UpdateCheck:Enabled` turns off                                                   |
 
 The Hub never initiates anything toward a CI system. A build runs the engine in
 batch, there is no daemon in it, so there is nothing to poll. The same topology

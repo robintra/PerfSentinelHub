@@ -1,0 +1,18 @@
+[
+  {
+    "action": "ack",
+    "signature": "n_plus_one_sql:order-svc:_api_v1_orders:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "by": "alice@example.com",
+    "at": "2026-09-20T11:28:03.924682Z",
+    "expires_at": "2027-08-01T00:00:00Z",
+    "source": "daemon"
+  },
+  {
+    "action": "ack",
+    "signature": "slow_sql:billing-svc:GET__invoices:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "by": "ci-bot",
+    "reason": "permanent baseline",
+    "at": "2026-05-04",
+    "source": "toml"
+  }
+]

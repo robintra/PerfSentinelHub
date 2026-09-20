@@ -2,6 +2,143 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- `GET /api/findings` reads the history the Hub keeps, by environment and by period. The
+  engine's findings dashboard reads it from perf-sentinel 0.24.0 on, so its table follows
+  Grafana's time picker over the Hub's retention, where a daemon's in-memory ring cannot
+  look back. `environment` and `source_id` scope the read to the sources of one environment
+  or to one source. Both are closed sets, the Hub's configured sources, so a value outside
+  them is a `400` rather than an empty page, and given together they intersect, the rule
+  `/api/incidents` already follows. `from` and `to` bound the read to an observation
+  window in epoch milliseconds, both inclusive, at the granularity of a UTC day on the
+  Hub's clock: a finding is listed when a source in scope observed it inside the window,
+  and the window selects rows without rewriting them. `offset` pages the rows, which come
+  in a total order, `last_seen` descending then `signature`, and `signature` is an exact
+  match, bounded at 1,024 characters and left to the daemon for its shape. A scoped answer
+  describes its scope rather than the fleet. The daemon's document is the copy of the
+  source in scope that saw the finding last, `first_seen` is the earliest and `last_seen`
+  the latest over those sources, `status` is derived from that `last_seen` and from their
+  heartbeats alone, and `sources` lists only them. `max_confidence` stays fleet-wide on
+  purpose. Every entry of `sources` gains the source's `id`, the one `/api/sources` lists
+  and `source_id` filters on. Behind it, schema `V6` records the days each source observed
+  a finding in `finding_observations`, and `finding_sources` keeps each source's own copy
+  of the envelope. Both start at the upgrade and nothing is backfilled. Before the first
+  day recorded for a source, that source is assumed to have carried the finding since its
+  `first_seen`, so an upgraded Hub does not read as empty over its whole past, and
+  `docs/LIMITATIONS.md` says what that assumption costs.
+- `/metrics` gains a ninth family,
+  `perf_sentinel_hub_findings{environment,finding_type,severity,status}`, a gauge of the
+  distinct finding signatures stored per environment. Its `status` is the environment's
+  own, computed the way `GET /api/findings?environment=` computes it, so the series of one
+  environment and status add up to the findings that read holds for them. `finding_type`
+  and `severity` are free text a daemon sends, so a value outside the engine's twelve types
+  or its three severities counts under `other` instead of opening a series of its own,
+  which holds the family to 13 types by 4 severities by 3 statuses per environment. An
+  empty combination publishes no series, since the family is read through `sum()`, where
+  an absent series already is a zero. The counts are kept for 15 seconds, because the
+  endpoint is anonymous and a count reads every finding of its environment. Every other
+  family is still computed at scrape time. The example Grafana dashboard charts the family
+  in two panels, stored findings by environment and status, and active findings by
+  severity for the environment a new `environment` variable picks, drawn in the engine's
+  severity colors and in whole counts. Dashboard `version` 3.
+- The Hub mirrors the active acknowledgments of each daemon, schema `V7`. Every poll of a
+  daemon on perf-sentinel 0.24.0 or later reads its ack listing, CI baseline included, into
+  `source_acks`. A read replaces its source's rows whole, so a revoked ack leaves with the
+  next one. A daemon below 0.24.0 is never asked, because it cannot list its baseline, and
+  its findings are judged on their envelope as before. `GET /api/findings` serves the
+  mirror as `acks`, one entry per source of `sources` whose daemon holds an active ack on
+  the signature: the `source_id`, the `source` of the ack, `daemon` for one taken at
+  runtime and `toml` for one of the CI baseline, then `by`, `reason`, `at` and
+  `expires_at`. The field is absent when no source holds any, and the daemon's own
+  `acknowledged_by` is still relayed verbatim beside it. `/api/sources` gains `acks_state`
+  and `acks_read_ms`, what the last ack read came to and when, kept in an `ack_reads` row
+  apart from reachability for the reason `incidents_state` is. The states are the same,
+  plus `truncated` for a listing that reached the daemon's cap of a thousand acks, whose
+  entries are served but which does not decide `include_acked=false`. The `by` and
+  `reason` of an ack are readable on the open read route, as `acknowledged_by` already was.
+- A source takes a second credential, `Sources[].AckHeaderName` and `AckHeaderValue` (Helm
+  `sources[].ackHeaderName` with `ackSecretName` and `ackSecretKey`). It is the daemon's
+  `[daemon.ack] api_key`, sent on a relayed ack or revoke and on nothing else, while the
+  read pair keeps everything else. Without it the Hub never writes to that daemon, and
+  `/api/sources` reports `ack_relay: false` for the source, neither the header nor its
+  value being ever published. The Hub refuses to start when the pair sits on a trace
+  backend, which has no ack route, or carries the same key as the source's
+  `AuthHeaderValue`, since a read key that can write is a write key.
+  `Hub:AckRelay:TrustIdentityHeader` (Helm `hub.ackRelay.trustIdentityHeader`), `false` by
+  default, lets the relay name its caller from `Hub:Analysis:IdentityHeader`, for a Hub
+  behind a proxy that writes that header itself and strips the one a client sent. A
+  `Hub:Auth` session always names the caller and ignores the header. With neither, the
+  relay refuses every caller, and the Hub logs one warning at startup naming the sources
+  whose credential will never be sent.
+- Two routes relay an ack or a revoke to the daemon behind one source,
+  `POST /api/sources/{sourceId}/acks` with `{signature, reason, expires_at?}` and
+  `POST /api/sources/{sourceId}/acks/revoke` with `{signature}`. Neither is ever open:
+  under `Hub:Auth` they need a session, and a caller nobody names gets a `403` before the
+  source is even looked at. An unknown source, a trace backend and a daemon without an ack
+  credential answer one and the same `404`. The Hub has no antiforgery token and no CORS
+  policy, so a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
+  other than `application/json` a `415`. Two relays run at a time, a third gets `503` with
+  `Retry-After: 1`, and a body over 8 KiB is a `413`. The Hub relays only for a finding it
+  holds at that source, and a revoke also for an ack it mirrors from it, which bounds the
+  relay to what the Hub knows. It writes the daemon's request itself, so nothing the
+  caller sent travels as bytes, a `by` in the body is ignored, and the caller the Hub
+  knows travels as `by` on an ack and as `X-User-Id` on a revoke. A `2xx` answers `204`.
+  The daemon's `400`, `409`, `503` and `507` keep their code with a `detail` saying why, a
+  `404` on a revoke means not acked there or only by the CI baseline, and silence is a
+  `504`. A `502` covers the rest, and its `detail` says which it was: a daemon that could
+  not be reached, a status the relay does not know, or a daemon's `401`, never relayed as
+  one because it says the key the Hub holds is wrong, which no sign-in mends. After a
+  `2xx` the Hub reads that daemon's ack listing again, so `acks` and `include_acked=false`
+  follow at once instead of at the next poll. Each relay logs one line, event `1310` when
+  the daemon answered and `1311` when it did not, without the reason or the credential.
+- The launcher gets an ack page, a sixth screen with no tab, reached by link only. Acks are
+  made from the Grafana findings dashboard, the HTML report, the TUI or the CLI, and this
+  page is where a Grafana link lands: `/?ack=<signature>`, a query rather than a hash
+  because a hash is lost when the identity provider asks for a password on the way in,
+  which the launcher turns into `#/ack?signature=<signature>` on load. Each finding of an
+  unfolded incident also ends with an Ack link, which adds `&source_id=<id>` for the
+  incident's daemon, and that only narrows which rows start checked. The page reads the
+  finding by its exact signature, then offers one form, a required reason, an optional
+  expiry day sent as the last second of that day in UTC, and one row per source that
+  carries the finding. A row offers Acknowledge, or Revoke beside who took the ack, when
+  and why, or nothing, with a note saying why: for an ack of the CI baseline, which no
+  runtime route can revoke, for a source whose last ack read was not conclusive, which
+  includes every daemon below 0.24.0, for a source with no ack credential, and for a
+  source the Hub no longer configures. One submit sends one relay request per checked
+  source, one after the other, prints one line per source with the Hub's own reason on a
+  refusal, and reads the finding again. One source refusing costs the others nothing.
+
+### Changed
+
+- The database moves to schema `V7` through `V6` at the first boot. Both steps only create
+  tables and add nullable columns inside the startup transaction, and neither backfills
+  anything, so an upgrade asks nothing of the operator. A read of `/api/findings` without
+  the new parameters, and the lookup by trace beside it, answer what they answered before
+  apart from two additive fields, `sources[].id` on every finding and `acks` on one a
+  mirrored daemon holds an ack on. A test pins both responses byte for byte. The relay
+  stays off until a source is given an ack credential.
+- A filter given empty or as whitespace only reads as absent, which is what Grafana sends
+  for its "All" choice: `service`, `finding_type`, `severity` and `status` on
+  `/api/findings`, like the new `environment`, `source_id`, `signature`, `from` and `to`,
+  and `service`, `namespace`, `kind`, `environment` and `source_id` on `/api/incidents`. It
+  used to answer `400` on a closed set, `status`, `kind`, `environment` or `source_id`,
+  and to match nothing on a free filter such as `service`, which emptied the table.
+  `limit`, `offset` and `include_acked` are not filters, and a blank one is still a `400`.
+- `include_acked=false` judges each source in scope that carries the finding, by
+  whichever of its two views the Hub read last. The mirror decides when the last ack read
+  of that source came to `ok` and is no older than its last observation of the finding,
+  and otherwise the source's own copy of the envelope decides by a non-null
+  `acknowledged_by`, which is all the Hub judged before. The finding stays listed while at
+  least one such source holds it un-acknowledged. It used to be judged on the single
+  envelope the fleet shares, so an ack taken in production hid the finding for staging
+  too. It no longer does, in a scoped read or in one over the whole fleet.
+- A source whose `Environment` carries a control character is refused at startup. An
+  environment is now a Prometheus label value and a member of a closed set a query
+  parameter is compared against, and the label is escaped on the way out besides.
+
 ## [0.2.1] - 2026-09-18
 
 ### Added

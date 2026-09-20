@@ -114,15 +114,23 @@ service:
 
 Three files under [`examples/`](../examples), each validated rather than sketched.
 
-| File                                                           | Is                                                          |
-|----------------------------------------------------------------|-------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json) | Nine panels over the eight families, importable as it stands |
-| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)   | One rule, checked with `promtool check rules`               |
-| [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)   | A scrape job for a deployment that names its targets        |
+| File                                                           | Is                                                                     |
+|----------------------------------------------------------------|------------------------------------------------------------------------|
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json) | Eleven panels over eight of the nine families, importable as it stands |
+| [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)   | One rule, checked with `promtool check rules`                          |
+| [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)   | A scrape job for a deployment that names its targets                   |
 
 The engine ships its own dashboard for its own metrics, and the two do not
 overlap: no panel here reads a daemon series, and no panel there reads a Hub
 one. Import both to watch a fleet and the Hub collecting it.
+
+The two findings panels count and never list. The history of each finding in
+Grafana, a table that follows the time picker, is served by the engine's
+findings dashboard, `examples/grafana-findings-dashboard.json` in its
+repository, rather than by a dashboard of the Hub's. From engine 0.24.0 on, that
+dashboard reads `GET /api/findings` through a second Infinity datasource pointed
+at the Hub, beside the one pointed at a daemon. [API.md](API.md#read-api)
+describes the `environment`, `from` and `to` parameters that read takes.
 
 ### Why there is only one alert
 

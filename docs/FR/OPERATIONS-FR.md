@@ -122,16 +122,26 @@ service:
 
 Trois fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissés.
 
-| Fichier                                                           | Est                                                         |
-|-------------------------------------------------------------------|-------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Neuf panneaux sur les huit familles, importable tel quel    |
-| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Une règle, contrôlée par `promtool check rules`             |
-| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)   | Un job de collecte pour un déploiement qui nomme ses cibles |
+| Fichier                                                           | Est                                                           |
+|-------------------------------------------------------------------|---------------------------------------------------------------|
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Onze panneaux sur huit des neuf familles, importable tel quel |
+| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Une règle, contrôlée par `promtool check rules`               |
+| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)   | Un job de collecte pour un déploiement qui nomme ses cibles   |
 
 Le moteur livre son propre tableau de bord pour ses propres métriques, et les
 deux ne se recouvrent pas : aucun panneau d'ici ne lit une série de daemon, et
 aucun panneau de là-bas ne lit une série du Hub. Importer les deux pour
 surveiller une flotte et le Hub qui la collecte.
+
+Les deux panneaux de findings comptent et ne listent jamais. L'historique de
+chaque finding dans Grafana, un tableau qui suit le sélecteur de temps, est
+servi par le tableau de bord des findings du moteur,
+`examples/grafana-findings-dashboard.json` dans son dépôt, plutôt que par un
+tableau de bord du Hub. À partir du moteur 0.24.0, ce tableau de bord lit
+`GET /api/findings` au travers d'une seconde source de données Infinity qui vise
+le Hub, à côté de celle qui vise un daemon.
+[API-FR.md](API-FR.md#api-de-lecture) décrit les paramètres `environment`,
+`from` et `to` que prend cette lecture.
 
 ### Pourquoi une seule alerte
 

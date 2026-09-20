@@ -464,6 +464,76 @@
         },
         "overrides": []
       }
+    },
+    {
+      "title": "Stored findings by environment and status",
+      "description": "Distinct finding signatures the Hub stores, per environment and status. The status is the environment's own, computed the way GET /api/findings?environment= computes it, so a finding still seen in staging does not keep production's copy active. A gauge, not a counter: a quiet finding changes status and retention removes it, so every series falls as well as rises and increase() over any of them is meaningless. Unlike the runs panel above, an empty combination publishes no series, so a line that ends while the others carry on means that state emptied, not that the scrape broke. Drawn as lines rather than stacked, since a signature seen in two environments counts in each and the top of a stack would not be a count of findings. The Hub keeps the counts for 15 seconds, so two scrapes inside that interval read the same value.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (environment, status) (perf_sentinel_hub_findings{job=~\"$job\"})",
+          "refId": "A",
+          "legendFormat": "{{environment}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Active findings by severity",
+      "description": "The active part of the panel beside it, split by severity. Active means a daemon of that environment saw the finding within Hub:ResolutionGrace, 7 days by default. A severity outside the engine's three counts under other instead of opening a series of its own. An environment with no active finding draws no line at all, which is the good case rather than a gap.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (environment, severity) (perf_sentinel_hub_findings{job=~\"$job\", status=\"active\"})",
+          "refId": "A",
+          "legendFormat": "{{environment}} {{severity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
     }
   ],
   "schemaVersion": 39,
@@ -512,5 +582,5 @@
   "timezone": "browser",
   "title": "PerfSentinelHub overview",
   "uid": "perf-sentinel-hub-overview",
-  "version": 2
+  "version": 3
 }

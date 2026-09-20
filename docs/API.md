@@ -2,7 +2,8 @@
 
 Four surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
 plugin or a CI job reads the read API. The browser uses the analysis API and the ack relay,
-reads `/api/incidents` for its incidents screen, and never calls `/api/findings`.
+reads `/api/incidents` for its incidents screen, and reads `/api/findings` only on the ack
+page, by signature.
 
 ## Import API
 

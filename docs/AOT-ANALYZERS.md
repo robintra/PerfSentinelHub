@@ -1,9 +1,12 @@
 # Rider reports trim and AOT errors the build does not
 
-Rider flags twelve `IL2026` and `IL3050` diagnostics at ERROR severity, two in
-`Program.cs` on `AddOptions<HubOptions>().BindConfiguration(...)` and ten in
-`Api/ApiEndpoints.cs` on the `MapGet` and `MapPost` calls. They are false
-positives. Do not act on them, and do not silence them.
+Rider flags a pair of `IL2026` and `IL3050` diagnostics at ERROR severity on
+every call a source generator intercepts: each minimal API mapping (`MapGet` and
+`MapPost` in `Api/ApiEndpoints*.cs` and `Api/MetricsEndpoint.cs`) and the two
+configuration bindings, `AddOptions<HubOptions>().BindConfiguration(...)` in
+`Program.cs` and `GetSection(...).Get<T>()` in `Api/HubAuthentication.cs`. That
+is two diagnostics per call site, so the count grows with every new route. They
+are false positives. Do not act on them, and do not silence them.
 
 ## Why the build disagrees
 

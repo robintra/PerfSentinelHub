@@ -104,13 +104,17 @@ publication réussies.
 
 ## Ce que ce n'est pas
 
-Ni ingress, ni comptes utilisateurs, ni import CI ou SARIF, ni écrivain d'acquittements,
+Ni ingress, ni comptes utilisateurs, ni import CI ou SARIF, ni magasin d'acquittements,
 ni sauvegarde distante. La commande `backup` locale prend un instantané de la base, mais
 expédier ce fichier hors du cluster reste le travail de l'opérateur. La connexion du
 navigateur est déléguée à un fournisseur OAuth2 quand `Hub:Auth` est activé, et le Hub
 ne garde aucun utilisateur à lui.
 
-L'exposition réseau relève de la prochaine conception indépendante. Les acquittements restent dans le dépôt que consomme perf-sentinel.
+L'exposition réseau relève de la prochaine conception indépendante.
+Le Hub ne possède aucun magasin d'acquittements. Il reflète les acquittements actifs de
+chaque daemon, et relaie un acquittement ou une révocation à l'exécution vers un daemon
+avec la clé d'acquittement de ce daemon, quand une source en reçoit une. La baseline de CI
+reste dans le dépôt que consomme perf-sentinel et se change par pull request.
 
 Chaque badge ci-dessus rapporte quelque chose d'observé. Ceux de l'image de conteneur et
 du chart Helm sont délibérément absents jusqu'à ce qu'une première release publie leurs

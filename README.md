@@ -102,13 +102,15 @@ These registry commands work only once the public rehearsal and publication succ
 
 ## What this is not
 
-No ingress, no user accounts, no CI or SARIF import, no acknowledgment writer, and no
+No ingress, no user accounts, no CI or SARIF import, no acknowledgment store, and no
 remote backup. The local `backup` command snapshots the database, but shipping that file
 off the cluster stays the operator's job. Browser sign-in is delegated to an OAuth2
 provider when `Hub:Auth` is on, and the Hub keeps no user of its own.
 
 Network exposure belongs to the next independent design.
-Acknowledgments remain in the repository perf-sentinel consumes.
+The Hub owns no ack store. It mirrors each daemon's active acks, and it relays a runtime
+ack or revoke to a daemon with that daemon's own ack key when a source is given one. The CI
+baseline stays in the repository perf-sentinel consumes and is changed by pull request.
 
 Every badge above reports something observed. The container image and Helm chart badges
 are deliberately absent until the first release publishes their package pages, because a

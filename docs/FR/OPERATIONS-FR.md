@@ -40,22 +40,23 @@ copie que personne n'a rafraîchie.
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
-qu'au travers d'une bibliothèque : huit familles de métriques sur des données que
+qu'au travers d'une bibliothèque : neuf familles de métriques sur des données que
 le Hub détient déjà ne justifient pas une dépendance dans un service dont les
 deux seuls paquets sont SQLite.
 
-| Métrique                                        | Type  | Ce à quoi elle répond                                     |
-|-------------------------------------------------|-------|-----------------------------------------------------------|
-| `perf_sentinel_hub_build_info{version}`         | gauge | Quelle version tourne                                     |
-| `perf_sentinel_hub_source_reachable{source}`    | gauge | Si le dernier poll d'un daemon a réussi                   |
-| `perf_sentinel_hub_source_unreachable_seconds`  | gauge | Depuis combien de temps il est injoignable, 0 s'il répond |
-| `perf_sentinel_hub_source_last_success_seconds` | gauge | L'âge du dernier poll réussi                              |
-| `perf_sentinel_hub_analysis_queue_depth`        | gauge | Les runs acceptés et pas encore pris par un worker        |
-| `perf_sentinel_hub_source_last_import_seconds`  | gauge | Dernier push d'un daemon. Pas un battement de cœur, voir plus bas |
-| `perf_sentinel_hub_import_rejected_total{reason}` | counter | Imports refusés, par motif                            |
-| `perf_sentinel_hub_analysis_runs{status}`       | gauge | Les runs actuellement stockés, par statut                 |
+| Métrique                                                               | Type    | Ce à quoi elle répond                                             |
+|------------------------------------------------------------------------|---------|-------------------------------------------------------------------|
+| `perf_sentinel_hub_build_info{version}`                                | gauge   | Quelle version tourne                                             |
+| `perf_sentinel_hub_source_reachable{source}`                           | gauge   | Si le dernier poll d'un daemon a réussi                           |
+| `perf_sentinel_hub_source_unreachable_seconds`                         | gauge   | Depuis combien de temps il est injoignable, 0 s'il répond         |
+| `perf_sentinel_hub_source_last_success_seconds`                        | gauge   | L'âge du dernier poll réussi                                      |
+| `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Les runs acceptés et pas encore pris par un worker                |
+| `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | Dernier push d'un daemon. Pas un battement de cœur, voir plus bas |
+| `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refusés, par motif                                        |
+| `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Les runs actuellement stockés, par statut                         |
+| `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
 
-Trois partis pris dans cette forme.
+Quatre partis pris dans cette forme.
 
 Seul un daemon reçoit une série de source, et seulement un que le Hub a
 réellement observé. Un backend de traces n'est jamais interrogé, et un daemon
@@ -76,10 +77,31 @@ jamais purgé quel que soit l'âge apparent de sa ligne, un worker s'apprêtant 
 disparaît se lisant comme un échec de collecte plutôt que comme "rien n'est dans
 cet état".
 
+`findings` compte les signatures distinctes par environnement, et le `status`
+qu'elle porte est celui de l'environnement, calculé comme le calcule
+`GET /api/findings?environment=` : un finding encore vu en recette ne garde pas
+`active` la copie de la production. Les séries d'un environnement et d'un statut
+totalisent donc les findings que cette lecture détient pour eux, toutes pages
+confondues. `finding_type` et `severity` sont du texte libre envoyé par un
+daemon, donc une valeur hors des douze types du moteur ou de ses trois
+sévérités compte sous `other` au lieu d'ouvrir une série à elle. À l'inverse
+d'`analysis_runs`, une combinaison vide ne publie aucune série. Les zéros
+seraient chaque environnement multiplié par chaque type, sévérité et statut,
+presque tous vides pour de bon, et la famille se lit au travers de `sum()`, où
+une série absente vaut déjà zéro. Les comptes sont gardés 15 secondes, parce
+que l'endpoint est anonyme et qu'un compte lit tous les findings de son
+environnement. Une collecte dans cet intervalle reçoit les comptes précédents,
+et toutes les autres familles restent calculées à la collecte.
+
 La cardinalité est bornée par la configuration. `source` prend les identifiants
 de `Hub:Sources`, fixés au démarrage et restreints à 1 à 64 caractères ASCII
-alphanumériques, `.`, `_` ou `-`. `status` prend six constantes. Rien de ce
-qu'envoie un appelant n'atteint un libellé.
+alphanumériques, `.`, `_` ou `-`. `environment` prend les environnements de ces
+mêmes sources, auxquels un caractère de contrôle est refusé au démarrage et qui
+sont échappés à l'écriture. Le `status` des runs prend six constantes.
+`findings` tient au plus environnements × 13 × 4 × 3 séries : douze types,
+trois sévérités, un compartiment `other` sur chacun, et trois statuts. Rien de
+ce qu'envoie un appelant n'atteint un libellé, et rien de ce qu'envoie un
+daemon n'en atteint un sans être replié.
 
 L'endpoint ne porte aucune authentification, exactement comme `/api/status`, et
 reste ouvert sous `Hub:Auth` pour que la collecte n'ait pas besoin de session.

@@ -1,8 +1,11 @@
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -12,6 +15,10 @@ namespace PerfSentinelHub.Tests;
 public sealed class MetricsEndpointTests : IDisposable
 {
     private readonly HttpClient _client;
+
+    // Starts at the real hour and only moves when a test advances it, which is
+    // what lets one test scrape on both sides of the findings cache.
+    private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
 
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(), $"perf-sentinel-hub-metrics-{Guid.NewGuid():N}.db");
@@ -24,6 +31,8 @@ public sealed class MetricsEndpointTests : IDisposable
             builder.ConfigureServices(services =>
             {
                 HubApplicationFactory.RemoveBackgroundWorkers(services);
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton<TimeProvider>(_clock);
                 services.PostConfigure<HubOptions>(options =>
                 {
                     options.DatabasePath = _databasePath;
@@ -45,7 +54,9 @@ public sealed class MetricsEndpointTests : IDisposable
                             Environment = "production",
                             Kind = SourceKinds.Tempo,
                             BaseUrl = new Uri("http://127.0.0.1:3")
-                        }
+                        },
+                        Daemon("payments", "production"),
+                        Daemon("staging-a", "staging")
                     ];
                 });
             }));
@@ -83,7 +94,8 @@ public sealed class MetricsEndpointTests : IDisposable
                      "perf_sentinel_hub_source_unreachable_seconds",
                      "perf_sentinel_hub_source_last_success_seconds",
                      "perf_sentinel_hub_analysis_queue_depth",
-                     "perf_sentinel_hub_analysis_runs"
+                     "perf_sentinel_hub_analysis_runs",
+                     "perf_sentinel_hub_findings"
                  })
         {
             Assert.Contains($"# HELP {family} ", body, StringComparison.Ordinal);
@@ -97,7 +109,7 @@ public sealed class MetricsEndpointTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = _factory.Services.GetRequiredService<HubDatabase>();
         await database.MarkSourceAttemptAsync(
-            "checkout", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cancellationToken);
+            "checkout", _clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
 
         var body = await ScrapeAsync(cancellationToken);
         Assert.Contains("perf_sentinel_hub_source_reachable{source=\"checkout\"} 1", body, StringComparison.Ordinal);
@@ -121,11 +133,12 @@ public sealed class MetricsEndpointTests : IDisposable
     [Fact]
     public async Task No_sample_can_carry_a_label_that_breaks_the_scrape()
     {
+        await PushAsync("checkout", "production", _clock.GetUtcNow(), await FixtureFindingAsync());
         var body = await ScrapeAsync(TestContext.Current.CancellationToken);
-        // One label pair per sample. An unescaped quote would close the value
+        // One label set per sample. An unescaped quote would close the value
         // early and turn the rest of the line into a second, malformed label.
         foreach (var line in body.Split('\n')
-                     .Where(l => l.StartsWith("perf_sentinel_hub_source_", StringComparison.Ordinal)))
+                     .Where(l => l.StartsWith("perf_sentinel_hub_", StringComparison.Ordinal) && l.Contains('{')))
         {
             Assert.Equal(1, line.Count(c => c == '{'));
             Assert.Equal(1, line.Count(c => c == '}'));
@@ -186,7 +199,7 @@ public sealed class MetricsEndpointTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = _factory.Services.GetRequiredService<HubDatabase>();
-        var failedAt = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds();
+        var failedAt = _clock.GetUtcNow().AddMinutes(-5).ToUnixTimeMilliseconds();
         await database.MarkSourceFailureAsync("checkout", failedAt, "network_error", cancellationToken);
 
         var body = await ScrapeAsync(cancellationToken);
@@ -251,16 +264,7 @@ public sealed class MetricsEndpointTests : IDisposable
     public async Task A_push_gives_its_daemon_an_import_age()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var database = _factory.Services.GetRequiredService<HubDatabase>();
-        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(
-            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
-            cancellationToken));
-        var pushedAt = DateTimeOffset.UtcNow.AddMinutes(-2).ToUnixTimeMilliseconds();
-        Assert.True(await database.TryUpsertBatchAsync(
-            new SourceSnapshot("checkout", "Checkout", "production", "0.11.2"),
-            batch,
-            pushedAt,
-            cancellationToken));
+        await PushAsync("checkout", "production", _clock.GetUtcNow().AddMinutes(-2), await FixtureFindingAsync());
 
         var body = await ScrapeAsync(cancellationToken);
         // The push path, not the poll path: only TryUpsertBatchAsync writes here,
@@ -269,6 +273,169 @@ public sealed class MetricsEndpointTests : IDisposable
         Assert.InRange(age, 110, 180);
         Assert.DoesNotContain("perf_sentinel_hub_source_last_import_seconds{source=\"tempo-eu\"}",
             body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Findings_are_counted_per_environment_with_that_environments_status()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = _clock.GetUtcNow();
+        var finding = await FixtureFindingAsync();
+        var mystery = finding with { Signature = "mystery:x", FindingType = "mystery" };
+        var slow = finding with { Signature = "slow_sql:x", FindingType = "slow_sql", Severity = "warning" };
+        var resolved = finding with { Signature = "resolved:x" };
+        await PushAsync("checkout", "production", now, finding, mystery, slow);
+        // Quiet for longer than the grace on an endpoint its own daemon still
+        // heartbeats through the push below: presumably fixed.
+        await PushAsync("payments", "production", now.AddDays(-8), resolved);
+        // A second daemon of the environment carries it too, and it still counts once.
+        await PushAsync("payments", "production", now, finding);
+        await PushAsync("staging-a", "staging", now.AddDays(-8), finding);
+
+        var body = await ScrapeAsync(cancellationToken);
+        // Neither blocking_wait nor mystery is a type the engine knows, so both
+        // fold into one series, which has to carry their sum rather than repeat.
+        Assert.Equal(2, Sample(body, FindingsSeries("production", "other", "critical", "active")));
+        Assert.Equal(1, Sample(body, FindingsSeries("production", "slow_sql", "warning", "active")));
+        Assert.Equal(1, Sample(body, FindingsSeries("production", "other", "critical", "likely_resolved")));
+        // Production still sees it today, which says nothing about staging's quiet copy.
+        Assert.Equal(1, Sample(body, FindingsSeries("staging", "other", "critical", "not_observed")));
+
+        foreach (var environment in new[] { "production", "staging" })
+        {
+            foreach (var status in new[] { "active", "likely_resolved", "not_observed" })
+            {
+                using var response = await _client.GetAsync(
+                    $"/api/findings?environment={environment}&status={status}", cancellationToken);
+                using var document = JsonDocument.Parse(
+                    await response.Content.ReadAsStringAsync(cancellationToken));
+                Assert.Equal(document.RootElement.GetArrayLength(), Findings(body, environment, status));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task An_empty_combination_publishes_no_series()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        // Unlike Every_run_status_reports_even_at_zero: the run statuses are six
+        // series, the zeros of this family would be every environment times
+        // every type, severity and status, nearly all of them forever empty.
+        Assert.Contains("# TYPE perf_sentinel_hub_findings gauge", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("perf_sentinel_hub_findings{", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_environment_that_needs_escaping_still_scrapes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        // Configuration refuses a control character in an environment and
+        // nothing else, so a quote and a backslash do reach the label.
+        const string environment = @"pro""d\e";
+        await using var quoted = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
+                options.Sources = [.. options.Sources, Daemon("odd", environment)])));
+        using var client = quoted.CreateClient();
+        await PushAsync("odd", environment, _clock.GetUtcNow(), await FixtureFindingAsync());
+
+        var body = await client.GetStringAsync("/metrics", cancellationToken);
+        Assert.Equal(1, Sample(body, FindingsSeries(@"pro\""d\\e", "other", "critical", "active")));
+    }
+
+    [Fact]
+    public async Task The_findings_series_are_cached_for_a_scrape_interval()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await ScrapeAsync(cancellationToken);
+        await PushAsync("checkout", "production", _clock.GetUtcNow(), await FixtureFindingAsync());
+
+        // The route is anonymous and a count reads its whole scope, so a second
+        // scrape inside the interval must not count again. Every other family
+        // is still read at scrape time.
+        _clock.Advance(TimeSpan.FromSeconds(14));
+        var cached = await ScrapeAsync(cancellationToken);
+        Assert.DoesNotContain("perf_sentinel_hub_findings{", cached, StringComparison.Ordinal);
+        Assert.Contains("perf_sentinel_hub_source_last_import_seconds{source=\"checkout\"}", cached,
+            StringComparison.Ordinal);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        var fresh = await ScrapeAsync(cancellationToken);
+        Assert.Equal(1, Sample(fresh, FindingsSeries("production", "other", "critical", "active")));
+    }
+
+    [Theory]
+    [InlineData("slow_sql", "slow_sql")]
+    [InlineData("serialized_calls", "serialized_calls")]
+    [InlineData("blocking_wait", "other")]
+    [InlineData("SLOW_SQL", "other")]
+    [InlineData("", "other")]
+    public void Fold_keeps_the_vocabulary_and_buckets_the_rest(string value, string expected)
+    {
+        Assert.Equal(expected, FindingLabels.Fold(FindingLabels.Types, value));
+    }
+
+    [Fact]
+    public void The_severity_labels_are_the_severities_storage_ranks()
+    {
+        // One vocabulary: storage ranks a severity by its place in the list the
+        // gauge folds through, so neither can name one the other ignores. The
+        // order is pinned because the rank it yields is stored.
+        Assert.Equal(12, FindingLabels.Types.Length);
+        Assert.Equal(["critical", "warning", "info"], FindingLabels.Severities);
+        Assert.Equal([3, 2, 1], FindingLabels.Severities.Select(FindingParser.SeverityRank));
+        Assert.Equal(0, FindingParser.SeverityRank(FindingLabels.Other));
+    }
+
+    private static SourceOptions Daemon(string id, string environment)
+    {
+        return new SourceOptions
+        {
+            Id = id,
+            Name = id,
+            Environment = environment,
+            Kind = SourceKinds.Daemon,
+            BaseUrl = new Uri("http://127.0.0.1:1")
+        };
+    }
+
+    private static async Task<ParsedFinding> FixtureFindingAsync()
+    {
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
+            TestContext.Current.CancellationToken));
+        return batch.Findings[0];
+    }
+
+    // The push path: only TryUpsertBatchAsync records an import.
+    private async Task PushAsync(
+        string sourceId,
+        string environment,
+        DateTimeOffset at,
+        params ParsedFinding[] findings)
+    {
+        var database = _factory.Services.GetRequiredService<HubDatabase>();
+        Assert.True(await database.TryUpsertBatchAsync(
+            new SourceSnapshot(sourceId, sourceId, environment, "0.11.2"),
+            new ParsedBatch(findings, 0),
+            at.ToUnixTimeMilliseconds(),
+            TestContext.Current.CancellationToken));
+    }
+
+    private static string FindingsSeries(string environment, string findingType, string severity, string status)
+    {
+        return $"perf_sentinel_hub_findings{{environment=\"{environment}\",finding_type=\"{findingType}\","
+               + $"severity=\"{severity}\",status=\"{status}\"}}";
+    }
+
+    // Every series of one environment and status, summed as a dashboard sums them.
+    private static double Findings(string body, string environment, string status)
+    {
+        return body.Split('\n')
+            .Where(line => line.StartsWith(
+                               $"perf_sentinel_hub_findings{{environment=\"{environment}\",",
+                               StringComparison.Ordinal) &&
+                           line.Contains($",status=\"{status}\"}} ", StringComparison.Ordinal))
+            .Sum(line => double.Parse(line[(line.LastIndexOf(' ') + 1)..], CultureInfo.InvariantCulture));
     }
 
     private static double Sample(string body, string series)

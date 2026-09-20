@@ -130,8 +130,10 @@ Hub ne répond jamais. Voir [DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
 Une seule réplique, et ce n'est pas un réglage. SQLite n'a qu'un écrivain et le
 volume est `ReadWriteOnce`, donc le chart pose `replicas: 1`.
 
-`GET /metrics` couvre la joignabilité, la file d'analyses et les comptes de
-runs, et rien d'autre. Aucune série ne porte les findings stockés, la durée
-d'une purge de rétention ni le débit d'import, donc une alerte sur ces points
-doit lire `/api/findings` ou les journaux. Voir
-[OPERATIONS-FR.md](OPERATIONS-FR.md#métriques).
+`GET /metrics` couvre la joignabilité, la file d'analyses, les comptes de runs
+et les findings stockés de chaque environnement, et rien d'autre. Les findings
+sont comptés par environnement, type, sévérité et statut, jamais par service ni
+par endpoint, et les comptes ont jusqu'à 15 secondes. Aucune série ne porte la
+durée d'une purge de rétention ni le débit d'import, donc une alerte sur ces
+points, ou sur les findings d'un seul service, doit lire `/api/findings` ou les
+journaux. Voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques).

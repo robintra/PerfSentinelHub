@@ -106,6 +106,36 @@ public static class AnalysisStatuses
         [Pending, Running, Succeeded, Failed, Interrupted, Expired];
 }
 
+/// <summary>Distinct signatures of one scope sharing a type, a severity and a status.</summary>
+public sealed record FindingCount(string FindingType, string Severity, string Status, int Count);
+
+/// <summary>
+///     The closed vocabularies a finding's type and severity fold into before
+///     they become Prometheus label values. Both columns are free text a daemon
+///     sends, and a label fed from that is how /metrics dies of cardinality.
+///     The types are the engine's own. The severities are listed most severe
+///     first, and <see cref="Collection.FindingParser.SeverityRank" /> ranks a
+///     severity by its place here, so the order is stored and must not change.
+/// </summary>
+public static class FindingLabels
+{
+    public const string Other = "other";
+
+    public static readonly string[] Types =
+    [
+        "n_plus_one_sql", "n_plus_one_http", "n_plus_one_messaging", "redundant_sql", "redundant_http",
+        "slow_sql", "slow_http", "slow_messaging", "excessive_fanout", "chatty_service", "pool_saturation",
+        "serialized_calls"
+    ];
+
+    public static readonly string[] Severities = ["critical", "warning", "info"];
+
+    public static string Fold(string[] allowed, string value)
+    {
+        return Array.IndexOf(allowed, value) >= 0 ? value : Other;
+    }
+}
+
 /// <summary>
 ///     One analysis run. The source's name, environment and kind are copied at
 ///     submission because a run outlives the configuration entry it came from.

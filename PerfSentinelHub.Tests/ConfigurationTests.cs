@@ -28,18 +28,34 @@ public sealed class ConfigurationTests
     }
 
     [Theory]
-    [InlineData("", "http://daemon:4318")]
-    [InlineData("bad/source", "http://daemon:4318")]
-    [InlineData("prod", "file:///tmp/findings")]
-    [InlineData("prod", "http://user@daemon:4318")]
-    public void Invalid_source_is_rejected(string id, string url)
+    [InlineData("", "http://daemon:4318", "prod")]
+    [InlineData("bad/source", "http://daemon:4318", "prod")]
+    [InlineData("prod", "file:///tmp/findings", "prod")]
+    [InlineData("prod", "http://user@daemon:4318", "prod")]
+    // An environment is a Prometheus label value and a member of the read API's closed set.
+    [InlineData("prod", "http://daemon:4318", "pro\nd")]
+    public void Invalid_source_is_rejected(string id, string url, string environment)
     {
         var options = ValidOptions() with
         {
-            Sources = [ValidSource() with { Id = id, BaseUrl = new Uri(url) }]
+            Sources = [ValidSource() with { Id = id, BaseUrl = new Uri(url), Environment = environment }]
         };
 
         Assert.False(new HubOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
+    public void A_blank_name_does_not_hide_a_control_character_in_the_environment()
+    {
+        var options = ValidOptions() with
+        {
+            Sources = [ValidSource() with { Name = "", Environment = "pro\nd" }]
+        };
+
+        // Both in one pass, so a bad source costs one restart and not two.
+        string[] failures = [.. new HubOptionsValidator().Validate(null, options).Failures ?? []];
+        Assert.Contains(failures, failure => failure.Contains("requires a name", StringComparison.Ordinal));
+        Assert.Contains(failures, failure => failure.Contains("control characters", StringComparison.Ordinal));
     }
 
     [Fact]

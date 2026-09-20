@@ -121,7 +121,10 @@ ingress leaves the browser asking for a prefix the Hub never answers. See
 One replica, and not a knob. SQLite has a single writer and the volume is
 `ReadWriteOnce`, so the chart sets `replicas: 1`.
 
-`GET /metrics` covers reachability, the analysis queue and run counts, and
-nothing else. There is no series for stored findings, for retention purge
-duration, or for import throughput, so an alert on those has to read
-`/api/findings` or the logs. See [OPERATIONS.md](OPERATIONS.md#metrics).
+`GET /metrics` covers reachability, the analysis queue, run counts and the
+stored findings of each environment, and nothing else. Findings are counted per
+environment, type, severity and status, never per service or per endpoint, and
+the counts are up to 15 seconds old. There is no series for retention purge
+duration or for import throughput, so an alert on those, or on one service's
+findings, has to read `/api/findings` or the logs. See
+[OPERATIONS.md](OPERATIONS.md#metrics).

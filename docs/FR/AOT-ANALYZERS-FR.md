@@ -1,9 +1,13 @@
 # Rider signale des erreurs de trim et d'AOT que la compilation ne voit pas
 
-Rider signale douze diagnostics `IL2026` et `IL3050` en sévérité ERROR, deux
-dans `Program.cs` sur `AddOptions<HubOptions>().BindConfiguration(...)` et dix
-dans `Api/ApiEndpoints.cs` sur les appels `MapGet` et `MapPost`. Ce sont des
-faux positifs. N'agissez pas dessus, et ne les faites pas taire.
+Rider signale une paire de diagnostics `IL2026` et `IL3050` en sévérité ERROR
+sur chaque appel qu'un générateur de source intercepte : chaque route d'API
+minimale (`MapGet` et `MapPost` dans `Api/ApiEndpoints*.cs` et
+`Api/MetricsEndpoint.cs`) et les deux liaisons de configuration,
+`AddOptions<HubOptions>().BindConfiguration(...)` dans `Program.cs` et
+`GetSection(...).Get<T>()` dans `Api/HubAuthentication.cs`. Cela fait deux
+diagnostics par site d'appel, donc le compte grandit avec chaque nouvelle route.
+Ce sont des faux positifs. N'agissez pas dessus, et ne les faites pas taire.
 
 ## Pourquoi la compilation n'est pas d'accord
 

@@ -130,17 +130,17 @@ jobs:
               print(*errors, sep=chr(10))
               raise SystemExit(1)
           PY
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/osv.sarif
           category: security-audit/osv
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/gitleaks.sarif
           category: security-audit/gitleaks
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/zizmor.sarif
@@ -224,17 +224,17 @@ jobs:
           limit-severities-for-sarif: true
           version: v0.70.0
           cache: false
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/trivy-fs.sarif
           category: security-audit/trivy-fs
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/trivy-config.sarif
           category: security-audit/trivy-config
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/trivy-image.sarif
@@ -278,7 +278,7 @@ jobs:
           results_format: sarif
           repo_token: ${{ github.token }}
           publish_results: true
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: ${{ always() }}
         with:
           sarif_file: artifacts/security/scorecard.sarif

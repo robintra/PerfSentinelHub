@@ -447,11 +447,11 @@
     {
       "name": "Microsoft.Testing.Extensions.TrxReport",
       "kind": "nuget",
-      "version": "2.4.0",
-      "digest_or_sha": "sha512-base64:aFPJTJOyRXMNRNVSyQSKdW4v74NohLBbdQQyWW7WtS1CYKQqIt/rn181Mr5tcGP5iKvbaA/tP8uaXsO5gNtAUQ==",
-      "lock_content_hash": "WkOaIp/ivwcaF34rmUAIjafnWJ/chI/2hvH/wLQlLXKNDDvaRYvjkxWC7l0+Ib+C4dGrylUonM4kHwJujlkVKw==",
-      "released_at": "2026-09-02T20:59:50.67Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.4.0.json",
+      "version": "2.4.1",
+      "digest_or_sha": "sha512-base64:U7Vmdjl8gXRVbX93z2SfOFrxf0OTOjvncMkdVE7hA3D5kvbOj5kuKyqA4eocEjynATf2++X9yumn1RPzjKqwiQ==",
+      "lock_content_hash": "KGAvJKRqhod45ecH4L1cCKIjGrzziUcLo3L4hRlfOg/Ww2Q7MnA30qHY2rnKzGyLVWf91tc2VleGe8c33FmPaQ==",
+      "released_at": "2026-09-16T14:22:09.977Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.4.1.json",
       "reason": "TRX reporter for Microsoft.Testing.Platform, feeding sonar.cs.vstest.reportsPaths."
     }
   ]

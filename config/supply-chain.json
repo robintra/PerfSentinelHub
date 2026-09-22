@@ -140,19 +140,19 @@
     {
       "name": "docker/setup-qemu-action",
       "kind": "github-action",
-      "version": "4.3.0",
-      "digest_or_sha": "1f40c72289eff860ee54a304f1438e3cff362e0a",
-      "released_at": "2026-09-01T10:40:59Z",
-      "source": "https://github.com/docker/setup-qemu-action/releases/tag/v4.3.0",
+      "version": "4.4.0",
+      "digest_or_sha": "99012661954931238ded8c8b007157a8430204e1",
+      "released_at": "2026-09-15T09:42:21Z",
+      "source": "https://github.com/docker/setup-qemu-action/releases/tag/v4.4.0",
       "reason": "Latest stable Docker QEMU setup action, pinned to its release commit."
     },
     {
       "name": "docker/setup-buildx-action",
       "kind": "github-action",
-      "version": "4.3.0",
-      "digest_or_sha": "37fe631027851001ddb9b187196cc803df7f5f0e",
-      "released_at": "2026-08-19T09:41:47Z",
-      "source": "https://github.com/docker/setup-buildx-action/releases/tag/v4.3.0",
+      "version": "4.4.1",
+      "digest_or_sha": "f87e5991a6d7451dcb8d9637bfbc97413f497069",
+      "released_at": "2026-09-16T07:50:21Z",
+      "source": "https://github.com/docker/setup-buildx-action/releases/tag/v4.4.1",
       "reason": "Latest stable Docker Buildx setup action, pinned to its release commit."
     },
     {
@@ -275,10 +275,10 @@
     {
       "name": "github/codeql-action",
       "kind": "github-action",
-      "version": "4.38.0",
-      "digest_or_sha": "b96794f015dfd88f77b49b1c93e0fa7110f94c63",
-      "released_at": "2026-09-09T14:04:03Z",
-      "source": "https://github.com/github/codeql-action/releases/tag/v4.38.0",
+      "version": "4.38.1",
+      "digest_or_sha": "1c5b675653bb5c22dbe9b12b556ec555138e09fd",
+      "released_at": "2026-09-18T13:11:14Z",
+      "source": "https://github.com/github/codeql-action/releases/tag/v4.38.1",
       "reason": "Latest stable CodeQL action release."
     },
     {

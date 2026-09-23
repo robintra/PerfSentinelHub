@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Analysis;
+using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -58,6 +61,38 @@ public sealed class AnalysisStorageTests : IDisposable
             var run = await database.FindRunAsync(id, cancellationToken);
             Assert.Equal(AnalysisStatuses.Interrupted, run!.Status);
             Assert.Equal(Now + 200, run.FinishedAtMs);
+        }
+    }
+
+    [Fact]
+    public async Task A_lost_run_is_interrupted_before_the_worker_finishes_starting()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = await OpenAsync(cancellationToken);
+        Assert.True(await database.TryInsertRunAsync(Run("lost", Now), cancellationToken));
+        var options = Options.Create(new HubOptions { DatabasePath = _databasePath });
+        var worker = new AnalysisWorker(
+            database,
+            new AnalysisRunner(
+                new DaemonClient(new HttpClient(), options),
+                new EngineProbe(options, NullLogger<EngineProbe>.Instance),
+                options,
+                NullLogger<AnalysisRunner>.Instance),
+            options,
+            TimeProvider.System,
+            NullLogger<AnalysisWorker>.Instance);
+
+        await worker.StartAsync(cancellationToken);
+        try
+        {
+            // The listener opens once the hosted services have started. A run
+            // still left to interrupt then would catch one submitted to this
+            // very process, and fail a run nobody lost.
+            Assert.Equal(AnalysisStatuses.Interrupted, (await database.FindRunAsync("lost", cancellationToken))!.Status);
+        }
+        finally
+        {
+            await worker.StopAsync(cancellationToken);
         }
     }
 

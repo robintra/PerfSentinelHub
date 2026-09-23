@@ -28,11 +28,14 @@ public sealed partial class AnalysisWorker(
 
     private readonly HubOptions _options = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    // Here rather than in ExecuteAsync, which BackgroundService runs off the
+    // start path: the host awaits this before the listener opens, so a run
+    // submitted to this process can never be taken for one the last one lost.
+    public override async Task StartAsync(CancellationToken cancellationToken)
     {
         var interrupted = await database.InterruptRunningRunsAsync(
             timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
-            stoppingToken);
+            cancellationToken);
         if (interrupted > 0)
             LogInterruptedOnStartup(logger, interrupted);
 
@@ -40,6 +43,11 @@ public sealed partial class AnalysisWorker(
         if (swept > 0)
             LogScratchSwept(logger, swept);
 
+        await base.StartAsync(cancellationToken);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
         var workers = Enumerable
             .Range(0, _options.Analysis.Workers)
             .Select(_ => DrainAsync(stoppingToken))

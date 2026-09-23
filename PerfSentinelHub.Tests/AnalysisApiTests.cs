@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -12,8 +11,6 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Tests;
 
 // Drives a real worker over a stub engine, end to end.
-[SupportedOSPlatform("linux")]
-[SupportedOSPlatform("macos")]
 public sealed class AnalysisApiTests : IDisposable
 {
     private readonly HttpClient _client;
@@ -227,28 +224,15 @@ public sealed class AnalysisApiTests : IDisposable
 
     private string WriteStubEngine()
     {
-        var path = Path.Combine(_workspace, "perf-sentinel");
-        File.WriteAllText(path, """
-                                #!/bin/sh
-                                if [ "$1" = "--version" ]; then echo "perf-sentinel 0.16.0"; exit 0; fi
-                                if [ "$1" = "report" ]; then
-                                  while [ $# -gt 0 ]; do
-                                    if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
-                                    shift
-                                  done
-                                  exit 0
-                                fi
-                                cat <<'JSON'
-                                {"analysis":{"traces_analyzed":42},
-                                 "findings":[{"severity":"critical"},{"severity":"warning"},{"severity":"info"}],
-                                 "quality_gate":{"passed":false},
-                                 "binary_version":"0.16.0"}
-                                JSON
-
-                                """);
-        File.SetUnixFileMode(
-            path,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return path;
+        return new FakeEngine
+        {
+            Version = "perf-sentinel 0.16.0",
+            Output = """
+                     {"analysis":{"traces_analyzed":42},
+                      "findings":[{"severity":"critical"},{"severity":"warning"},{"severity":"info"}],
+                      "quality_gate":{"passed":false},
+                      "binary_version":"0.16.0"}
+                     """
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel"));
     }
 }

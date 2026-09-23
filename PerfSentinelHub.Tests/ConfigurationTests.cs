@@ -346,7 +346,16 @@ public sealed class ConfigurationTests
         Assert.Equal(SourceKinds.JaegerQuery, options.Sources[0].Kind);
         Assert.True(new HubOptionsValidator().Validate(null, options with
         {
-            DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db")
+            DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db"),
+            // The documented paths are the container's, and a path with no drive is not
+            // absolute on Windows, as the configuration reference says.
+            Analysis = OperatingSystem.IsWindows()
+                ? options.Analysis with
+                {
+                    EngineBinaryPath = Path.Combine(Path.GetTempPath(), "perf-sentinel"),
+                    ReportDirectory = ReportDirectoryFixture.ReportDirectory
+                }
+                : options.Analysis
         }).Succeeded);
     }
 
@@ -445,6 +454,7 @@ public sealed class ConfigurationTests
         return new HubOptions
         {
             DatabasePath = Path.Combine(Path.GetTempPath(), "hub.db"),
+            Analysis = new AnalysisOptions { ReportDirectory = ReportDirectoryFixture.ReportDirectory },
             Sources = [ValidSource()]
         };
     }

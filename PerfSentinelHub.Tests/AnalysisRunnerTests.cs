@@ -1,4 +1,3 @@
-using System.Runtime.Versioning;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,8 +10,6 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Tests;
 
 // Runs a real subprocess against a stub engine, the way the container will.
-[SupportedOSPlatform("linux")]
-[SupportedOSPlatform("macos")]
 public sealed class AnalysisRunnerTests : IDisposable
 {
     private const long Now = 1_787_839_140_000;
@@ -320,37 +317,14 @@ public sealed class AnalysisRunnerTests : IDisposable
         int sleepSeconds = 0,
         string help = "")
     {
-        Directory.CreateDirectory(_workspace);
-        var path = Path.Combine(_workspace, "perf-sentinel");
-        File.WriteAllText(path, $"""
-                                 #!/bin/sh
-                                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then
-                                   printf '%s' {Quote(help)}
-                                   exit 0
-                                 fi
-                                 if [ "$1" = "report" ]; then
-                                   echo "$@" > render-args.txt
-                                   while [ $# -gt 0 ]; do
-                                     if [ "$1" = "--output" ]; then shift; printf '<html>report</html>' > "$1"; fi
-                                     shift
-                                   done
-                                   exit 0
-                                 fi
-                                 [ {sleepSeconds} -gt 0 ] && sleep {sleepSeconds}
-                                 printf '%s' {Quote(standardError)} >&2
-                                 printf '%s' {Quote(reportJson)}
-                                 exit {exitCode}
-
-                                 """);
-        File.SetUnixFileMode(
-            path,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return path;
-    }
-
-    private static string Quote(string value)
-    {
-        return $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
+        return new FakeEngine
+        {
+            Help = help,
+            Output = reportJson,
+            Error = standardError,
+            ExitCode = exitCode,
+            SleepSeconds = sleepSeconds
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel"));
     }
 
     private static AnalysisRun Run()

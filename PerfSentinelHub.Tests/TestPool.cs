@@ -10,13 +10,29 @@ internal static class TestPool
     /// </summary>
     internal static void ClearFor(string databasePath)
     {
-        // Pools are keyed by connection string, so this mirrors HubDatabase.OpenConnectionAsync.
-        using var own = new SqliteConnection(new SqliteConnectionStringBuilder
+        // Pools are keyed by the exact connection string, so each shape the suite opens a file
+        // with has its own pool: HubDatabase.OpenConnectionAsync, the read-only HubBackup and
+        // its checks, and a bare seed. A pool left behind keeps the file open, which Linux
+        // tolerates on delete and Windows refuses.
+        string[] connectionStrings =
+        [
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = true
+            }.ToString(),
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly
+            }.ToString(),
+            $"Data Source={databasePath}"
+        ];
+        foreach (var connectionString in connectionStrings)
         {
-            DataSource = databasePath,
-            Mode = SqliteOpenMode.ReadWriteCreate,
-            Pooling = true
-        }.ToString());
-        SqliteConnection.ClearPool(own);
+            using var own = new SqliteConnection(connectionString);
+            SqliteConnection.ClearPool(own);
+        }
     }
 }

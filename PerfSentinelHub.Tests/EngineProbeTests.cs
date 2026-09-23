@@ -1,4 +1,3 @@
-using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -6,22 +5,15 @@ using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Tests;
 
-// The probe runs a real subprocess, and the fake binary is a shell script.
-// The Hub only ever ships in a Linux container.
-[SupportedOSPlatform("linux")]
-[SupportedOSPlatform("macos")]
+// The probe runs a real subprocess, a FakeEngine script.
 public sealed class EngineProbeTests : IDisposable
 {
-    private readonly List<string> _scripts = [];
-
     private readonly string _workspace = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-probe-{Guid.NewGuid():N}");
 
     public void Dispose()
     {
-        foreach (var script in _scripts)
-            File.Delete(script);
         if (Directory.Exists(_workspace))
             Directory.Delete(_workspace, true);
     }
@@ -47,7 +39,7 @@ public sealed class EngineProbeTests : IDisposable
     [InlineData("", null)]
     public async Task A_version_line_is_read_and_anything_else_is_refused(string output, string? expected)
     {
-        var probe = Probe(WriteScript($"printf '%s' \"{output}\""));
+        var probe = Probe(WriteEngine(new FakeEngine { Version = output, Help = output }));
 
         await probe.StartAsync(TestContext.Current.CancellationToken);
 
@@ -64,9 +56,7 @@ public sealed class EngineProbeTests : IDisposable
         string help,
         bool expected)
     {
-        var probe = Probe(WriteScript(
-            $"if [ \"$1\" = \"report\" ]; then printf '%s' \"{help}\"; exit 0; fi\n"
-            + "printf 'perf-sentinel 0.16.0'"));
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "perf-sentinel 0.16.0", Help = help }));
 
         await probe.StartAsync(TestContext.Current.CancellationToken);
 
@@ -79,8 +69,7 @@ public sealed class EngineProbeTests : IDisposable
     {
         // Refusing the help is not proof the flag is missing, but guessing the
         // other way costs every daemon run its report.
-        var probe = Probe(WriteScript(
-            "if [ \"$1\" = \"report\" ]; then exit 2; fi\nprintf 'perf-sentinel 0.16.0'"));
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "perf-sentinel 0.16.0", HelpExitCode = 2 }));
 
         await probe.StartAsync(TestContext.Current.CancellationToken);
 
@@ -91,7 +80,7 @@ public sealed class EngineProbeTests : IDisposable
     [Fact]
     public async Task A_binary_that_fails_leaves_the_version_unknown()
     {
-        var probe = Probe(WriteScript("printf 'perf-sentinel 0.16.0'\nexit 1"));
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "perf-sentinel 0.16.0", VersionExitCode = 1 }));
 
         await probe.StartAsync(TestContext.Current.CancellationToken);
 
@@ -124,15 +113,8 @@ public sealed class EngineProbeTests : IDisposable
             NullLogger<EngineProbe>.Instance);
     }
 
-    private string WriteScript(string body)
+    private string WriteEngine(FakeEngine engine)
     {
-        Directory.CreateDirectory(_workspace);
-        var path = Path.Combine(_workspace, $"engine-probe-{Guid.NewGuid():N}.sh");
-        File.WriteAllText(path, $"#!/bin/sh\n{body}\n");
-        File.SetUnixFileMode(
-            path,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        _scripts.Add(path);
-        return path;
+        return engine.WriteTo(Path.Combine(_workspace, $"engine-probe-{Guid.NewGuid():N}"));
     }
 }

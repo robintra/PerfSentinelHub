@@ -23,6 +23,7 @@ public sealed class BackupTests : IDisposable
         File.Delete(_databasePath);
         File.Delete($"{_databasePath}-shm");
         File.Delete($"{_databasePath}-wal");
+        TestPool.ClearFor(_backupPath);
         File.Delete(_backupPath);
     }
 

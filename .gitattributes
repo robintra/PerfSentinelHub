@@ -1,3 +1,7 @@
+# LF in every checkout, core.autocrlf included: .editorconfig asks for it, dotnet format
+# rejects anything else, and the tests compare golden responses byte for byte.
+* text=auto eol=lf
+
 # Keep the language breakdown on what the project ships. Excluded here is developer tooling
 # only: the CI and release scripts, and the convenience Makefile. The Dockerfile and the Helm
 # chart stay counted, because a release publishes both to GHCR, so they are deliverables.

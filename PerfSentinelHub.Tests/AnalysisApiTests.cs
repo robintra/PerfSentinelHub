@@ -153,7 +153,8 @@ public sealed class AnalysisApiTests : IDisposable
         Assert.All(
             knobs.Where(knob => knob.GetProperty("name").GetString() != "sanitizer_aware_classification"),
             knob => Assert.Equal("integer", knob.GetProperty("kind").GetString()));
-        var mode = Assert.Single(knobs, knob => knob.GetProperty("name").GetString() == "sanitizer_aware_classification");
+        var mode = Assert.Single(knobs,
+            knob => knob.GetProperty("name").GetString() == "sanitizer_aware_classification");
         Assert.Equal("choice", mode.GetProperty("kind").GetString());
         Assert.Equal("auto", mode.GetProperty("default").GetString());
         Assert.DoesNotContain(knobs, knob => knob.GetProperty("name").GetString() == "sanitizer_aware_min_cv");

@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.25.0` as its analysis engine, repinned by digest from
+  `0.24.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.24.0` now reads one minor behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  A backend analysis gives the findings and signatures it gave on `0.24.0`, since nothing
+  in `0.25.0` touches detection or scoring. What reaches the Hub's data comes from the
+  daemon: a `0.25.0` daemon freezes into an incident only the findings of that incident's
+  namespace, where it froze those of the same service in every namespace, as long as
+  `k8s.namespace.name` is among its `[detection] grouping_attributes`, as it is by
+  default. The incident mirror copies what the daemon froze, so an incident polled from
+  such a daemon carries fewer findings, and one it recorded before keeps what it froze.
+  The poll still asks for the frozen findings, so the new `findings=false` on the daemon's
+  `/api/incidents` changes nothing here.
+
+  `0.25.0` adds no configuration key, so `DetectionOverrides` and the daemon view's
+  defaults are untouched.
+
 ## [0.3.0] - 2026-09-20
 
 ### Added

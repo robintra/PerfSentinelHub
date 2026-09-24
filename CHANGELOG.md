@@ -2,6 +2,34 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.25.1` as its analysis engine, repinned by digest from
+  `0.25.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.25.0` now reads one patch behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.25.1` counts a connection pool's validation ping, the empty query the OpenTelemetry
+  JDBC instrumentation traces with `db.statement=""`, as `not_io` instead of a missing
+  statement. The Hub reads neither counter, so what moves in its data is narrow: a ping
+  whose span name read as a query execution no longer borrows the statement of a related
+  span, in a Tempo source's backend analysis as in a polled daemon, so the occurrence count
+  of such a finding can drop by the pings it held. Its signature does not move. A
+  `jaeger_query` source's analysis does not go through that ingest path.
+
+  `0.25.1` adds no configuration key, so `DetectionOverrides` and the daemon view's
+  defaults are untouched.
+
+### Fixed
+
+- A run submitted right after the Hub started could be marked `interrupted`, as if the
+  previous process had lost it. At startup the Hub interrupts the runs a previous process
+  left running, and it did so from the analysis worker's background loop, which the host
+  does not wait for, so the listener could already have accepted a run by then. It now
+  does so before the listener opens.
+
 ## [0.3.1] - 2026-09-23
 
 ### Changed

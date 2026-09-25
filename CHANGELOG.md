@@ -2,6 +2,35 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.25.2` as its analysis engine, repinned by digest from
+  `0.25.1`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.25.1` now reads one patch behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.25.2` reads the `method` and `status` tags that Micrometer Observation puts on the
+  outbound HTTP spans of a Spring Boot service, where it read every such call as a `GET`
+  without a status. That holds in a Tempo source's backend analysis, in a `jaeger_query`
+  source's, and in a polled daemon once that daemon runs `0.25.2`. On such a service, a
+  finding on a call that is not a `GET` now names its real verb in its template, so it
+  arrives under a signature the Hub has never seen, as a new row, and an acknowledgment
+  mirrored on the old `GET` signature does not carry over to it. The `GET` row keeps its
+  signature, with fewer occurrences where the other verbs had counted in it.
+
+  The new row fits the lineage probe, same service, detector and endpoint with another
+  `template_hash`, while the `GET` row it would link to is still current. Stored before
+  that `GET` row in the same batch, it links to it and serves the `GET` row's
+  `original_first_seen`. Stored after, it links to nothing, because the `GET` row was
+  just seen. The order of findings within a batch is not a contract, so either can
+  happen, and a lineage block dated to this upgrade on a non-`GET` HTTP finding is worth
+  reading with that in mind.
+
+  `0.25.2` adds no configuration key, so `DetectionOverrides` and the daemon view's
+  defaults are untouched.
+
 ## [0.3.2] - 2026-09-24
 
 ### Changed

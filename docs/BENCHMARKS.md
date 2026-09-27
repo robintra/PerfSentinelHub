@@ -12,12 +12,12 @@ else, and the process runs as the non-root user `1654`.
 
 ## Summary
 
-| Figure                       | Value                                                 |
-|------------------------------|-------------------------------------------------------|
-| Cold start to first response | 130 ms median, 120 to 138 ms over 10 runs             |
-| Memory at rest               | 20.3 to 20.8 MiB, 60 s after start, over 3 containers |
-| Compressed image, amd64      | 39.8 MB: base 21.4, Hub 11.1, Perf Sentinel 7.4       |
-| Compressed image, arm64      | 37.7 MB: base 20.3, Hub 10.6, Perf Sentinel 6.8       |
+| Figure                       | Value                                                                   |
+|------------------------------|-------------------------------------------------------------------------|
+| Cold start to first response | 130 ms median, 120 to 138 ms over 10 runs                               |
+| Memory at rest               | 20.3 to 20.8 MiB (21.3 to 21.8 MB), 60 s after start, over 3 containers |
+| Compressed image, amd64      | 39.8 MB: base 21.4, Hub 11.1, Perf Sentinel 7.4                         |
+| Compressed image, arm64      | 37.7 MB: base 20.3, Hub 10.6, Perf Sentinel 6.8                         |
 
 ## What the image carries
 

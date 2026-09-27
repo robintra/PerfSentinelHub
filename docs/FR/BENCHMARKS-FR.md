@@ -12,12 +12,12 @@ processus tourne sous l'utilisateur non root `1654`.
 
 ## En bref
 
-| Chiffre                             | Valeur                                                     |
-|-------------------------------------|------------------------------------------------------------|
-| Démarrage à froid, première réponse | 130 ms en médiane, de 120 à 138 ms sur 10 essais           |
-| Mémoire au repos                    | 20,3 à 20,8 Mio, 60 s après le démarrage, sur 3 conteneurs |
-| Image compressée, amd64             | 39,8 Mo : base 21,4, Hub 11,1, Perf Sentinel 7,4           |
-| Image compressée, arm64             | 37,7 Mo : base 20,3, Hub 10,6, Perf Sentinel 6,8           |
+| Chiffre                             | Valeur                                                                      |
+|-------------------------------------|-----------------------------------------------------------------------------|
+| Démarrage à froid, première réponse | 130 ms en médiane, de 120 à 138 ms sur 10 essais                            |
+| Mémoire au repos                    | 20,3 à 20,8 Mio (21,3 à 21,8 Mo), 60 s après le démarrage, sur 3 conteneurs |
+| Image compressée, amd64             | 39,8 Mo : base 21,4, Hub 11,1, Perf Sentinel 7,4                            |
+| Image compressée, arm64             | 37,7 Mo : base 20,3, Hub 10,6, Perf Sentinel 6,8                            |
 
 ## Ce que contient l'image
 

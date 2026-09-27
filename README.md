@@ -97,6 +97,7 @@ These registry commands work only once the public rehearsal and publication succ
 | [docs/OPERATIONS.md](docs/OPERATIONS.md)         | Freshness, recovery, metrics with ready-made Grafana and Prometheus files, backup and restore         |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Browser sign-in against Keycloak, Entra ID, Google, GitLab or Bitbucket, and the routes left open     |
 | [docs/LIMITATIONS.md](docs/LIMITATIONS.md)       | What the Hub declares rather than measures, and what a run does not promise                           |
+| [docs/BENCHMARKS.md](docs/BENCHMARKS.md)         | Image size, cold start and memory at rest, measured on the published image                            |
 | [RELEASING.md](RELEASING.md)                     | What a release contains, how it is signed, and how to verify one publicly                             |
 | [CONTRIBUTING.md](CONTRIBUTING.md)               | Local gates, the pinned toolchain, and the pull request rules                                         |
 

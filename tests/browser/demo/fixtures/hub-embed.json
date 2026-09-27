@@ -3,9 +3,9 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "identity": null,
-      "engine_version": "0.24.0",
+      "engine_version": "0.25.2",
       "latest_engine_version": null,
       "latest_hub_version": null,
       "queue_depth": 0,
@@ -316,7 +316,7 @@
           "info": 3,
           "traces_analyzed": 11,
           "quality_gate_passed": false,
-          "report_bytes": 573280,
+          "report_bytes": 572749,
           "warnings": [
             {
               "kind": "tuning",
@@ -348,7 +348,7 @@
           "info": 3,
           "traces_analyzed": 11,
           "quality_gate_passed": false,
-          "report_bytes": 573280,
+          "report_bytes": 572749,
           "warnings": [
             {
               "kind": "tuning",
@@ -381,7 +381,7 @@
         "info": 3,
         "traces_analyzed": 11,
         "quality_gate_passed": false,
-        "report_bytes": 573280,
+        "report_bytes": 572749,
         "warnings": [
           {
             "kind": "tuning",
@@ -413,7 +413,7 @@
         "info": 3,
         "traces_analyzed": 11,
         "quality_gate_passed": false,
-        "report_bytes": 573280,
+        "report_bytes": 572749,
         "warnings": [
           {
             "kind": "tuning",
@@ -560,7 +560,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.24.0",
+      "defaults_engine_version": "0.25.2",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -699,7 +699,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.24.0",
+      "defaults_engine_version": "0.25.2",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -792,7 +792,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.24.0",
+      "defaults_engine_version": "0.25.2",
       "scoring_config": null,
       "energy_model": null,
       "traces": null,
@@ -902,7 +902,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.24.0",
+      "defaults_engine_version": "0.25.2",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -1041,7 +1041,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.24.0",
+      "defaults_engine_version": "0.25.2",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -1181,6 +1181,43 @@
     ],
     "/api/incidents?limit=100&offset=0": [
       {
+        "id": "4f5adcd734c89662084a4de03eb78a18",
+        "service": "order-svc",
+        "namespace": "shop",
+        "kind": "restart",
+        "at_ms": 1756511875000,
+        "detail": "pod restarted by the kubelet",
+        "window_from_ms": 1756511872000,
+        "window_to_ms": 1756511877000,
+        "oldest_finding_ms": 1756511875000,
+        "ended_at_ms": 1756511920000,
+        "source_id": "billing-stg",
+        "source_name": "Billing staging",
+        "environment": "staging",
+        "first_seen": 1756511999000,
+        "last_seen": 1756511999000,
+        "finding_count": 1,
+        "capture": "partial"
+      },
+      {
+        "id": "7731ebe4f36703d6875a19efc76c4d19",
+        "service": "cache-svc",
+        "kind": "other",
+        "at_ms": 1756511875000,
+        "detail": "node under memory pressure, pod evicted",
+        "window_from_ms": 1756511872000,
+        "window_to_ms": 1756511877000,
+        "oldest_finding_ms": 1756511875000,
+        "ended_at_ms": null,
+        "source_id": "billing-stg",
+        "source_name": "Billing staging",
+        "environment": "staging",
+        "first_seen": 1756511999000,
+        "last_seen": 1756511999000,
+        "finding_count": 1,
+        "capture": "partial"
+      },
+      {
         "id": "7a9c3328f4920a7108344be78981afa4",
         "service": "checkout-svc",
         "namespace": "shop",
@@ -1219,51 +1256,14 @@
         "capture": "complete"
       },
       {
-        "id": "4f5adcd734c89662084a4de03eb78a18",
-        "service": "order-svc",
-        "namespace": "shop",
-        "kind": "restart",
-        "at_ms": 1756511875000,
-        "detail": "pod restarted by the kubelet",
-        "window_from_ms": 1756511872000,
-        "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511875000,
-        "ended_at_ms": 1756511920000,
-        "source_id": "billing-stg",
-        "source_name": "Billing staging",
-        "environment": "staging",
-        "first_seen": 1756511999000,
-        "last_seen": 1756511999000,
-        "finding_count": 1,
-        "capture": "partial"
-      },
-      {
-        "id": "7731ebe4f36703d6875a19efc76c4d19",
-        "service": "cache-svc",
-        "kind": "other",
-        "at_ms": 1756511875000,
-        "detail": "node under memory pressure, pod evicted",
-        "window_from_ms": 1756511872000,
-        "window_to_ms": 1756511877000,
-        "oldest_finding_ms": 1756511875000,
-        "ended_at_ms": null,
-        "source_id": "billing-stg",
-        "source_name": "Billing staging",
-        "environment": "staging",
-        "first_seen": 1756511999000,
-        "last_seen": 1756511999000,
-        "finding_count": 1,
-        "capture": "partial"
-      },
-      {
         "id": "7660c5ff6d6c8e0bd95421fcf55acd5d",
         "service": "gateway-svc",
         "namespace": "edge",
         "kind": "deploy",
-        "at_ms": 1756511870000,
+        "at_ms": 1756511869000,
         "detail": "rollout 4f21c8 reached every replica",
-        "window_from_ms": 1756511867000,
-        "window_to_ms": 1756511872000,
+        "window_from_ms": 1756511866000,
+        "window_to_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -1274,6 +1274,109 @@
         "capture": "empty"
       }
     ],
+    "/api/incidents/4f5adcd734c89662084a4de03eb78a18": {
+      "id": "4f5adcd734c89662084a4de03eb78a18",
+      "service": "order-svc",
+      "namespace": "shop",
+      "kind": "restart",
+      "at_ms": 1756511875000,
+      "detail": "pod restarted by the kubelet",
+      "window_from_ms": 1756511872000,
+      "window_to_ms": 1756511877000,
+      "oldest_finding_ms": 1756511875000,
+      "findings": [
+        {
+          "finding": {
+            "type": "n_plus_one_sql",
+            "severity": "warning",
+            "trace_id": "huba0000000000000000000000000000",
+            "service": "order-svc",
+            "source_endpoint": "GET /orders",
+            "pattern": {
+              "template": "SELECT * FROM orders WHERE owner_id = ?",
+              "occurrences": 8,
+              "window_ms": 0,
+              "distinct_params": 8,
+              "span_duration_us_p50": 1500,
+              "span_duration_us_p99": 1500,
+              "span_duration_cv_x1000": 0
+            },
+            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+            "first_timestamp": "2026-09-20T19:57:30.968Z",
+            "last_timestamp": "2026-09-20T19:57:30.968Z",
+            "green_impact": {
+              "estimated_extra_io_ops": 7,
+              "io_intensity_score": 8,
+              "io_intensity_band": "high"
+            },
+            "confidence": "daemon_staging",
+            "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
+          },
+          "stored_at_ms": 1756511875000,
+          "first_seen_ms": 1756511875000,
+          "seen_count": 1
+        }
+      ],
+      "ended_at_ms": 1756511920000,
+      "source_id": "billing-stg",
+      "source_name": "Billing staging",
+      "environment": "staging",
+      "first_seen": 1756511999000,
+      "last_seen": 1756511999000,
+      "finding_count": 1,
+      "capture": "partial"
+    },
+    "/api/incidents/7731ebe4f36703d6875a19efc76c4d19": {
+      "id": "7731ebe4f36703d6875a19efc76c4d19",
+      "service": "cache-svc",
+      "kind": "other",
+      "at_ms": 1756511875000,
+      "detail": "node under memory pressure, pod evicted",
+      "window_from_ms": 1756511872000,
+      "window_to_ms": 1756511877000,
+      "oldest_finding_ms": 1756511875000,
+      "findings": [
+        {
+          "finding": {
+            "type": "n_plus_one_sql",
+            "severity": "warning",
+            "trace_id": "hubb0000000000000000000000000000",
+            "service": "cache-svc",
+            "source_endpoint": "GET /sessions",
+            "pattern": {
+              "template": "SELECT * FROM sessions WHERE owner_id = ?",
+              "occurrences": 8,
+              "window_ms": 0,
+              "distinct_params": 8,
+              "span_duration_us_p50": 1500,
+              "span_duration_us_p99": 1500,
+              "span_duration_cv_x1000": 0
+            },
+            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+            "first_timestamp": "2026-09-20T19:57:30.968Z",
+            "last_timestamp": "2026-09-20T19:57:30.968Z",
+            "green_impact": {
+              "estimated_extra_io_ops": 7,
+              "io_intensity_score": 8,
+              "io_intensity_band": "high"
+            },
+            "confidence": "daemon_staging",
+            "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
+          },
+          "stored_at_ms": 1756511875000,
+          "first_seen_ms": 1756511875000,
+          "seen_count": 1
+        }
+      ],
+      "ended_at_ms": null,
+      "source_id": "billing-stg",
+      "source_name": "Billing staging",
+      "environment": "staging",
+      "first_seen": 1756511999000,
+      "last_seen": 1756511999000,
+      "finding_count": 1,
+      "capture": "partial"
+    },
     "/api/incidents/7a9c3328f4920a7108344be78981afa4": {
       "id": "7a9c3328f4920a7108344be78981afa4",
       "service": "checkout-svc",
@@ -1378,118 +1481,15 @@
       "finding_count": 1,
       "capture": "complete"
     },
-    "/api/incidents/4f5adcd734c89662084a4de03eb78a18": {
-      "id": "4f5adcd734c89662084a4de03eb78a18",
-      "service": "order-svc",
-      "namespace": "shop",
-      "kind": "restart",
-      "at_ms": 1756511875000,
-      "detail": "pod restarted by the kubelet",
-      "window_from_ms": 1756511872000,
-      "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511875000,
-      "findings": [
-        {
-          "finding": {
-            "type": "n_plus_one_sql",
-            "severity": "warning",
-            "trace_id": "huba0000000000000000000000000000",
-            "service": "order-svc",
-            "source_endpoint": "GET /orders",
-            "pattern": {
-              "template": "SELECT * FROM orders WHERE owner_id = ?",
-              "occurrences": 8,
-              "window_ms": 0,
-              "distinct_params": 8,
-              "span_duration_us_p50": 1500,
-              "span_duration_us_p99": 1500,
-              "span_duration_cv_x1000": 0
-            },
-            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-09-20T19:57:30.968Z",
-            "last_timestamp": "2026-09-20T19:57:30.968Z",
-            "green_impact": {
-              "estimated_extra_io_ops": 7,
-              "io_intensity_score": 8,
-              "io_intensity_band": "high"
-            },
-            "confidence": "daemon_staging",
-            "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
-          },
-          "stored_at_ms": 1756511875000,
-          "first_seen_ms": 1756511875000,
-          "seen_count": 1
-        }
-      ],
-      "ended_at_ms": 1756511920000,
-      "source_id": "billing-stg",
-      "source_name": "Billing staging",
-      "environment": "staging",
-      "first_seen": 1756511999000,
-      "last_seen": 1756511999000,
-      "finding_count": 1,
-      "capture": "partial"
-    },
-    "/api/incidents/7731ebe4f36703d6875a19efc76c4d19": {
-      "id": "7731ebe4f36703d6875a19efc76c4d19",
-      "service": "cache-svc",
-      "kind": "other",
-      "at_ms": 1756511875000,
-      "detail": "node under memory pressure, pod evicted",
-      "window_from_ms": 1756511872000,
-      "window_to_ms": 1756511877000,
-      "oldest_finding_ms": 1756511875000,
-      "findings": [
-        {
-          "finding": {
-            "type": "n_plus_one_sql",
-            "severity": "warning",
-            "trace_id": "hubb0000000000000000000000000000",
-            "service": "cache-svc",
-            "source_endpoint": "GET /sessions",
-            "pattern": {
-              "template": "SELECT * FROM sessions WHERE owner_id = ?",
-              "occurrences": 8,
-              "window_ms": 0,
-              "distinct_params": 8,
-              "span_duration_us_p50": 1500,
-              "span_duration_us_p99": 1500,
-              "span_duration_cv_x1000": 0
-            },
-            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-09-20T19:57:30.968Z",
-            "last_timestamp": "2026-09-20T19:57:30.968Z",
-            "green_impact": {
-              "estimated_extra_io_ops": 7,
-              "io_intensity_score": 8,
-              "io_intensity_band": "high"
-            },
-            "confidence": "daemon_staging",
-            "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
-          },
-          "stored_at_ms": 1756511875000,
-          "first_seen_ms": 1756511875000,
-          "seen_count": 1
-        }
-      ],
-      "ended_at_ms": null,
-      "source_id": "billing-stg",
-      "source_name": "Billing staging",
-      "environment": "staging",
-      "first_seen": 1756511999000,
-      "last_seen": 1756511999000,
-      "finding_count": 1,
-      "capture": "partial"
-    },
     "/api/incidents/7660c5ff6d6c8e0bd95421fcf55acd5d": {
       "id": "7660c5ff6d6c8e0bd95421fcf55acd5d",
       "service": "gateway-svc",
       "namespace": "edge",
       "kind": "deploy",
-      "at_ms": 1756511870000,
+      "at_ms": 1756511869000,
       "detail": "rollout 4f21c8 reached every replica",
-      "window_from_ms": 1756511867000,
-      "window_to_ms": 1756511872000,
+      "window_from_ms": 1756511866000,
+      "window_to_ms": 1756511871000,
       "findings": [],
       "ended_at_ms": null,
       "source_id": "billing-stg",

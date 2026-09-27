@@ -14,10 +14,10 @@
 # PerfSentinelHub
 
 **One durable endpoint for the findings your
-[perf-sentinel](https://github.com/robintra/perf-sentinel) daemons produce, and a browser
+[Perf Sentinel](https://github.com/robintra/perf-sentinel) daemons produce, and a browser
 interface that launches an analysis without a terminal.** A NativeAOT service backed by
-SQLite. Daemon push is the primary path, polling is a recovery safety net, and finding
-envelopes stay read-compatible for 180 days by default.
+SQLite. Daemons push their findings, and the Hub polls them as a fallback. History is kept
+180 days by default.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
@@ -26,7 +26,7 @@ envelopes stay read-compatible for 180 days by default.
 
 ## Run locally in five minutes
 
-Requirements: .NET SDK 10.0.401 and a reachable perf-sentinel daemon.
+Requirements: .NET SDK 10.0.401 and a reachable Perf Sentinel daemon.
 
 ```bash
 Hub__DatabasePath=/tmp/perf-sentinel-hub.db \
@@ -71,8 +71,7 @@ and set `sources[].authHeaderName`, `authSecretName` and `authSecretKey`. The sa
 carries a daemon's `[daemon] read_api_key` as `X-API-Key` for its incidents. For daemon push,
 set `sources[].importSecretName` and `importSecretKey`, with at least 32 characters.
 
-For a public release, install by digest rather than by tag. A version tag is a discovery
-hint, never a deployment identity:
+Install a public release by digest rather than by tag, since a tag can be moved:
 
 ```bash
 IMAGE_DIGEST="$(jq -r .image.digest release/release-manifest.json)"
@@ -82,8 +81,6 @@ CHART=ghcr.io/robintra/charts/perf-sentinel-hub
 CHART_DIGEST="$(oras resolve "$CHART:0.3.3")"
 helm pull "oci://$CHART@$CHART_DIGEST"
 ```
-
-These registry commands work only once the public rehearsal and publication succeed.
 
 ## Documentation
 
@@ -106,16 +103,12 @@ These registry commands work only once the public rehearsal and publication succ
 No ingress, no user accounts, no CI or SARIF import, no acknowledgment store, and no
 remote backup. The local `backup` command snapshots the database, but shipping that file
 off the cluster stays the operator's job. Browser sign-in is delegated to an OAuth2
-provider when `Hub:Auth` is on, and the Hub keeps no user of its own.
+provider when `Hub:Auth` is on, and the Hub keeps no user of its own. Exposing the Hub
+outside the cluster is out of scope for now.
 
-Network exposure belongs to the next independent design.
 The Hub owns no ack store. It mirrors each daemon's active acks, and it relays a runtime
 ack or revoke to a daemon with that daemon's own ack key when a source is given one. The CI
-baseline stays in the repository perf-sentinel consumes and is changed by pull request.
-
-Every badge above reports something observed. The container image and Helm chart badges
-are deliberately absent until the first release publishes their package pages, because a
-badge that links nowhere is a promise rather than evidence.
+baseline stays in the repository Perf Sentinel consumes and is changed by pull request.
 
 ## License
 

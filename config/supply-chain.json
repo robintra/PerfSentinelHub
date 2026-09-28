@@ -294,8 +294,8 @@
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
       "version": "10.0.401-noble-aot",
-      "digest_or_sha": "sha256:1a069a730888d278b5ac00e3e238707387d20d2b65f0fc6866b6180df0a767e0",
-      "released_at": "2026-09-08",
+      "digest_or_sha": "sha256:96f3b7d45f53eb05990f05b89ce61c4e23d07a5098521c2f20b018630e34f298",
+      "released_at": "2026-09-21",
       "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-noble-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
     },

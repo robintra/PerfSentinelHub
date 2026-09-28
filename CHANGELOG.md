@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.25.3` as its analysis engine, repinned by digest from
+  `0.25.2`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.25.2` now reads one patch behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.25.3` changes the fix a Java finding suggests, never the finding itself. A SELECT
+  that Hibernate generated reads `java_jpa` even when no span names Hibernate, which
+  covers the lazy loads the OpenTelemetry Java agent never wraps in a Hibernate span, and
+  a service traced through Micrometer Observation gets the Java generic fix where it got
+  none. The HTML report of an analysis shows the new fix. The suggested fix is not part
+  of the signature, so every finding keeps its row, its lineage and the acknowledgments
+  mirrored on it, and no finding appears or disappears.
+
+  The two other changes of `0.25.3` are daemon start-up logs, a chmod warning on an ack
+  store at an `fsGroup` volume root and advisories printed twice, which the Hub's own
+  analysis runs never meet. `0.25.3` adds no configuration key, so `DetectionOverrides`
+  and the daemon view's defaults are untouched.
+
 ## [0.3.3] - 2026-09-25
 
 ### Changed

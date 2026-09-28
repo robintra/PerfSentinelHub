@@ -2,11 +2,16 @@
 # rejects anything else, and the tests compare golden responses byte for byte.
 * text=auto eol=lf
 
-# Keep the language breakdown on what the project ships. Excluded here is developer tooling
-# only: the CI and release scripts, and the convenience Makefile. The Dockerfile and the Helm
-# chart stay counted, because a release publishes both to GHCR, so they are deliverables.
+# Keep the language breakdown to the application itself: C# for the service, JavaScript,
+# CSS and HTML for the launcher. Excluded here is everything around it: the CI and release
+# scripts, the Makefile, the Playwright suite and its type declarations, and the packaging
+# (Dockerfile, Helm templates). Matching by extension keeps new files of those kinds out too.
 # These files stay first-party, so neither linguist-vendored nor linguist-generated would be
 # true of them.
 scripts/** linguist-detectable=false
 Makefile linguist-detectable=false
 ruff.toml linguist-detectable=false
+*.sh linguist-detectable=false
+*.ts linguist-detectable=false
+*.tpl linguist-detectable=false
+Dockerfile linguist-detectable=false

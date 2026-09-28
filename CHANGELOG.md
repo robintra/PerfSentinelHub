@@ -2,7 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.3.4] - 2026-09-28
 
 ### Changed
 
@@ -23,6 +23,11 @@ All notable changes to PerfSentinelHub are recorded here.
   store at an `fsGroup` volume root and advisories printed twice, which the Hub's own
   analysis runs never meet. `0.25.3` adds no configuration key, so `DetectionOverrides`
   and the daemon view's defaults are untouched.
+
+### Fixed
+
+- The page title and the wordmark name the product `Perf Sentinel Hub`, where they read
+  `perf-sentinel hub`. The logo's alternative text reads `Perf Sentinel`.
 
 ## [0.3.3] - 2026-09-25
 

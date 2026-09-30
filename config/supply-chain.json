@@ -338,11 +338,11 @@
     {
       "name": "trivy",
       "kind": "download",
-      "version": "0.70.0",
-      "digest_or_sha": "sha256:8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9",
-      "released_at": "2026-04-17T06:50:02Z",
-      "source": "https://github.com/aquasecurity/trivy/releases/tag/v0.70.0",
-      "artifact_url": "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz",
+      "version": "0.74.0",
+      "digest_or_sha": "sha256:2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+      "released_at": "2026-08-14T11:29:11Z",
+      "source": "https://github.com/aquasecurity/trivy/releases/tag/v0.74.0",
+      "artifact_url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz",
       "reason": "Latest stable Trivy binary with a published Linux checksum."
     },
     {

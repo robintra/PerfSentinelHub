@@ -293,19 +293,19 @@
     {
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
-      "version": "10.0.401-noble-aot",
-      "digest_or_sha": "sha256:96f3b7d45f53eb05990f05b89ce61c4e23d07a5098521c2f20b018630e34f298",
-      "released_at": "2026-09-21",
-      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-noble-aot",
+      "version": "10.0.401-resolute-aot",
+      "digest_or_sha": "sha256:ae581c66994fd9520cb09d6db419aee49dfa110ff2f81634091ce7e0d39f150a",
+      "released_at": "2026-09-08",
+      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-resolute-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
     },
     {
       "name": "mcr.microsoft.com/dotnet/runtime-deps",
       "kind": "container",
-      "version": "10.0.12-noble-chiseled-extra",
-      "digest_or_sha": "sha256:9a3e4e315a3eae3be20b73739ae84fa7e4ffb2a47a234f3bef30825f0543fe1b",
+      "version": "10.0.12-resolute-chiseled-extra",
+      "digest_or_sha": "sha256:18a09d6e57620abc3d8baa0dd00b0bdb6691003d9f1b67d621ed17aab3ef5f29",
       "released_at": "2026-09-08",
-      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.12-noble-chiseled-extra",
+      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.12-resolute-chiseled-extra",
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.12."
     },
     {

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble-aot@sha256:96f3b7d45f53eb05990f05b89ce61c4e23d07a5098521c2f20b018630e34f298 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-resolute-aot@sha256:ae581c66994fd9520cb09d6db419aee49dfa110ff2f81634091ce7e0d39f150a AS build
 ARG TARGETARCH
 ARG VERSION=0.3.4
 ARG SOURCE_DATE_EPOCH
@@ -14,7 +14,7 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
 # outside the registry.
 FROM ghcr.io/robintra/perf-sentinel:0.25.3@sha256:bd05da09549b4699d58926606f5ca2810bf683911483d37de2349590a5a608cd AS engine
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-noble-chiseled-extra@sha256:9a3e4e315a3eae3be20b73739ae84fa7e4ffb2a47a234f3bef30825f0543fe1b
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-resolute-chiseled-extra@sha256:18a09d6e57620abc3d8baa0dd00b0bdb6691003d9f1b67d621ed17aab3ef5f29
 ARG SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.version="0.3.4" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \

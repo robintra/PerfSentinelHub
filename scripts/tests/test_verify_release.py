@@ -838,6 +838,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         result = subprocess.run(command, text=True, capture_output=True)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn(f'image: "localhost:5000/team/perf-sentinel-hub@{digest}"', result.stdout)
+        self.assertIn("fsGroup: 1654", result.stdout)
+        self.assertIn("fsGroupChangePolicy: OnRootMismatch", result.stdout)
 
         for repository in (
             "ghcr.io/robintra/perf-sentinel-hub:latest",

@@ -2,6 +2,13 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## Unreleased
+
+### Fixed
+
+- The Helm deployment assigns the pod's group `1654` as the volume `fsGroup`, allowing
+  the non-root Hub process to create its SQLite database on a newly provisioned PVC.
+
 ## [0.3.4] - 2026-09-28
 
 ### Changed

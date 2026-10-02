@@ -2,6 +2,25 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.25.4` as its analysis engine, repinned by digest from
+  `0.25.3`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a fleet still on `0.25.3` now reads one patch behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.25.4` changes how the CLI and the TUI print a finding's code location, never the
+  finding itself: a qualified `code.function.name` no longer repeats its namespace, a
+  namespace holding `\` or `::` joins its function with `::`, and an empty attribute
+  leaves no stray separator. The Hub reads none of those outputs. An analysis run's JSON
+  keeps `code_location` as the four fields the span sent, and the HTML report is rendered
+  from that JSON by a template `0.25.4` does not touch, so a run's report is unchanged.
+  Signatures, endpoints and SARIF locations do not move, so every finding keeps its row
+  and the acknowledgments mirrored on it. `0.25.4` adds no configuration key, so
+  `DetectionOverrides` and the daemon view's defaults are untouched.
+
 ## [0.3.4] - 2026-09-28
 
 ### Changed

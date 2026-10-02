@@ -21,6 +21,21 @@ All notable changes to PerfSentinelHub are recorded here.
   and the acknowledgments mirrored on it. `0.25.4` adds no configuration key, so
   `DetectionOverrides` and the daemon view's defaults are untouched.
 
+- The images move from Ubuntu 24.04 noble to 26.04 resolute: the build image to
+  `sdk:10.0.401-resolute-aot`, the runtime image to
+  `runtime-deps:10.0.12-resolute-chiseled-extra`, both pinned by digest in the
+  `Dockerfile` and `config/supply-chain.json`. The SDK and the runtime stay on the same
+  .NET release, so the lock and `global.json` do not move. What changes is the
+  distribution under them, OpenSSL included: the Hub's outbound TLS, to daemons and trace
+  backends, runs on OpenSSL 3.5 where noble carried 3.0.
+
+### Fixed
+
+- On the recent analyses screen, the legend sat flush against the banner above it, and
+  the two banners, mixed engine versions and changed detection thresholds, sat flush
+  against each other. A banner carries no margin of its own; both now stand 12px apart,
+  the spacing the filter line under a banner already had.
+
 ## [0.3.4] - 2026-09-28
 
 ### Changed

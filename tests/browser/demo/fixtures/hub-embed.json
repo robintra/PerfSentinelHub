@@ -3,9 +3,9 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "identity": null,
-      "engine_version": "0.25.2",
+      "engine_version": "0.25.4",
       "latest_engine_version": null,
       "latest_hub_version": null,
       "queue_depth": 0,
@@ -560,7 +560,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.2",
+      "defaults_engine_version": "0.25.4",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -699,7 +699,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.2",
+      "defaults_engine_version": "0.25.4",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -792,7 +792,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.2",
+      "defaults_engine_version": "0.25.4",
       "scoring_config": null,
       "energy_model": null,
       "traces": null,
@@ -902,7 +902,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.2",
+      "defaults_engine_version": "0.25.4",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -1041,7 +1041,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.2",
+      "defaults_engine_version": "0.25.4",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",

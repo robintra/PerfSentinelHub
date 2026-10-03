@@ -14,7 +14,7 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
 # outside the registry.
 FROM ghcr.io/robintra/perf-sentinel:0.25.5@sha256:5e0896bb79e20f528dd35d0b86ece229c27b0fc46be0c63b697ba99aa8a6956f AS engine
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-resolute-chiseled-extra@sha256:18a09d6e57620abc3d8baa0dd00b0bdb6691003d9f1b67d621ed17aab3ef5f29
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-resolute-chiseled-extra@sha256:2b0f7a348127985b5accc794e1304b0f3f9ab9c8db652096514db4b831dc3ce4
 ARG SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.version="0.3.4" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \

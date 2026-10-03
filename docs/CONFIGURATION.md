@@ -197,3 +197,10 @@ trusts only your CA cannot reach anything on the public internet.
 
 Verified against the runtime this image is built on: with no variable the private
 certificate is refused and public TLS works, with the concatenated bundle both work.
+
+The analysis engine the launcher starts inherits this variable. From perf-sentinel
+0.25.5 it trusts the certificates of `SSL_CERT_FILE` next to its own bundled roots, so the
+same bundle lets the launcher analyze a Tempo or Jaeger source served with a private
+certificate. The engine also reads `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` for its
+`https://` calls: a Hub that carries `HTTPS_PROXY` sends them through that proxy, so an
+in-cluster `https://` source belongs in `NO_PROXY`.

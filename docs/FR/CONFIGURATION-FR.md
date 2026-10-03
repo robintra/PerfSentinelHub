@@ -210,3 +210,10 @@ qui ne fait confiance qu'à votre CA ne peut rien joindre sur l'internet public.
 Vérifié contre l'exécution sur laquelle cette image est bâtie : sans la variable le
 certificat privé est refusé et le TLS public fonctionne, avec le bundle concaténé les deux
 fonctionnent.
+
+Le moteur d'analyse que démarre le lanceur hérite de cette variable. Depuis perf-sentinel
+0.25.5, il fait confiance aux certificats de `SSL_CERT_FILE` en plus de ses propres racines
+embarquées, donc le même bundle permet au lanceur d'analyser une source Tempo ou Jaeger
+servie avec un certificat privé. Le moteur lit aussi `HTTPS_PROXY`, `ALL_PROXY` et
+`NO_PROXY` pour ses appels `https://` : un Hub qui porte `HTTPS_PROXY` les fait passer par
+ce proxy, donc une source `https://` du cluster doit figurer dans `NO_PROXY`.

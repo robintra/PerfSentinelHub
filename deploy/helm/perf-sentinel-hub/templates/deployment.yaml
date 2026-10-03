@@ -27,6 +27,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1654
         runAsGroup: 1654
+        fsGroup: 1654
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: hub

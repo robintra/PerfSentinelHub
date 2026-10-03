@@ -293,28 +293,28 @@
     {
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
-      "version": "10.0.401-noble-aot",
-      "digest_or_sha": "sha256:96f3b7d45f53eb05990f05b89ce61c4e23d07a5098521c2f20b018630e34f298",
-      "released_at": "2026-09-21",
-      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-noble-aot",
+      "version": "10.0.401-resolute-aot",
+      "digest_or_sha": "sha256:ae581c66994fd9520cb09d6db419aee49dfa110ff2f81634091ce7e0d39f150a",
+      "released_at": "2026-09-08",
+      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-resolute-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
     },
     {
       "name": "mcr.microsoft.com/dotnet/runtime-deps",
       "kind": "container",
-      "version": "10.0.12-noble-chiseled-extra",
-      "digest_or_sha": "sha256:9a3e4e315a3eae3be20b73739ae84fa7e4ffb2a47a234f3bef30825f0543fe1b",
-      "released_at": "2026-09-08",
-      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.12-noble-chiseled-extra",
+      "version": "10.0.12-resolute-chiseled-extra",
+      "digest_or_sha": "sha256:2b0f7a348127985b5accc794e1304b0f3f9ab9c8db652096514db4b831dc3ce4",
+      "released_at": "2026-10-02",
+      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.12-resolute-chiseled-extra",
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.12."
     },
     {
       "name": "ghcr.io/robintra/perf-sentinel",
       "kind": "container",
-      "version": "0.25.3",
-      "digest_or_sha": "sha256:bd05da09549b4699d58926606f5ca2810bf683911483d37de2349590a5a608cd",
-      "released_at": "2026-09-28",
-      "source": "https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.25.3",
+      "version": "0.25.5",
+      "digest_or_sha": "sha256:5e0896bb79e20f528dd35d0b86ece229c27b0fc46be0c63b697ba99aa8a6956f",
+      "released_at": "2026-10-03",
+      "source": "https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.25.5",
       "reason": "The analysis engine the Hub runs. Copied from the published image so the build reaches no host outside the registry."
     },
     {
@@ -338,11 +338,11 @@
     {
       "name": "trivy",
       "kind": "download",
-      "version": "0.70.0",
-      "digest_or_sha": "sha256:8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9",
-      "released_at": "2026-04-17T06:50:02Z",
-      "source": "https://github.com/aquasecurity/trivy/releases/tag/v0.70.0",
-      "artifact_url": "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz",
+      "version": "0.74.0",
+      "digest_or_sha": "sha256:2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+      "released_at": "2026-08-14T11:29:11Z",
+      "source": "https://github.com/aquasecurity/trivy/releases/tag/v0.74.0",
+      "artifact_url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz",
       "reason": "Latest stable Trivy binary with a published Linux checksum."
     },
     {

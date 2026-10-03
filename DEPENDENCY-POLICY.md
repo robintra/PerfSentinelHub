@@ -18,15 +18,16 @@ Only stable releases are eligible. Stable repository declarations and `allowPrer
 `global.json` form the baseline, and the dependency-automation and supply-chain checks reject a
 prerelease opt-in or prerelease inventory entry.
 
-Each Dependabot entry sets `cooldown.default-days` to `3` with no exclusion, so automated version
-updates wait three days before a pull request opens. Manually pinned inventory entries are not
-subject to any waiting period and may adopt a stable release as soon as it ships.
+Stable releases are adopted immediately. No Dependabot entry sets `cooldown`, and the
+dependency-automation check rejects one: the protection is human review, pinned lockfiles and
+checksums, and the full pipeline running before any merge, not a waiting period. Manually pinned
+inventory entries follow the same rule and may adopt a stable release as soon as it ships.
 
 ## Security updates and exceptions
 
-Security updates are intentionally not delayed by the ordinary three-day cooldown and remain in
-individual pull requests. They do not bypass review, locked restore, dependency review, static
-analysis, vulnerability scanning, or the aggregate CI gate. There is no auto-merge path.
+Security updates are not delayed either and remain in individual pull requests. They do not bypass
+review, locked restore, dependency review, static analysis, vulnerability scanning, or the
+aggregate CI gate. There is no auto-merge path.
 
 A security fix is pinned in `config/supply-chain.json` like any other entry, with its advisory and
 reason recorded. Prereleases, broad ranges, and standing exceptions are not permitted.

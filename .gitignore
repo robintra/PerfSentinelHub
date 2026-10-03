@@ -5,6 +5,7 @@ riderModule.iml
 qodana.yaml
 qodana.sarif.json
 /_ReSharper.Caches/
+*.DotSettings.user
 .idea/
 .codex/
 .DS_Store

@@ -448,6 +448,7 @@ jobs:
           exit-code: 1
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+          version: v0.74.0
 
   helm:
     name: Helm validation

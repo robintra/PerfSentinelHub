@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-PerfSentinelHub is in the `0.x` development series. Only the latest published `0.1.x` release receives security fixes. Older releases and untagged builds are unsupported; upgrade to the newest patch before reporting behavior that may already be fixed.
+PerfSentinelHub is in the `0.x` development series. Only the latest published release receives security fixes. Older releases and untagged builds are unsupported; upgrade to the newest patch before reporting behavior that may already be fixed.
 
 ## Report a vulnerability privately
 

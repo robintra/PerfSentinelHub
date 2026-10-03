@@ -6,9 +6,9 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
-- The image ships perf-sentinel `0.25.4` as its analysis engine, repinned by digest from
+- The image ships perf-sentinel `0.25.5` as its analysis engine, repinned by digest from
   `0.25.3`. It is also the version the launcher compares a polled daemon's
-  `producer_version` against, so a fleet still on `0.25.3` now reads one patch behind.
+  `producer_version` against, so a daemon still on `0.25.3` or `0.25.4` now reads behind.
   `config/supply-chain.json` carries the same digest as the `Dockerfile`.
 
   `0.25.4` changes how the CLI and the TUI print a finding's code location, never the
@@ -16,10 +16,36 @@ All notable changes to PerfSentinelHub are recorded here.
   namespace holding `\` or `::` joins its function with `::`, and an empty attribute
   leaves no stray separator. The Hub reads none of those outputs. An analysis run's JSON
   keeps `code_location` as the four fields the span sent, and the HTML report is rendered
-  from that JSON by a template `0.25.4` does not touch, so a run's report is unchanged.
-  Signatures, endpoints and SARIF locations do not move, so every finding keeps its row
-  and the acknowledgments mirrored on it. `0.25.4` adds no configuration key, so
-  `DetectionOverrides` and the daemon view's defaults are untouched.
+  from that JSON by a template neither version touches, so a run's report is unchanged.
+
+  `0.25.5` masks a value between double quotes on MySQL and MariaDB, where it used to
+  keep it in the template, in clear. That holds in a Tempo or `jaeger_query` source's
+  backend analysis, whose report shows the masked template, and in a polled daemon once
+  that daemon runs `0.25.5`. A daemon finding whose SQL held such a value gets a new
+  template and a new signature, so it arrives as a new row, and an acknowledgment mirrored
+  on the old signature does not carry over to it. Queries that split into one finding per
+  value now group, so findings on them can also appear or disappear.
+
+  The new row fits the lineage probe, same service, detector and endpoint with another
+  `template_hash`. Where the old template held one constant value, the old row is the
+  lone candidate once the daemon stops sending it, and the new row links to it and
+  serves its `original_first_seen`. Where the old rows were one per value, there are
+  several candidates and the new row links to none. A lineage block dated to this upgrade
+  on a MySQL or MariaDB SQL finding is worth reading with that in mind.
+
+  The engine the launcher starts inherits the Hub's environment, and `0.25.5` reads
+  `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and `SSL_CERT_FILE` for its `https://` calls. A
+  Tempo or Jaeger source behind a proxy, or with a certificate from a private CA, now
+  works with those set on the Hub. A Hub that already carries `HTTPS_PROXY` now sends the
+  engine's `https://` source calls through that proxy, so an in-cluster `https://` source
+  belongs in `NO_PROXY`. `http://` sources stay direct. A `jaeger_query` source on Jaeger
+  2.21 or later, which removed the v1 search, failed every run with HTTP 404, and now
+  succeeds through the v3 search the engine falls back to.
+
+  Signatures, endpoints and SARIF locations move only for the MySQL and MariaDB findings
+  above, so every other finding keeps its row and the acknowledgments mirrored on it.
+  Neither version adds a configuration key, so `DetectionOverrides` and the daemon view's
+  defaults are untouched.
 
 - The images move from Ubuntu 24.04 noble to 26.04 resolute: the build image to
   `sdk:10.0.401-resolute-aot`, the runtime image to

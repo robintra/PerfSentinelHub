@@ -3,9 +3,9 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "identity": null,
-      "engine_version": "0.25.5",
+      "engine_version": "0.26.0",
       "latest_engine_version": null,
       "latest_hub_version": null,
       "queue_depth": 0,
@@ -176,7 +176,7 @@
         "kind": "daemon",
         "retention_hours": null,
         "reachable": false,
-        "last_attempt_ms": 1756511999000,
+        "last_attempt_ms": 1756512000000,
         "last_success_ms": null,
         "unreachable_since_ms": 1756511999000,
         "producer_version": null,
@@ -256,6 +256,23 @@
     ],
     "/api/analyses?limit=500": [
       {
+        "id": "0000000000000003",
+        "status": "failed",
+        "source_id": "search-prod",
+        "source_name": "Search production",
+        "environment": "production",
+        "kind": "daemon",
+        "request": {},
+        "requested_by": "unknown",
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": null,
+        "producer_version": null,
+        "error_code": "source_unreachable",
+        "result": null
+      },
+      {
         "id": "0000000000000004",
         "status": "failed",
         "source_id": "tempo-eu",
@@ -274,23 +291,6 @@
         "expires_at_ms": null,
         "producer_version": null,
         "error_code": "source_rejected_request",
-        "result": null
-      },
-      {
-        "id": "0000000000000003",
-        "status": "failed",
-        "source_id": "search-prod",
-        "source_name": "Search production",
-        "environment": "production",
-        "kind": "daemon",
-        "request": {},
-        "requested_by": "unknown",
-        "created_at_ms": 1756511999000,
-        "started_at_ms": 1756512000000,
-        "finished_at_ms": 1756512000000,
-        "expires_at_ms": null,
-        "producer_version": null,
-        "error_code": "source_unreachable",
         "result": null
       },
       {
@@ -316,7 +316,7 @@
           "info": 3,
           "traces_analyzed": 11,
           "quality_gate_passed": false,
-          "report_bytes": 572749,
+          "report_bytes": 576118,
           "warnings": [
             {
               "kind": "tuning",
@@ -348,7 +348,7 @@
           "info": 3,
           "traces_analyzed": 11,
           "quality_gate_passed": false,
-          "report_bytes": 572749,
+          "report_bytes": 576118,
           "warnings": [
             {
               "kind": "tuning",
@@ -381,7 +381,7 @@
         "info": 3,
         "traces_analyzed": 11,
         "quality_gate_passed": false,
-        "report_bytes": 572749,
+        "report_bytes": 576118,
         "warnings": [
           {
             "kind": "tuning",
@@ -413,7 +413,7 @@
         "info": 3,
         "traces_analyzed": 11,
         "quality_gate_passed": false,
-        "report_bytes": 572749,
+        "report_bytes": 576118,
         "warnings": [
           {
             "kind": "tuning",
@@ -560,7 +560,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.5",
+      "defaults_engine_version": "0.26.0",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -572,6 +572,7 @@
         "use_hourly_profiles": true
       },
       "energy_model": "",
+      "energy_source": null,
       "traces": {
         "value": 912,
         "capacity": 1000,
@@ -699,7 +700,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.5",
+      "defaults_engine_version": "0.26.0",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -711,6 +712,7 @@
         "use_hourly_profiles": true
       },
       "energy_model": "",
+      "energy_source": null,
       "traces": {
         "value": 128,
         "capacity": 1000,
@@ -792,9 +794,10 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.5",
+      "defaults_engine_version": "0.26.0",
       "scoring_config": null,
       "energy_model": null,
+      "energy_source": null,
       "traces": null,
       "analysis_queue": null,
       "findings": null,
@@ -902,7 +905,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.5",
+      "defaults_engine_version": "0.26.0",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -914,6 +917,7 @@
         "use_hourly_profiles": true
       },
       "energy_model": "",
+      "energy_source": null,
       "traces": {
         "value": 344,
         "capacity": 1000,
@@ -1041,7 +1045,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.25.5",
+      "defaults_engine_version": "0.26.0",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -1053,6 +1057,7 @@
         "use_hourly_profiles": true
       },
       "energy_model": "",
+      "energy_source": null,
       "traces": {
         "value": 61,
         "capacity": 1000,
@@ -1189,7 +1194,7 @@
         "detail": "pod restarted by the kubelet",
         "window_from_ms": 1756511871000,
         "window_to_ms": 1756511876000,
-        "oldest_finding_ms": 1756511874000,
+        "oldest_finding_ms": 1756511875000,
         "ended_at_ms": 1756511919000,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -1207,7 +1212,7 @@
         "detail": "node under memory pressure, pod evicted",
         "window_from_ms": 1756511871000,
         "window_to_ms": 1756511876000,
-        "oldest_finding_ms": 1756511874000,
+        "oldest_finding_ms": 1756511875000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -1226,7 +1231,7 @@
         "detail": "container exceeded its memory limit",
         "window_from_ms": 1756511871000,
         "window_to_ms": 1756511876000,
-        "oldest_finding_ms": 1756511870000,
+        "oldest_finding_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
@@ -1245,7 +1250,7 @@
         "detail": "working set at 94 percent of the limit",
         "window_from_ms": 1756511871000,
         "window_to_ms": 1756511876000,
-        "oldest_finding_ms": 1756511870000,
+        "oldest_finding_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
@@ -1260,10 +1265,10 @@
         "service": "gateway-svc",
         "namespace": "edge",
         "kind": "deploy",
-        "at_ms": 1756511868000,
+        "at_ms": 1756511869000,
         "detail": "rollout 4f21c8 reached every replica",
-        "window_from_ms": 1756511865000,
-        "window_to_ms": 1756511870000,
+        "window_from_ms": 1756511866000,
+        "window_to_ms": 1756511871000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -1283,7 +1288,7 @@
       "detail": "pod restarted by the kubelet",
       "window_from_ms": 1756511871000,
       "window_to_ms": 1756511876000,
-      "oldest_finding_ms": 1756511874000,
+      "oldest_finding_ms": 1756511875000,
       "findings": [
         {
           "finding": {
@@ -1312,8 +1317,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
           },
-          "stored_at_ms": 1756511874000,
-          "first_seen_ms": 1756511874000,
+          "stored_at_ms": 1756511875000,
+          "first_seen_ms": 1756511875000,
           "seen_count": 1
         }
       ],
@@ -1334,7 +1339,7 @@
       "detail": "node under memory pressure, pod evicted",
       "window_from_ms": 1756511871000,
       "window_to_ms": 1756511876000,
-      "oldest_finding_ms": 1756511874000,
+      "oldest_finding_ms": 1756511875000,
       "findings": [
         {
           "finding": {
@@ -1363,8 +1368,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
           },
-          "stored_at_ms": 1756511874000,
-          "first_seen_ms": 1756511874000,
+          "stored_at_ms": 1756511875000,
+          "first_seen_ms": 1756511875000,
           "seen_count": 1
         }
       ],
@@ -1386,7 +1391,7 @@
       "detail": "container exceeded its memory limit",
       "window_from_ms": 1756511871000,
       "window_to_ms": 1756511876000,
-      "oldest_finding_ms": 1756511870000,
+      "oldest_finding_ms": 1756511871000,
       "findings": [
         {
           "finding": {
@@ -1438,7 +1443,7 @@
       "detail": "working set at 94 percent of the limit",
       "window_from_ms": 1756511871000,
       "window_to_ms": 1756511876000,
-      "oldest_finding_ms": 1756511870000,
+      "oldest_finding_ms": 1756511871000,
       "findings": [
         {
           "finding": {
@@ -1486,10 +1491,10 @@
       "service": "gateway-svc",
       "namespace": "edge",
       "kind": "deploy",
-      "at_ms": 1756511868000,
+      "at_ms": 1756511869000,
       "detail": "rollout 4f21c8 reached every replica",
-      "window_from_ms": 1756511865000,
-      "window_to_ms": 1756511870000,
+      "window_from_ms": 1756511866000,
+      "window_to_ms": 1756511871000,
       "findings": [],
       "ended_at_ms": null,
       "source_id": "billing-stg",

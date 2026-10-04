@@ -2,6 +2,22 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- A daemon's `// carbon scoring` card listed the window's `energy_model` as where the
+  energy figure comes from, with a help text reading measured or estimated into it. That
+  tag names the carbon intensity source or tier, so a daemon with Electricity Maps
+  showed `electricity_maps_api` there whether a power backend measured anything or not.
+  The card now shows `energy_source`, worded as perf-sentinel `0.26.0` words it from
+  per-service coverage: `modeled from I/O counts`, `source <backends>`, or
+  `source <backends> on N of M services · rest modeled from I/O counts`, followed by
+  `· calibrated` when calibration factors rescaled the modeled part. The daemon view
+  gains the `energy_source` field, null when the snapshot computed no energy, and keeps
+  `energy_model`. A daemon older than `0.26.0` gets the same label, calibration read
+  from the `+cal` suffix its tags carry.
+
 ## [0.3.5] - 2026-10-03
 
 ### Changed

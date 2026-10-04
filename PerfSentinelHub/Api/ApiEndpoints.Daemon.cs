@@ -138,6 +138,7 @@ public static partial class ApiEndpoints
             snapshot.DetectionConfigJson,
             snapshot.ScoringConfigJson,
             snapshot.EnergyModel,
+            snapshot.EnergySource,
             defaultsEngineVersion,
             report.ErrorCode,
             snapshot.Warnings,
@@ -192,14 +193,14 @@ public static partial class ApiEndpoints
     private static DaemonSnapshotRead ReadSnapshot(byte[]? report)
     {
         if (report is null)
-            return new DaemonSnapshotRead(null, null, null, [], 0);
+            return new DaemonSnapshotRead(null, null, null, null, [], 0);
 
         try
         {
             using var document = JsonDocument.Parse(report);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                return new DaemonSnapshotRead(null, null, null, [], 0);
+                return new DaemonSnapshotRead(null, null, null, null, [], 0);
 
             var (warnings, dropped) = ReadHints(root);
             var green = Section(root, "green_summary");
@@ -207,12 +208,13 @@ public static partial class ApiEndpoints
                 RawObject(root, "detection_config"),
                 green is { } summary ? RawObject(summary, "scoring_config") : null,
                 green is { } model ? JsonRead.ReadString(model, "energy_model") : null,
+                green is { } energy ? EnergySource.Label(energy) : null,
                 warnings,
                 dropped);
         }
         catch (JsonException)
         {
-            return new DaemonSnapshotRead(null, null, null, [], 0);
+            return new DaemonSnapshotRead(null, null, null, null, [], 0);
         }
     }
 
@@ -335,6 +337,7 @@ public static partial class ApiEndpoints
         string? DetectionConfigJson,
         string? ScoringConfigJson,
         string? EnergyModel,
+        string? EnergySource,
         IReadOnlyList<ResultWarning> Warnings,
         int Dropped);
 }

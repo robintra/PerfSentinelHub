@@ -43,6 +43,7 @@ public static class DaemonViewWriter
         writer.WriteString("defaults_engine_version", view.DefaultsEngineVersion);
         WriteRawOrNull(writer, "scoring_config", view.ScoringConfigJson);
         JsonWrite.StringOrNull(writer, "energy_model", view.EnergyModel);
+        JsonWrite.StringOrNull(writer, "energy_source", view.EnergySource);
 
         var gauges = view.Status is null ? null : DaemonView.Read(view.Status);
         WriteGauge(writer, "traces", gauges?.Traces);
@@ -153,6 +154,7 @@ public sealed record DaemonViewData(
     string? DetectionConfigJson,
     string? ScoringConfigJson,
     string? EnergyModel,
+    string? EnergySource,
     // The engine version whose defaults are published alongside, which is the
     // binary this Hub embeds and not necessarily the one the daemon runs.
     string DefaultsEngineVersion,

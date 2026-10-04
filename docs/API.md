@@ -112,8 +112,12 @@ Anything past a hundred hints is counted in `warnings_dropped` rather than silen
 A failed export read is named in `hints_unavailable_reason` instead of reading as a clean
 bill.
 
-**What it derives.** Exactly one thing: `state`, from whether a gauge crossed 90 % of its
-cap, the same line the daemon's own monitor draws. It also carries `daemon_defaults`,
+**What it derives.** Two things. `state`, from whether a gauge crossed 90 % of its cap,
+the same line the daemon's own monitor draws. And `energy_source`, where the snapshot's
+energy figure comes from, worded as the engine words it since 0.26.0 (`source scaphandre_rapl
+on 1 of 2 services · rest modeled from I/O counts`, null when no energy was computed). It
+reads per-service coverage, never `energy_model`, which names the carbon intensity source or
+tier rather than an energy backend. It also carries `daemon_defaults`,
 `detection_defaults` and `defaults_engine_version`, so a reader can mark what a daemon
 actually changed. Those defaults belong to the binary this Hub embeds, so the version is
 named rather than assumed and a daemon on another minor is flagged rather than judged.

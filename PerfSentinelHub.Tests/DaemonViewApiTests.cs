@@ -44,7 +44,10 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
                                      "chatty_service_min_calls":15,"pool_saturation_concurrent_threshold":10,
                                      "serialized_min_sequential":3,"sanitizer_aware_classification":"auto",
                                      "sanitizer_aware_min_cv":0.5},
-                                   "green_summary":{"energy_model":"measured","scoring_config":{"api_version":"1.0"}},
+                                   "green_summary":{"energy_model":"electricity_maps_api","energy_kwh":0.2,
+                                     "per_service_measured_ratio":{"a":1.0,"b":0.0},
+                                     "per_service_energy_model":{"a":"scaphandre_rapl","b":"electricity_maps_api"},
+                                     "scoring_config":{"api_version":"1.0"}},
                                    "warning_details":[{"kind":"tuning","message":"ingest queue is undersized"}]}
                                   """;
 
@@ -78,13 +81,15 @@ public sealed class DaemonViewApiTests(HubApplicationFactory factory)
     [Fact]
     public async Task The_view_carries_the_sections_the_config_endpoint_does_not()
     {
-        // /api/config publishes [daemon] alone. These three ride the snapshot,
+        // /api/config publishes [daemon] alone. These ride the snapshot,
         // and they are the reason the view reads it at all.
         var (view, _) = await ReadViewAsync(Answering);
 
         Assert.Equal(5, view.GetProperty("detection_config").GetProperty("n_plus_one_threshold").GetInt32());
         Assert.Equal("1.0", view.GetProperty("scoring_config").GetProperty("api_version").GetString());
-        Assert.Equal("measured", view.GetProperty("energy_model").GetString());
+        Assert.Equal("electricity_maps_api", view.GetProperty("energy_model").GetString());
+        Assert.Equal("source scaphandre_rapl on 1 of 2 services · rest modeled from I/O counts",
+            view.GetProperty("energy_source").GetString());
     }
 
     [Fact]

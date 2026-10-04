@@ -119,8 +119,12 @@ visible. Tout ce qui dépasse la centaine de conseils est compté dans `warnings
 plutôt que disparu en silence. Une lecture d'export ratée est nommée dans
 `hints_unavailable_reason` au lieu de se lire comme un bulletin de santé vierge.
 
-**Ce qu'il dérive.** Une seule chose : `state`, selon qu'une jauge a franchi 90 % de son
-plafond, la même ligne que trace le monitor du daemon. Il porte aussi `daemon_defaults`,
+**Ce qu'il dérive.** Deux choses. `state`, selon qu'une jauge a franchi 90 % de son
+plafond, la même ligne que trace le monitor du daemon. Et `energy_source`, la provenance du
+chiffre d'énergie de l'instantané, formulée comme le moteur la formule depuis la 0.26.0
+(`source scaphandre_rapl on 1 of 2 services · rest modeled from I/O counts`, null quand
+aucune énergie n'a été calculée). Il lit la couverture par service, jamais `energy_model`,
+qui nomme la source ou le niveau d'intensité carbone et non un backend d'énergie. Il porte aussi `daemon_defaults`,
 `detection_defaults` et `defaults_engine_version`, pour qu'un lecteur puisse marquer ce
 qu'un daemon a réellement changé. Ces défauts sont ceux du binaire que ce Hub embarque,
 donc la version est nommée plutôt que supposée, et un daemon sur une autre mineure est

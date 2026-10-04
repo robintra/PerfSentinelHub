@@ -21,7 +21,8 @@ public sealed class EnergySourceTests
 
     private static string Services(params (string Service, string Tag, double Ratio)[] rows)
     {
-        var ratios = string.Join(",", rows.Select(r => $"\"{r.Service}\":{r.Ratio.ToString(CultureInfo.InvariantCulture)}"));
+        var ratios = string.Join(",",
+            rows.Select(r => $"\"{r.Service}\":{r.Ratio.ToString(CultureInfo.InvariantCulture)}"));
         var tags = string.Join(",", rows.Select(r => $"\"{r.Service}\":{JsonSerializer.Serialize(r.Tag)}"));
         return "\"per_service_measured_ratio\":{" + ratios + "},\"per_service_energy_model\":{" + tags + "}";
     }

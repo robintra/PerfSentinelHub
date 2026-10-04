@@ -4,6 +4,26 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Changed
+
+- The image ships perf-sentinel `0.26.0` as its analysis engine, repinned by digest from
+  `0.25.5`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.25.5` now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.26.0` changes no detector, normalizer or signature, so no polled finding appears,
+  disappears or changes signature, and acknowledgments mirrored on a daemon keep
+  matching. A new run's HTML report gains an `Energy` card in its Carbon tab, rendered by
+  the embedded engine, and a report rendered before the upgrade keeps its old layout. A
+  Tempo or `jaeger_query` backend analysis, which no energy backend covers, reads
+  `modeled from I/O counts` there.
+
+  The energy fixes, one Kepler zone instead of their overlapping sum, the Redfish chassis
+  entry and `schema = "sensor"`, and the Alumet startup warning, run in the daemon, so
+  they follow the daemon's version, not the Hub's. Once a daemon fed by Kepler runs
+  `0.26.0`, the energy and carbon figures of a run on its snapshot drop, and are not
+  comparable with a run taken before.
+
 ### Fixed
 
 - A daemon's `// carbon scoring` card listed the window's `energy_model` as where the

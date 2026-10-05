@@ -24,19 +24,8 @@ public static class EnergySource
             return null;
 
         var models = StringMap(green, "per_service_energy_model");
-        var ratios = new List<(string Service, double Ratio)>();
-        if (green.TryGetProperty("per_service_measured_ratio", out var map) && map.ValueKind == JsonValueKind.Object)
-            foreach (var entry in map.EnumerateObject())
-                // A ratio the engine could not write reads as unmeasured, as NaN does there.
-                ratios.Add((entry.Name,
-                    entry.Value.ValueKind == JsonValueKind.Number ? entry.Value.GetDouble() : double.NaN));
-
-        // The flag survives a measured window tag, the suffix covers daemons older than it.
-        var calibrated = (green.TryGetProperty("energy_calibrated", out var flag) &&
-                          flag.ValueKind == JsonValueKind.True) ||
-                         (JsonRead.ReadString(green, "energy_model") ?? "").EndsWith(CalSuffix, StringComparison.Ordinal) ||
-                         models.Values.Any(m => m.EndsWith(CalSuffix, StringComparison.Ordinal));
-        var cal = calibrated ? Calibrated : "";
+        var ratios = MeasuredRatios(green);
+        var cal = IsCalibrated(green, models) ? Calibrated : "";
 
         var covered = ratios.Where(r => r.Ratio > 0.0).Select(r => r.Service).ToList();
         if (covered.Count == 0)
@@ -65,6 +54,23 @@ public static class EnergySource
             ? tag
             : null;
     }
+
+    private static List<(string Service, double Ratio)> MeasuredRatios(JsonElement green)
+    {
+        var ratios = new List<(string Service, double Ratio)>();
+        if (green.TryGetProperty("per_service_measured_ratio", out var map) && map.ValueKind == JsonValueKind.Object)
+            foreach (var entry in map.EnumerateObject())
+                // A ratio the engine could not write reads as unmeasured, as NaN does there.
+                ratios.Add((entry.Name,
+                    entry.Value.ValueKind == JsonValueKind.Number ? entry.Value.GetDouble() : double.NaN));
+        return ratios;
+    }
+
+    // The flag survives a measured window tag, the suffix covers daemons older than it.
+    private static bool IsCalibrated(JsonElement green, Dictionary<string, string> models) =>
+        (green.TryGetProperty("energy_calibrated", out var flag) && flag.ValueKind == JsonValueKind.True) ||
+        (JsonRead.ReadString(green, "energy_model") ?? "").EndsWith(CalSuffix, StringComparison.Ordinal) ||
+        models.Values.Any(m => m.EndsWith(CalSuffix, StringComparison.Ordinal));
 
     private static Dictionary<string, string> StringMap(JsonElement green, string name)
     {

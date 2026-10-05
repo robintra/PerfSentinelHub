@@ -74,7 +74,7 @@ public sealed class EnergySourceTests
         var longTag = new string('a', 65);
         Assert.Equal("source redfish_bmc",
             Label(Summary("x", Services(
-                ("a", longTag, 1.0), ("b", "kepler‮_ebpf", 1.0), ("c", "redfish_bmc", 1.0)))));
+                ("a", longTag, 1.0), ("b", "kepler\u202E_ebpf", 1.0), ("c", "redfish_bmc", 1.0)))));
         Assert.Equal("source unknown on 1 of 2 services · rest modeled from I/O counts",
             Label(Summary("x", Services(("a", longTag, 1.0), ("b", "io_proxy_v3", 0.0)))));
     }

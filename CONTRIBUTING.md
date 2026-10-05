@@ -41,7 +41,7 @@ git config commit.gpgsign true
 git log --show-signature -1
 ```
 
-Open a pull request against `main`, complete the pull request checklist, and resolve every review conversation. The repository requires linear history and disallows direct pushes, force pushes, branch deletion, and administrator bypass. The solo-maintainer policy requires zero additional approving reviews, but it still requires a pull request, signed commits, resolved conversations, and every required check.
+Open a pull request against `main`, complete the pull request checklist, and resolve every review conversation. A pull request lands as a merge commit, the only merge method enabled: it keeps every signed commit of the branch as pushed, where rebase merging rewrites them unsigned and squash merging replaces them. Bring a branch that is behind `main` up to date with a merge commit or a local signed rebase, never with GitHub's rebase update, which drops the signatures. The repository disallows direct pushes, force pushes, and branch deletion, and only repository administrators can bypass these rules. The solo-maintainer policy requires zero additional approving reviews, but it still requires a pull request, signed commits, resolved conversations, and every required check.
 
 Required checks include the dedicated-App-authored `CI / Gate`, SonarCloud, CodeQL, and dependency review. A check named `CI / Gate` from GitHub Actions or any other source does not satisfy the dedicated App boundary.
 

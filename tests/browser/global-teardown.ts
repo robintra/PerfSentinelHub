@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 
 const WORK = join(tmpdir(), "perf-sentinel-hub-demo");
 
-export default async function globalTeardown(): Promise<void> {
+export default function globalTeardown(): void {
   try {
     const state = JSON.parse(readFileSync(join(WORK, "state.json"), "utf8")) as
       { pids: number[]; hubGroup?: number };

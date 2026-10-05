@@ -67,17 +67,25 @@ function ackSignature(): string {
     return baseline.signature;
 }
 
+// Retries until `attempt` yields a value or the deadline passes. Recursive rather
+// than a loop because each attempt waits on the previous one's answer.
+async function poll<T>(attempt: () => Promise<T | undefined>, deadline: number,
+                       pauseMs: number, failure: string): Promise<T> {
+    const result = await attempt();
+    if (result !== undefined) return result;
+    if (Date.now() >= deadline) throw new Error(failure);
+    await new Promise((r) => setTimeout(r, pauseMs));
+    return poll(attempt, deadline, pauseMs, failure);
+}
+
 async function waitFor(url: string, seconds: number): Promise<void> {
-    const deadline = Date.now() + seconds * 1000;
-    while (Date.now() < deadline) {
+    await poll(async () => {
         try {
-            if ((await fetch(url)).ok) return;
+            return (await fetch(url)).ok || undefined;
         } catch {
-            // not up yet
+            return undefined; // not up yet
         }
-        await new Promise((r) => setTimeout(r, 250));
-    }
-    throw new Error(`${url} never came up`);
+    }, Date.now() + seconds * 1000, 250, `${url} never came up`);
 }
 
 async function submit(sourceId: string, request: unknown): Promise<string> {
@@ -92,13 +100,10 @@ async function submit(sourceId: string, request: unknown): Promise<string> {
 }
 
 async function settle(id: string, seconds: number): Promise<string> {
-    const deadline = Date.now() + seconds * 1000;
-    while (Date.now() < deadline) {
+    return poll(async () => {
         const run = await (await fetch(`${BASE}/api/analyses/${id}`)).json() as { status: string };
-        if (run.status !== "pending" && run.status !== "running") return run.status;
-        await new Promise((r) => setTimeout(r, 300));
-    }
-    throw new Error(`run ${id} never reached a terminal state`);
+        return run.status === "pending" || run.status === "running" ? undefined : run.status;
+    }, Date.now() + seconds * 1000, 300, `run ${id} never reached a terminal state`);
 }
 
 // The same fixed epoch demo/capture-fixtures.sh pins. Observations are then
@@ -141,34 +146,35 @@ async function captureEmbedFixtures(runs: string[]): Promise<void> {
     const stable = new Map(runs.map((id, i) => [id, (i + 1).toString(16).padStart(16, "0")]));
     const renumber = (text: string) =>
         [...stable].reduce((acc, [from, to]) => acc.split(from).join(to), text);
-    const read = async (path: string) => {
+    const read = async (path: string): Promise<[string, unknown]> => {
         const response = await fetch(BASE + path);
         if (!response.ok) throw new Error(`${path} answered ${response.status}`);
         const body = rebase(await response.json(), capturedAt);
-        routes[renumber(path)] = JSON.parse(renumber(JSON.stringify(body)));
+        return [renumber(path), JSON.parse(renumber(JSON.stringify(body)))];
     };
+    // Fetched together, recorded in the order given, so the file's key order holds.
+    const readAll = async (paths: string[]) =>
+        Object.assign(routes, Object.fromEntries(await Promise.all(paths.map(read))));
 
-    await read("/api/status");
-    await read("/api/sources");
-    await read("/api/analyses?limit=500");
-    for (const id of runs) await read(`/api/analyses/${id}`);
-    // Only a daemon has a view. A trace backend answers 400, which is correct and
-    // is not something the embed needs to replay.
-    for (const id of ["checkout-prod", "billing-stg", "search-prod", "orders-prod", "ci-main"]) {
-        await read(`/api/sources/${id}/daemon`);
-    }
-    // What the ack page reads, spelled the way the launcher spells it, so the Ack
-    // link of an unfolded incident lands on a page with something on it rather
-    // than on an embed that has no answer for the route.
-    await read(`/api/findings?signature=${encodeURIComponent(ackSignature())}`
-        + "&include_acked=true&limit=1");
     // The incidents screen reads the first page, then one record per unfolded
     // row. The id is the daemon's own hash, so it is stable across captures.
     const incidents = "/api/incidents?limit=100&offset=0";
-    await read(incidents);
-    for (const incident of routes[incidents] as { id: string }[]) {
-        await read(`/api/incidents/${incident.id}`);
-    }
+    await readAll([
+        "/api/status",
+        "/api/sources",
+        "/api/analyses?limit=500",
+        ...runs.map((id) => `/api/analyses/${id}`),
+        // Only a daemon has a view. A trace backend answers 400, which is correct and
+        // is not something the embed needs to replay.
+        ...["checkout-prod", "billing-stg", "search-prod", "orders-prod", "ci-main"]
+            .map((id) => `/api/sources/${id}/daemon`),
+        // What the ack page reads, spelled the way the launcher spells it, so the Ack
+        // link of an unfolded incident lands on a page with something on it rather
+        // than on an embed that has no answer for the route.
+        `/api/findings?signature=${encodeURIComponent(ackSignature())}&include_acked=true&limit=1`,
+        incidents
+    ]);
+    await readAll((routes[incidents] as { id: string }[]).map((incident) => `/api/incidents/${incident.id}`));
 
     writeFileSync(join(__dirname, "demo", "fixtures", "hub-embed.json"),
         JSON.stringify({epoch_ms: EPOCH_MS, routes}, null, 2) + "\n");
@@ -191,9 +197,8 @@ export default async function globalSetup(): Promise<void> {
     daemon(CALM_PORT, "calm");
     daemon(ACKED_PORT, "acked");
     daemon(BASELINE_PORT, "baseline");
-    for (const port of [BUSY_PORT, CALM_PORT, ACKED_PORT, BASELINE_PORT]) {
-        await waitFor(`http://127.0.0.1:${port}/api/status`, 15);
-    }
+    await Promise.all([BUSY_PORT, CALM_PORT, ACKED_PORT, BASELINE_PORT]
+        .map((port) => waitFor(`http://127.0.0.1:${port}/api/status`, 15)));
 
     const build = spawnSync(DOTNET,
         ["build", join(ROOT, "PerfSentinelHub", "PerfSentinelHub.csproj"), "-c", "Release", "--nologo"],
@@ -276,7 +281,7 @@ export default async function globalSetup(): Promise<void> {
     const unreachable = await submit("search-prod", {});
     const refused = await submit("tempo-eu",
         {service: "checkout", lookback: "999h", max_traces: 100});
-    for (const id of [succeeded, alsoSucceeded, unreachable, refused]) await settle(id, 120);
+    await Promise.all([succeeded, alsoSucceeded, unreachable, refused].map((id) => settle(id, 120)));
 
     try {
         await captureEmbedFixtures([succeeded, alsoSucceeded, unreachable, refused]);

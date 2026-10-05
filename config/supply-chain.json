@@ -158,10 +158,10 @@
     {
       "name": "anchore/sbom-action",
       "kind": "github-action",
-      "version": "0.24.2",
-      "digest_or_sha": "3ad7283483fc7af8ff2b4ea19663c2d5ca935e26",
-      "released_at": "2026-08-28T19:45:05Z",
-      "source": "https://github.com/anchore/sbom-action/releases/tag/v0.24.2",
+      "version": "0.24.3",
+      "digest_or_sha": "66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c",
+      "released_at": "2026-10-02T15:35:43Z",
+      "source": "https://github.com/anchore/sbom-action/releases/tag/v0.24.3",
       "reason": "Latest stable Anchore SPDX SBOM action, pinned to its release commit."
     },
     {
@@ -176,10 +176,10 @@
     {
       "name": "oras-project/setup-oras",
       "kind": "github-action",
-      "version": "2.0.1",
-      "digest_or_sha": "1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d",
-      "released_at": "2026-07-11T16:58:42Z",
-      "source": "https://github.com/oras-project/setup-oras/releases/tag/v2.0.1",
+      "version": "2.0.2",
+      "digest_or_sha": "005458ad77f1c8facd38a094e4af2e69e5607ff4",
+      "released_at": "2026-09-29T16:29:00Z",
+      "source": "https://github.com/oras-project/setup-oras/releases/tag/v2.0.2",
       "reason": "Latest stable official ORAS setup action."
     },
     {
@@ -294,8 +294,8 @@
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
       "version": "10.0.401-resolute-aot",
-      "digest_or_sha": "sha256:ae581c66994fd9520cb09d6db419aee49dfa110ff2f81634091ce7e0d39f150a",
-      "released_at": "2026-09-08",
+      "digest_or_sha": "sha256:37ed819a2da28a5cb2de264b64a35ce68137f04207656464b48ce3a5b7f9e32c",
+      "released_at": "2026-10-02",
       "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-resolute-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
     },

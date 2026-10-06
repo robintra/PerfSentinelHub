@@ -12,8 +12,10 @@ All notable changes to PerfSentinelHub are recorded here.
   that host, the only address its launcher works at, and the chart refuses to render
   the Ingress without a host. The Ingress publishes every route, `/api/findings`,
   `/metrics` and `/health` included, which `Hub:Auth` leaves open, so the host
-  belongs on a network allowed to read them. `make helm-template` renders the
-  Ingress and checks the missing-host refusal.
+  belongs on a network allowed to read them. An upgrade with `--reuse-values` from
+  values that predate the key renders no Ingress rather than failing. `make
+  helm-template` renders the Ingress, checks the missing-host refusal, and renders
+  values without an `ingress` key.
 
 ## [0.3.6] - 2026-10-04
 

@@ -93,12 +93,24 @@ lit `X-Forwarded-Proto`, donc l'URI de redirection qu'il envoie au fournisseur
 OAuth, `https://<hôte>/auth/callback`, est en `https`. `ingress.className` et
 `ingress.annotations` sont transmis tels quels au contrôleur.
 
-L'Ingress publie toutes les routes, y compris celles qui restent ouvertes :
-`/api/findings`, que lisent les plugins d'IDE et les jobs de CI et qui renvoie
-toutes les findings de toutes les sources, `/metrics` et `/health`. `Hub:Auth`
-ne les ferme pas. Ne publiez l'hôte que sur un réseau autorisé à les lire, ou
-limitez qui le joint avec les annotations de liste d'adresses sources du
-contrôleur.
+L'Ingress publie toutes les routes. Avec `Hub:Auth` désactivé, le défaut,
+aucune ne demande qui appelle, le lanceur et `POST /api/analyses` compris. Avec
+`Hub:Auth` activé, trois restent ouvertes : `/api/findings`, que lisent les
+plugins d'IDE et les jobs de CI et qui renvoie toutes les findings de toutes
+les sources, `/metrics` et `/health`. Ne publiez l'hôte que sur un réseau
+autorisé à les lire, ou limitez qui le joint avec les annotations de liste
+d'adresses sources du contrôleur.
+
+Le contrôleur transmet les en-têtes qu'envoie un client, `X-Forwarded-User`
+compris. Laissez `hub.ackRelay.trustIdentityHeader` désactivé derrière cet
+Ingress, sauf si le contrôleur pose lui-même cet en-tête depuis un proxy
+d'authentification, sinon quiconque joint l'hôte acquitte au nom de son choix.
+`Hub:Auth` exige TLS devant le Hub, par `ingress.tlsSecretName` ou par le
+contrôleur : ses cookies sont `Secure`, un navigateur les écarte en HTTP simple,
+et chaque connexion est refusée. L'import accepte des corps jusqu'à 2 Mio,
+au-delà du 1 Mio qu'ingress-nginx laisse passer par défaut, donc un daemon qui
+pousse par cet hôte demande de relever
+`nginx.ingress.kubernetes.io/proxy-body-size` en conséquence.
 
 ## La CI lit, elle n'alimente pas
 

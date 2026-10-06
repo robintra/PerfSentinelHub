@@ -82,7 +82,9 @@ ingress:
   # Controller-specific annotations (TLS issuer, source allow-list...).
   annotations: {}
   host: ""
-  # Secret holding the certificate for host. Empty publishes plain HTTP.
+  # Secret holding the certificate for host. Empty leaves TLS to the
+  # controller's annotations, or to nothing. hub.auth needs TLS: its cookies
+  # are Secure, and a browser drops them over plain HTTP.
   tlsSecretName: ""
 # 1Gi assumes a small fleet. The database keeps one row per finding, daemon and
 # observed day for hub.retention, about 300 bytes each: 2,000 signatures seen

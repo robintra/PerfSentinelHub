@@ -72,7 +72,7 @@ valeur dans un Secret et réglez `sources[].authHeaderName`, `authSecretName` et
 `X-API-Key` pour ses incidents. Pour le push depuis le daemon, réglez `sources[].importSecretName` et
 `importSecretKey`, avec au moins 32 caractères.
 
-Pour joindre le launcher depuis l'extérieur du cluster, réglez `ingress.enabled`,
+Pour joindre le lanceur depuis l'extérieur du cluster, réglez `ingress.enabled`,
 `ingress.host` et, pour TLS, `ingress.tlsSecretName`. Le Hub est servi à la racine de cet
 hôte, et l'Ingress publie aussi les routes que les machines appellent sans session, voir
 [docs/FR/DEPLOYMENT-FR.md](docs/FR/DEPLOYMENT-FR.md).

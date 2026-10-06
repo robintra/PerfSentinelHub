@@ -105,8 +105,9 @@ helm pull "oci://$CHART@$CHART_DIGEST"
 
 ## What this is not
 
-No user accounts, no CI or SARIF import, no acknowledgment store, and no remote backup. The local `backup` command snapshots the database, but shipping that file
-off the cluster stays the operator's job. Browser sign-in is delegated to an OAuth2
+No user accounts, no CI or SARIF import, no acknowledgment store, and no remote backup.
+The local `backup` command snapshots the database, but shipping that file off the
+cluster stays the operator's job. Browser sign-in is delegated to an OAuth2
 provider when `Hub:Auth` is on, and the Hub keeps no user of its own.
 
 The Hub owns no ack store. It mirrors each daemon's active acks, and it relays a runtime

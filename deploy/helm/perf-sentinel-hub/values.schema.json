@@ -111,11 +111,12 @@
     },
     "ingress": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
         "className": { "type": "string" },
         "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
-        "host": { "type": "string" },
+        "host": { "type": "string", "pattern": "^$|^(?:\\*\\.)?[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$" },
         "tlsSecretName": { "type": "string" }
       }
     }

@@ -97,8 +97,9 @@ helm-lint:
 
 helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) >/dev/null
-	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true --set ingress.host=hub.example.com --set ingress.tlsSecretName=hub-tls | grep -q 'kind: Ingress'
-	! helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true >/dev/null 2>&1
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress=null >/dev/null
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true --set ingress.host=hub.example.com --set ingress.tlsSecretName=hub-tls | grep -q 'secretName: "hub-tls"'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true 2>&1 >/dev/null | grep -q 'ingress.host is required'
 
 release-check:
 	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }

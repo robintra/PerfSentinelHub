@@ -89,11 +89,22 @@ The Hub reads `X-Forwarded-Proto`, so the redirect URI it sends the OAuth
 provider, `https://<host>/auth/callback`, reads `https`. `ingress.className`
 and `ingress.annotations` reach the controller as given.
 
-The Ingress publishes every route, the ones left open included:
-`/api/findings`, which IDE plugins and CI jobs read and which returns every
-finding of every source, `/metrics` and `/health`. `Hub:Auth` does not close
-them. Publish the host only on a network allowed to read them, or restrict who
-reaches it with the controller's source allow-list annotations.
+The Ingress publishes every route. With `Hub:Auth` off, the default, none of
+them asks who calls, the launcher and `POST /api/analyses` included. With it on,
+three stay open: `/api/findings`, which IDE plugins and CI jobs read and which
+returns every finding of every source, `/metrics` and `/health`. Publish the
+host only on a network allowed to read them, or restrict who reaches it with
+the controller's source allow-list annotations.
+
+The controller passes on the headers a client sends, `X-Forwarded-User`
+included. Leave `hub.ackRelay.trustIdentityHeader` off behind this Ingress
+unless the controller sets that header itself from an authenticating proxy, or
+anyone who reaches the host acks in a name of their choosing. `Hub:Auth` needs
+TLS in front of the Hub, from `ingress.tlsSecretName` or the controller: its
+cookies are `Secure`, a browser drops them over plain HTTP, and every sign-in
+is refused. The import accepts bodies up to 2 MiB, above the 1 MiB ingress-nginx
+lets through by default, so a daemon that pushes through this host needs
+`nginx.ingress.kubernetes.io/proxy-body-size` raised to match.
 
 ## The CI reads, it does not feed
 

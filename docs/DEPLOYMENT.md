@@ -82,6 +82,19 @@ front of it rather than the Hub itself, so read them before writing the
 ingress. See [LIMITATIONS.md](LIMITATIONS.md). `Hub:Auth` lifts the second one
 for the browser without a proxy, see [AUTHENTICATION.md](AUTHENTICATION.md).
 
+The chart writes that ingress when `ingress.enabled` is set. It publishes the
+Service at the root of `ingress.host`, never under a path, and with
+`ingress.tlsSecretName` it serves that host over TLS, ended at the controller.
+The Hub reads `X-Forwarded-Proto`, so the redirect URI it sends the OAuth
+provider, `https://<host>/auth/callback`, reads `https`. `ingress.className`
+and `ingress.annotations` reach the controller as given.
+
+The Ingress publishes every route, the ones left open included:
+`/api/findings`, which IDE plugins and CI jobs read and which returns every
+finding of every source, `/metrics` and `/health`. `Hub:Auth` does not close
+them. Publish the host only on a network allowed to read them, or restrict who
+reaches it with the controller's source allow-list annotations.
+
 ## The CI reads, it does not feed
 
 A build produces SARIF and JSON, and neither belongs in the Hub. `last_seen` is

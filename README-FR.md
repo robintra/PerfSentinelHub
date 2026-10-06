@@ -72,6 +72,11 @@ valeur dans un Secret et réglez `sources[].authHeaderName`, `authSecretName` et
 `X-API-Key` pour ses incidents. Pour le push depuis le daemon, réglez `sources[].importSecretName` et
 `importSecretKey`, avec au moins 32 caractères.
 
+Pour joindre le launcher depuis l'extérieur du cluster, réglez `ingress.enabled`,
+`ingress.host` et, pour TLS, `ingress.tlsSecretName`. Le Hub est servi à la racine de cet
+hôte, et l'Ingress publie aussi les routes que les machines appellent sans session, voir
+[docs/FR/DEPLOYMENT-FR.md](docs/FR/DEPLOYMENT-FR.md).
+
 Pour une release publique, installez par digest et non par tag. Un tag de version est un
 indice de découverte, jamais une identité de déploiement :
 
@@ -105,13 +110,12 @@ publication réussies.
 
 ## Ce que ce n'est pas
 
-Ni ingress, ni comptes utilisateurs, ni import CI ou SARIF, ni magasin d'acquittements,
-ni sauvegarde distante. La commande `backup` locale prend un instantané de la base, mais
+Ni comptes utilisateurs, ni import CI ou SARIF, ni magasin d'acquittements, ni sauvegarde
+distante. La commande `backup` locale prend un instantané de la base, mais
 expédier ce fichier hors du cluster reste le travail de l'opérateur. La connexion du
 navigateur est déléguée à un fournisseur OAuth2 quand `Hub:Auth` est activé, et le Hub
 ne garde aucun utilisateur à lui.
 
-L'exposition réseau relève de la prochaine conception indépendante.
 Le Hub ne possède aucun magasin d'acquittements. Il reflète les acquittements actifs de
 chaque daemon, et relaie un acquittement ou une révocation à l'exécution vers un daemon
 avec la clé d'acquittement de ce daemon, quand une source en reçoit une. La baseline de CI

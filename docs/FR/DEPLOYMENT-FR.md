@@ -86,6 +86,20 @@ devant lui plutôt que le Hub lui-même, donc à lire avant d'écrire l'ingress.
 Voir [LIMITATIONS-FR.md](LIMITATIONS-FR.md). `Hub:Auth` lève la seconde pour le
 navigateur sans proxy, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
 
+Le chart écrit cet ingress quand `ingress.enabled` est activé. Il publie le
+Service à la racine de `ingress.host`, jamais sous un chemin, et avec
+`ingress.tlsSecretName` il sert cet hôte en TLS, terminé au contrôleur. Le Hub
+lit `X-Forwarded-Proto`, donc l'URI de redirection qu'il envoie au fournisseur
+OAuth, `https://<hôte>/auth/callback`, est en `https`. `ingress.className` et
+`ingress.annotations` sont transmis tels quels au contrôleur.
+
+L'Ingress publie toutes les routes, y compris celles qui restent ouvertes :
+`/api/findings`, que lisent les plugins d'IDE et les jobs de CI et qui renvoie
+toutes les findings de toutes les sources, `/metrics` et `/health`. `Hub:Auth`
+ne les ferme pas. Ne publiez l'hôte que sur un réseau autorisé à les lire, ou
+limitez qui le joint avec les annotations de liste d'adresses sources du
+contrôleur.
+
 ## La CI lit, elle n'alimente pas
 
 Un build produit du SARIF et du JSON, et ni l'un ni l'autre n'a sa place dans

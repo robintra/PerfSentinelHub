@@ -108,6 +108,16 @@
         "requests": { "$ref": "#/$defs/resources" },
         "limits": { "$ref": "#/$defs/resources" }
       }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "host": { "type": "string" },
+        "tlsSecretName": { "type": "string" }
+      }
     }
   },
   "$defs": {

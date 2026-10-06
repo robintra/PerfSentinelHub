@@ -71,6 +71,11 @@ and set `sources[].authHeaderName`, `authSecretName` and `authSecretKey`. The sa
 carries a daemon's `[daemon] read_api_key` as `X-API-Key` for its incidents. For daemon push,
 set `sources[].importSecretName` and `importSecretKey`, with at least 32 characters.
 
+To reach the launcher from outside the cluster, set `ingress.enabled`, `ingress.host` and,
+for TLS, `ingress.tlsSecretName`. The Hub is served at the root of that host, and the
+Ingress also publishes the routes machines call without a session, see
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 Install a public release by digest rather than by tag, since a tag can be moved:
 
 ```bash
@@ -100,11 +105,9 @@ helm pull "oci://$CHART@$CHART_DIGEST"
 
 ## What this is not
 
-No ingress, no user accounts, no CI or SARIF import, no acknowledgment store, and no
-remote backup. The local `backup` command snapshots the database, but shipping that file
+No user accounts, no CI or SARIF import, no acknowledgment store, and no remote backup. The local `backup` command snapshots the database, but shipping that file
 off the cluster stays the operator's job. Browser sign-in is delegated to an OAuth2
-provider when `Hub:Auth` is on, and the Hub keeps no user of its own. Exposing the Hub
-outside the cluster is out of scope for now.
+provider when `Hub:Auth` is on, and the Hub keeps no user of its own.
 
 The Hub owns no ack store. It mirrors each daemon's active acks, and it relays a runtime
 ack or revoke to a daemon with that daemon's own ack key when a source is given one. The CI

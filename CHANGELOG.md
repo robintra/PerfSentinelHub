@@ -2,6 +2,19 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- The chart can publish the Hub outside the cluster through an Ingress. Set
+  `ingress.enabled` and `ingress.host`, and optionally `ingress.tlsSecretName`,
+  `ingress.className` and `ingress.annotations`. The Hub is served at the root of
+  that host, the only address its launcher works at, and the chart refuses to render
+  the Ingress without a host. The Ingress publishes every route, `/api/findings`,
+  `/metrics` and `/health` included, which `Hub:Auth` leaves open, so the host
+  belongs on a network allowed to read them. `make helm-template` renders the
+  Ingress and checks the missing-host refusal.
+
 ## [0.3.6] - 2026-10-04
 
 ### Changed

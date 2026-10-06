@@ -68,6 +68,22 @@ sources: []
 # ServiceMonitor at the Service instead.
 service:
   annotations: {}
+# Publishes the Hub outside the cluster on a host of its own, at its root: the
+# launcher calls /api and /reports as absolute paths, so a path prefix would
+# break it. The Ingress publishes every route, the open ones included
+# (/api/findings for IDE plugins and CI, /metrics, /health). Keep the host on a
+# network that may read them, see docs/DEPLOYMENT.md. TLS ends at the
+# controller, and the Hub reads X-Forwarded-Proto so its OAuth redirect URI,
+# https://<host>/auth/callback, reads https.
+ingress:
+  enabled: false
+  # IngressClass to bind. Empty leaves the cluster default in charge.
+  className: ""
+  # Controller-specific annotations (TLS issuer, source allow-list...).
+  annotations: {}
+  host: ""
+  # Secret holding the certificate for host. Empty publishes plain HTTP.
+  tlsSecretName: ""
 # 1Gi assumes a small fleet. The database keeps one row per finding, daemon and
 # observed day for hub.retention, about 300 bytes each: 2,000 signatures seen
 # daily on three daemons at the 180-day default come to roughly 300 MB, and the

@@ -90,11 +90,15 @@ image-scan: image
 # not the unstamped placeholder will do.
 SYNTHETIC_DIGEST := sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
+HELM_TEST_VALUES := --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318' --set image.digest=$(SYNTHETIC_DIGEST)
+
 helm-lint:
-	helm lint deploy/helm/perf-sentinel-hub --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318' --set image.digest=$(SYNTHETIC_DIGEST)
+	helm lint deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES)
 
 helm-template:
-	helm template test deploy/helm/perf-sentinel-hub --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318' --set image.digest=$(SYNTHETIC_DIGEST) >/dev/null
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) >/dev/null
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true --set ingress.host=hub.example.com --set ingress.tlsSecretName=hub-tls | grep -q 'kind: Ingress'
+	! helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true >/dev/null 2>&1
 
 release-check:
 	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }

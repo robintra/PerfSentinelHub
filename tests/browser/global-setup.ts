@@ -147,7 +147,13 @@ async function captureEmbedFixtures(runs: string[]): Promise<void> {
     const renumber = (text: string) =>
         [...stable].reduce((acc, [from, to]) => acc.split(from).join(to), text);
     const read = async (path: string): Promise<[string, unknown]> => {
-        const response = await fetch(BASE + path);
+        let response = await fetch(BASE + path);
+        // A gated route (DaemonViewGate admits two reads) turns the rest of a
+        // parallel batch away with 503 and a Retry-After, so wait and ask again.
+        for (let attempt = 0; response.status === 503 && response.headers.has("retry-after") && attempt < 10; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * Number(response.headers.get("retry-after"))));
+            response = await fetch(BASE + path);
+        }
         if (!response.ok) throw new Error(`${path} answered ${response.status}`);
         const body = rebase(await response.json(), capturedAt);
         return [renumber(path), JSON.parse(renumber(JSON.stringify(body)))];

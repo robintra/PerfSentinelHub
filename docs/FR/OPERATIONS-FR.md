@@ -150,13 +150,14 @@ service:
 
 ### Les consommer
 
-Trois fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissés.
+Quatre fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissés.
 
-| Fichier                                                           | Est                                                           |
-|-------------------------------------------------------------------|---------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json) | Onze panneaux sur huit des neuf familles, importable tel quel |
-| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)   | Une règle, contrôlée par `promtool check rules`               |
-| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)   | Un job de collecte pour un déploiement qui nomme ses cibles   |
+| Fichier                                                                       | Est                                                           |
+|-------------------------------------------------------------------------------|---------------------------------------------------------------|
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des neuf familles, importable tel quel |
+| [`FR/grafana-dashboard-FR.json`](../../examples/FR/grafana-dashboard-FR.json) | Le même tableau de bord, titres et descriptions en français   |
+| [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)               | Une règle, contrôlée par `promtool check rules`               |
+| [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)               | Un job de collecte pour un déploiement qui nomme ses cibles   |
 
 Le moteur livre son propre tableau de bord pour ses propres métriques, et les
 deux ne se recouvrent pas : aucun panneau d'ici ne lit une série de daemon, et

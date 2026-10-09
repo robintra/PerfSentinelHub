@@ -3,7 +3,7 @@
     {
       "name": "DS_PROMETHEUS",
       "label": "Prometheus",
-      "description": "The Prometheus instance scraping the PerfSentinelHub /metrics endpoint.",
+      "description": "L'instance Prometheus qui collecte l'endpoint /metrics de PerfSentinelHub.",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
@@ -50,8 +50,8 @@
   "links": [],
   "panels": [
     {
-      "title": "Running version",
-      "description": "The version this Hub reports on /metrics. build_info is always 1, so the panel shows the version label rather than the value. Two rows here means a rollout is half done.",
+      "title": "Version en service",
+      "description": "La version que ce Hub publie sur /metrics. build_info vaut toujours 1, donc le panneau affiche le label version plutôt que la valeur. Deux lignes ici signifient qu'un déploiement est à moitié fait.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -89,8 +89,8 @@
       }
     },
     {
-      "title": "Unreachable daemons",
-      "description": "Daemons whose last poll failed. Only a daemon is counted: a trace backend is never polled, and a daemon the Hub has never once reached publishes no series at all rather than a misleading value, so neither shows here. A push arriving from a daemon does not clear this, reachability being the Hub's route to the daemon rather than the reverse.",
+      "title": "Daemons injoignables",
+      "description": "Les daemons dont le dernier poll a échoué. Seul un daemon est compté : un backend de traces n'est jamais interrogé, et un daemon que le Hub n'a jamais atteint ne publie aucune série plutôt qu'une valeur trompeuse, donc aucun des deux n'apparaît ici. Un push reçu d'un daemon n'efface pas cet état, car l'accessibilité est la route du Hub vers le daemon et non l'inverse.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -139,8 +139,8 @@
       }
     },
     {
-      "title": "Analysis queue depth",
-      "description": "Runs accepted and not yet claimed by a worker. A number that keeps climbing means Hub:Analysis:Workers is below the submission rate, not that a run is stuck: a stuck run sits in running, which the panel below shows.",
+      "title": "File d'analyse",
+      "description": "Les runs acceptés et pas encore pris par un worker. Un nombre qui ne cesse de monter signifie que Hub:Analysis:Workers est en dessous du rythme des soumissions, pas qu'un run est bloqué : un run bloqué reste en running, ce que montre le panneau plus bas.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -194,8 +194,8 @@
       }
     },
     {
-      "title": "Interrupted runs",
-      "description": "Runs the Hub marked interrupted because the process stopped while they were running or still queued. Nothing is replayed on its own, so these wait for a human. They age out on Hub:Analysis:RunRetention like any finished run, so this falls without anyone acting.",
+      "title": "Runs interrompus",
+      "description": "Les runs que le Hub a marqués interrompus parce que le processus s'est arrêté pendant leur exécution ou alors qu'ils attendaient encore. Rien n'est rejoué tout seul, ils attendent donc une intervention humaine. Ils expirent sur Hub:Analysis:RunRetention comme tout run terminé, donc ce nombre baisse sans que personne n'agisse.",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -245,8 +245,8 @@
       }
     },
     {
-      "title": "Time each daemon has been unreachable",
-      "description": "Zero while a daemon answers, absent for one the Hub has never observed. The Hub retries with bounded exponential backoff (1s doubling to a 300s ceiling), so a short spike is a retry rather than an outage. A line that keeps rising is the one worth reading.",
+      "title": "Durée d'injoignabilité de chaque daemon",
+      "description": "Zéro tant qu'un daemon répond, absent pour un daemon que le Hub n'a jamais observé. Le Hub réessaie avec un repli exponentiel borné (1 s doublée jusqu'à un plafond de 300 s), donc un pic court est une nouvelle tentative et non une panne. C'est une ligne qui ne cesse de monter qui mérite d'être lue.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -279,8 +279,8 @@
       }
     },
     {
-      "title": "Age of the last successful poll",
-      "description": "A daemon never polled successfully has no series at all rather than a zero, because zero would read as 'succeeded just now'. So a missing line here means never, and a reader must not fill the gap with the value on either side.",
+      "title": "Âge du dernier poll réussi",
+      "description": "Un daemon jamais interrogé avec succès n'a aucune série plutôt qu'un zéro, parce que zéro se lirait comme un succès à l'instant même. Une ligne absente signifie donc jamais, et il ne faut pas combler le trou avec la valeur d'à côté.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -314,8 +314,8 @@
       }
     },
     {
-      "title": "Analysis runs by status",
-      "description": "A gauge, not a counter. A run moves between statuses and a finished one ages out on Hub:Analysis:RunRetention, so every series falls as well as rises and increase() over any of them is meaningless. Each status is published even at zero, so a series that disappears is a scrape failure rather than an empty state.",
+      "title": "Runs d'analyse par statut",
+      "description": "Une gauge, pas un compteur. Un run passe d'un statut à l'autre et un run terminé expire sur Hub:Analysis:RunRetention, donc chaque série descend autant qu'elle monte et increase() n'a de sens sur aucune d'elles. Chaque statut est publié même à zéro, donc une série qui disparaît est un échec de collecte et non un état vide.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -352,8 +352,8 @@
       }
     },
     {
-      "title": "Fleet reachability",
-      "description": "One row per daemon the Hub has actually observed. Reachable is the Hub's own route to that daemon, a different path through different firewalls than the push the daemon makes to the Hub, so a daemon can push successfully while showing as unreachable here. A daemon with no row has never been reached at all, which is why the count above and this table can disagree.",
+      "title": "Accessibilité de la flotte",
+      "description": "Une ligne par daemon que le Hub a réellement observé. Joignable désigne la route du Hub vers ce daemon, un autre chemin à travers d'autres pare-feux que le push du daemon vers le Hub, donc un daemon peut pousser avec succès tout en étant injoignable ici. Un daemon sans ligne n'a jamais été atteint, c'est pourquoi le compteur plus haut et ce tableau peuvent diverger.",
       "type": "table",
       "gridPos": {
         "h": 8,
@@ -383,12 +383,12 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "unreachable",
+                  "text": "injoignable",
                   "color": "red",
                   "index": 0
                 },
                 "1": {
-                  "text": "reachable",
+                  "text": "joignable",
                   "color": "green",
                   "index": 1
                 }
@@ -428,8 +428,8 @@
       }
     },
     {
-      "title": "Import rejections by reason",
-      "description": "Imports the Hub refused. Unlike source_last_import_seconds, which this dashboard leaves out because a quiet daemon pushes nothing, this is unambiguous: a refusal means a daemon reached the Hub and was turned away, never that the fleet is quiet. A steady unauthorized line is an expired ImportApiKey, gate_full means too many uploaders at once, write_timeout means the writer is held by the poll or by retention, and both bad_request and too_large point at the exporter rather than at the Hub. A push blocked before it arrives, by a network policy for instance, shows here as nothing at all: no request, no rejection.",
+      "title": "Imports refusés par motif",
+      "description": "Les imports que le Hub a refusés. Contrairement à source_last_import_seconds, que ce tableau de bord laisse de côté parce qu'un daemon calme ne pousse rien, ce panneau est sans ambiguïté : un refus signifie qu'un daemon a atteint le Hub et a été éconduit, jamais que la flotte est calme. Une ligne unauthorized persistante est une ImportApiKey expirée, gate_full signifie trop d'envois en même temps, write_timeout que l'écriture est retenue par le poll ou par la rétention, et bad_request comme too_large désignent l'exporteur plutôt que le Hub. Un push bloqué avant d'arriver, par une network policy par exemple, n'apparaît pas du tout ici : pas de requête, pas de refus.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -466,8 +466,8 @@
       }
     },
     {
-      "title": "Stored findings by environment and status",
-      "description": "Distinct finding signatures the Hub stores, per environment and status. The status is the environment's own, computed the way GET /api/findings?environment= computes it, so a finding still seen in staging does not keep production's copy active. A gauge, not a counter: a quiet finding changes status and retention removes it, so every series falls as well as rises and increase() over any of them is meaningless. Unlike the runs panel above, an empty combination publishes no series, so a line that ends while the others carry on means that state emptied, not that the scrape broke. Drawn as lines rather than stacked, since a signature seen in two environments counts in each and the top of a stack would not be a count of findings. The Hub keeps the counts for 15 seconds, so two scrapes inside that interval read the same value.",
+      "title": "Findings stockés par environnement et statut",
+      "description": "Les signatures de findings distinctes que le Hub stocke, par environnement et par statut. Le statut est propre à l'environnement, calculé comme le fait GET /api/findings?environment=, donc un finding encore vu en staging ne garde pas actif son double de production. Une gauge, pas un compteur : un finding calme change de statut et la rétention le supprime, donc chaque série descend autant qu'elle monte et increase() n'a de sens sur aucune d'elles. Contrairement au panneau des runs plus haut, une combinaison vide ne publie aucune série, donc une ligne qui s'arrête alors que les autres continuent signifie que cet état s'est vidé, pas que la collecte a échoué. Dessiné en lignes plutôt qu'empilé, puisqu'une signature vue dans deux environnements compte dans chacun et que le haut d'une pile ne serait pas un nombre de findings. Le Hub garde les comptes 15 secondes, donc deux collectes dans cet intervalle lisent la même valeur.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -503,8 +503,8 @@
       }
     },
     {
-      "title": "Active findings by severity, $environment",
-      "description": "The active findings of the environment chosen above, split by severity, in the colors the engine's findings dashboard gives them. Active means a daemon of that environment saw the finding within Hub:ResolutionGrace, 7 days by default. A severity outside the engine's three counts under other instead of opening a series of its own. A severity with no active finding draws no line at all, which is the good case rather than a gap.",
+      "title": "Findings actifs par sévérité, $environment",
+      "description": "Les findings actifs de l'environnement choisi plus haut, répartis par sévérité, dans les couleurs que leur donne le tableau de bord des findings du moteur. Actif signifie qu'un daemon de cet environnement a vu le finding dans le délai Hub:ResolutionGrace, 7 jours par défaut. Une sévérité hors des trois du moteur compte sous other au lieu d'ouvrir sa propre série. Une sévérité sans finding actif ne dessine aucune ligne, ce qui est le bon cas et non un trou.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -639,7 +639,7 @@
       },
       {
         "name": "environment",
-        "label": "Environment",
+        "label": "Environnement",
         "type": "query",
         "datasource": {
           "type": "prometheus",
@@ -655,7 +655,7 @@
         "includeAll": false,
         "multi": false,
         "current": {},
-        "description": "Environment charted by Active findings by severity, one of the environments the Hub's sources declare. One at a time, because a finding seen in two environments counts in each and a sum across them would not be a count of findings."
+        "description": "L'environnement dessiné par Findings actifs par sévérité, parmi ceux que déclarent les sources du Hub. Un seul à la fois, parce qu'un finding vu dans deux environnements compte dans chacun et qu'une somme des deux ne serait pas un nombre de findings."
       }
     ]
   },
@@ -665,7 +665,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "PerfSentinelHub overview",
+  "title": "PerfSentinelHub, vue d'ensemble",
   "uid": "perf-sentinel-hub-overview",
   "version": 3
 }

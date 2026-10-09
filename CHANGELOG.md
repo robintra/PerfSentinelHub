@@ -4,6 +4,11 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- `examples/FR/grafana-dashboard-FR.json`, the example dashboard with French titles,
+  descriptions and value labels. Queries, layout and colors are the English file's.
+
 ### Fixed
 
 - The description of the dashboard's import rejection panel compared it with a panel

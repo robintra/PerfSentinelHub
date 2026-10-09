@@ -14,6 +14,10 @@ All notable changes to PerfSentinelHub are recorded here.
 - The description of the dashboard's import rejection panel compared it with a panel
   beside it that does not exist. It now names `source_last_import_seconds`, which the
   dashboard leaves out on purpose.
+- The chart's Service carries `app.kubernetes.io/name` and
+  `app.kubernetes.io/instance` and names its port `http`, so a `ServiceMonitor` or
+  a `VMServiceScrape` can select it, as `values.yaml` already suggested. `make
+  helm-template` checks both.
 
 ## [0.3.7] - 2026-10-06
 

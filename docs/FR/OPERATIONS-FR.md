@@ -148,6 +148,11 @@ service:
     prometheus.io/path: /metrics
 ```
 
+Un opérateur qui sélectionne des Services (un `ServiceMonitor` de Prometheus
+Operator, un `VMServiceScrape` de VictoriaMetrics) trouve le Service par
+`app.kubernetes.io/name: perf-sentinel-hub` et collecte son port `http` sur
+`/metrics`.
+
 ### Les consommer
 
 Quatre fichiers sous [`examples/`](../../examples), validés plutôt qu'esquissés.

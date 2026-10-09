@@ -98,6 +98,8 @@ helm-lint:
 helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) >/dev/null
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress=null >/dev/null
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -A2 '^  labels:' | grep -q 'app.kubernetes.io/name: perf-sentinel-hub'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -q -- '- name: http'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true --set ingress.host=hub.example.com --set ingress.tlsSecretName=hub-tls | grep -q 'secretName: "hub-tls"'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true 2>&1 >/dev/null | grep -q 'ingress.host is required'
 

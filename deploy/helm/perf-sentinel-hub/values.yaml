@@ -65,7 +65,8 @@ hub:
 sources: []
 # Annotations on the Service. Left empty because a scrape is opted into, not
 # assumed: set prometheus.io/scrape, /port and /path here, or point a
-# ServiceMonitor at the Service instead.
+# ServiceMonitor at the Service instead: it carries app.kubernetes.io/name and
+# app.kubernetes.io/instance, and names its port http.
 service:
   annotations: {}
 # Publishes the Hub outside the cluster on a host of its own, at its root: the

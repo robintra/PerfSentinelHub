@@ -2,6 +2,14 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- The description of the dashboard's import rejection panel compared it with a panel
+  beside it that does not exist. It now names `source_last_import_seconds`, which the
+  dashboard leaves out on purpose.
+
 ## [0.3.7] - 2026-10-06
 
 ### Added

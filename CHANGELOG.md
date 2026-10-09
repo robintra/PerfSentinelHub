@@ -9,6 +9,29 @@ All notable changes to PerfSentinelHub are recorded here.
 - `examples/FR/grafana-dashboard-FR.json`, the example dashboard with French titles,
   descriptions and value labels. Queries, layout and colors are the English file's.
 
+### Changed
+
+- The image ships perf-sentinel `0.26.2` as its analysis engine, repinned by digest from
+  `0.26.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.26.0` or `0.26.1` now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.26.2` makes the engine's output reproducible: the same input gives the same findings,
+  in the same order, with the same figures. No finding appears or disappears and no
+  detector verdict changes. A cross-trace `slow_sql` or `slow_http` finding tied on
+  duration now names the smallest trace ID, and its signature follows that trace's service
+  and endpoint, so an acknowledgment taken on such a finding can stop matching once.
+  Avoidable I/O now counts once per grouping and adds up across parameter sets, so on
+  traces that span several groupings or repeat one query with several parameter sets, the
+  avoidable I/O, waste ratio and avoidable CO2 of a Tempo or `jaeger_query` run rise and
+  are not comparable with a run taken before.
+
+  A daemon source's run reads its report from the daemon, so those figures, the order of
+  its findings, acks and correlations, and the rejection at load of region keys that
+  differ only in case, follow the daemon's version, not the Hub's. Once a daemon runs
+  `0.26.2`, an ack listing past its 1000 cap names the same acks on every poll, so the
+  Hub's mirror of it stops shifting between polls.
+
 ### Fixed
 
 - The description of the dashboard's import rejection panel compared it with a panel
